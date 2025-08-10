@@ -1,0 +1,12 @@
+list(
+  APPEND
+  PROJECT_SOURCES
+  ${CMAKE_CURRENT_LIST_DIR}/components/timescreen_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/watchscreen_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/watchui_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/ui.c
+  ${CMAKE_CURRENT_LIST_DIR}/watchui.c
+  ${CMAKE_CURRENT_LIST_DIR}/fonts/GoogleSans_10_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/fonts/GoogleSans_14_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/fonts/GoogleSansBold_24_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/fonts/GoogleSansBold_42_data.c)

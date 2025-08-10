@@ -1,0 +1,33 @@
+<globals>
+    <api>
+        <!-- Add <enumdefs> here -->
+    </api>
+
+    <consts>
+        <!-- Add <px>, <int>, <color> etc here -->
+        <color name="accent" value="0xffaa00" />
+        <color name="gray" value="0x333333" />
+    </consts>
+
+    <styles>
+        <!-- Add <style> tags here -->
+        <style name="screen" width="240" height="240" bg_opa="255" bg_color="0x000000" radius="120" border_opa="0"/>
+        <style name="hidden" opa="0" />
+    </styles>
+
+    <subjects>
+        <!-- Add <int>, <string>, or <float> subjects here -->
+    </subjects>
+
+    <images>
+        <!-- Add <file> or <data> tags here -->
+    </images>
+
+    <fonts>
+        <!-- Add <bin> , <tiny_ttf>, <freetype> tags here -->
+        <bin name="GoogleSans_10" size="10" bpp="2" range="" symbols="0123456789" src_path="fonts/ProductSans-Regular.ttf" as_file="false" />
+        <bin name="GoogleSans_14" size="14" bpp="4" range="0x20-0x7f" symbols="" src_path="fonts/ProductSans-Regular.ttf" as_file="false" />
+        <bin name="GoogleSansBold_24" size="24" bpp="4" range="" symbols="0123456789" src_path="fonts/ProductSans-Bold.ttf" as_file="false" />
+        <bin name="GoogleSansBold_42" size="42" bpp="4" range="" symbols="0123456789" src_path="fonts/ProductSans-Bold.ttf" as_file="false" />
+    </fonts>
+</globals>

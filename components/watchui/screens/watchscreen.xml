@@ -1,0 +1,16 @@
+<screen permanent="true">
+    <styles>
+        <style name="basescreen"  
+            bg_color="0x000000"
+            flex_main_place="center"
+            flex_track_place="center"
+            flex_cross_place="center"
+        />
+    </styles>
+
+    <view extends="lv_obj" flex_flow="column" scroll_snap_y="center" scroll_one="true">
+        <style name="basescreen" />
+
+        <timescreen></timescreen>
+    </view>
+</screen>

@@ -1,0 +1,10 @@
+{
+    "symbol-bpp": 4,
+    "symbols": [
+        {"name": "play", "hex": "f04b", "sizes": [40, 32]}
+    ],
+    "fonts": [
+        {"font":"ProductSans-Regular.ttf", "size": [10, 14], "range":"", "symbols":"0123456789",   "bpp":4},
+        {"font":"ProductSans-Bold.ttf",    "size": [24, 42], "range":"", "symbols":"0123456789: ", "bpp":4}
+    ]
+}
