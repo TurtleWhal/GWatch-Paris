@@ -11,7 +11,7 @@
 
         <lv_label style_text_font="GoogleSansBold_42" text="09" style_text_color="0xFFFFFF" align="left_mid" x="-6" />
         
-        <lv_obj style_border_color="#accent" style_bg_opa="0" style_border_width="2" height="36" style_radius="18" width="80" floating="true" align="left_mid" x="50"></lv_obj>
+        <lv_obj style_border_color="#accent" style_bg_opa="0" style_border_width="2" height="36" style_radius="18" width="80" align="left_mid" x="50"></lv_obj>
         
         <lv_label style_text_font="GoogleSansBold_24" text="17" style_text_color="0xFFFFFF" align="left_mid" x="60" />
 

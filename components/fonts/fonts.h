@@ -2,13 +2,27 @@
 
 LV_FONT_DECLARE(ProductSansRegular_10);
 LV_FONT_DECLARE(ProductSansRegular_14);
+LV_FONT_DECLARE(ProductSansBold_16);
+LV_FONT_DECLARE(ProductSansBold_20);
 LV_FONT_DECLARE(ProductSansBold_24);
 LV_FONT_DECLARE(ProductSansBold_42);
 
-LV_FONT_DECLARE(FontAwesome_32);
-LV_FONT_DECLARE(FontAwesome_32);
+LV_FONT_DECLARE(FontAwesome_14);
+LV_FONT_DECLARE(ProductSansBold_16);
+LV_FONT_DECLARE(ProductSansBold_20);
+LV_FONT_DECLARE(ProductSansBold_24);
+LV_FONT_DECLARE(ProductSansBold_42);
+LV_FONT_DECLARE(ProductSansRegular_10);
+LV_FONT_DECLARE(ProductSansRegular_14);
 
-#define SET_SYMBOL_32(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_32, LV_PART_MAIN); lv_label_set_text(obj, sym);
-#define SET_SYMBOL_32(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_32, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_14(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_14, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_old_16(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_16, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_old_20(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_20, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_old_24(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_24, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_old_42(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_42, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_egular_10(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansRegular_10, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_egular_14(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansRegular_14, LV_PART_MAIN); lv_label_set_text(obj, sym);
 
-#define FA_PLAY "\xEF\x81\x8B" // U+F04B, Sizes: [40, 32]
+#define FA_STEPS    "" // '', Sizes: [14]
+#define FA_BATTERY  "" // '', Sizes: [14]
+#define FA_CALENDAR "" // '', Sizes: [14]

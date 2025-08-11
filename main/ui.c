@@ -2,6 +2,18 @@
 #include "lvgl.h"
 #include "fonts.h"
 #include "esp_timer.h"
+#include "math.h"
+
+#include "overlay.c"
+
+LV_IMAGE_DECLARE(overlay);
+
+#define DEG2RAD 0.017453292519943295
+
+// Returns x, y for a given Radius and Theta
+#define POLAR(r, t) cos(DEG2RAD *t) * r, sin(DEG2RAD *t) * r
+
+lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol);
 
 const char *second_ticks[] = {"00", "55", "50", "45", "40", "35", "30", "25", "20", "15", "10", "05", NULL};
 
@@ -13,7 +25,7 @@ lv_obj_t *minute;
 
 void ui_create(void)
 {
-    lv_color_t accent = lv_color_hex(0xffaa00);
+    lv_color_t accent = lv_color_hex(0xffaa22);
     lv_color_t gray = lv_color_hex(0x888888);
 
     lv_obj_t *scr = lv_obj_create(NULL);
@@ -22,13 +34,12 @@ void ui_create(void)
 
     minutescale = lv_scale_create(scr);
 
-    lv_obj_set_size(minutescale, 224, 224);
+    lv_obj_set_size(minutescale, 164, 164);
     lv_scale_set_mode(minutescale, LV_SCALE_MODE_ROUND_INNER);
     lv_obj_set_style_bg_opa(minutescale, LV_OPA_0, 0);
     lv_obj_set_style_radius(minutescale, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_clip_corner(minutescale, true, 0);
-    lv_obj_center(minutescale);
-    lv_obj_set_x(minutescale, -120);
+    lv_obj_align(minutescale, LV_ALIGN_LEFT_MID, 30 - (164 / 2), 0);
     lv_obj_set_style_arc_width(minutescale, 0, 0); // Set the arc width
 
     lv_scale_set_angle_range(minutescale, 360);
@@ -47,7 +58,7 @@ void ui_create(void)
 
     lv_obj_set_style_line_color(minutescale, gray, LV_PART_INDICATOR);
     lv_obj_set_style_length(minutescale, 8, LV_PART_INDICATOR);     /* tick length */
-    lv_obj_set_style_line_width(minutescale, 3, LV_PART_INDICATOR); /* tick width */
+    lv_obj_set_style_line_width(minutescale, 2, LV_PART_INDICATOR); /* tick width */
 
     lv_obj_set_style_line_color(minutescale, gray, LV_PART_ITEMS);
     lv_obj_set_style_length(minutescale, 4, LV_PART_ITEMS);     /* tick length */
@@ -55,13 +66,12 @@ void ui_create(void)
 
     secondscale = lv_scale_create(scr);
 
-    lv_obj_set_size(secondscale, 296, 296);
+    lv_obj_set_size(secondscale, 234, 234);
     lv_scale_set_mode(secondscale, LV_SCALE_MODE_ROUND_INNER);
     lv_obj_set_style_bg_opa(secondscale, LV_OPA_0, 0);
     lv_obj_set_style_radius(secondscale, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_clip_corner(secondscale, true, 0);
-    lv_obj_center(secondscale);
-    lv_obj_set_x(secondscale, -120);
+    lv_obj_align(secondscale, LV_ALIGN_LEFT_MID, 30 - (234 / 2), 0);
     lv_obj_set_style_arc_width(secondscale, 0, 0); // Set the arc width
 
     lv_scale_set_angle_range(secondscale, 360);
@@ -80,11 +90,15 @@ void ui_create(void)
 
     lv_obj_set_style_line_color(secondscale, gray, LV_PART_INDICATOR);
     lv_obj_set_style_length(secondscale, 8, LV_PART_INDICATOR);     /* tick length */
-    lv_obj_set_style_line_width(secondscale, 3, LV_PART_INDICATOR); /* tick width */
+    lv_obj_set_style_line_width(secondscale, 2, LV_PART_INDICATOR); /* tick width */
 
     lv_obj_set_style_line_color(secondscale, gray, LV_PART_ITEMS);
     lv_obj_set_style_length(secondscale, 4, LV_PART_ITEMS);     /* tick length */
     lv_obj_set_style_line_width(secondscale, 2, LV_PART_ITEMS); /* tick width */
+
+    lv_obj_t *edge = lv_image_create(scr);
+    lv_image_set_src(edge, &overlay);
+    lv_obj_center(edge);
 
     hour = lv_label_create(scr);
     lv_label_set_text(hour, "09");
@@ -99,12 +113,46 @@ void ui_create(void)
     lv_obj_align(minute, LV_ALIGN_LEFT_MID, 66, 0);
 
     lv_obj_t *bound = lv_obj_create(scr);
-    lv_obj_set_size(bound, 96, 36);
+    lv_obj_set_size(bound, 92, 36);
     lv_obj_set_style_bg_opa(bound, LV_OPA_0, 0);
     lv_obj_set_style_radius(bound, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_color(bound, accent, 0);
     lv_obj_set_style_border_width(bound, 2, 0);
     lv_obj_align(bound, LV_ALIGN_LEFT_MID, 60, 0);
+
+    lv_obj_t *steps = create_valuearc(scr, accent, FA_STEPS);
+    lv_obj_align(steps, LV_ALIGN_RIGHT_MID, -40, -68);
+
+    lv_arc_set_range(steps, 0, 6500);
+    lv_arc_set_value(steps, 1234);
+    lv_label_set_text_fmt(lv_obj_get_child_by_name(steps, "text"), "%d", 1234);
+
+    // lv_obj_t *date = create_valuearc(scr, accent, FA_CALENDAR);
+    // lv_obj_align(date, LV_ALIGN_RIGHT_MID, -14, 0);
+
+    lv_obj_t *dateicon = lv_label_create(scr);
+    SET_SYMBOL_14(dateicon, FA_CALENDAR);
+    lv_obj_align(dateicon, LV_ALIGN_CENTER, 80, -22);
+    lv_obj_set_style_text_color(dateicon, accent, 0);
+
+    lv_obj_t *month = lv_label_create(scr);
+    lv_obj_align(month, LV_ALIGN_CENTER, 80, 0);
+    lv_obj_set_style_text_font(month, &ProductSansBold_20, 0);
+    lv_obj_set_style_text_color(month, lv_color_white(), 0);
+    lv_label_set_text(month, "AUG");
+
+    lv_obj_t *day = lv_label_create(scr);
+    lv_obj_align(day, LV_ALIGN_CENTER, 80, 22);
+    lv_obj_set_style_text_font(day, &ProductSansBold_16, 0);
+    lv_obj_set_style_text_color(day, lv_color_white(), 0);
+    lv_label_set_text(day, "11");
+
+    lv_obj_t *battery = create_valuearc(scr, accent, FA_BATTERY);
+    lv_obj_align(battery, LV_ALIGN_RIGHT_MID, -40, 68);
+
+    lv_arc_set_range(battery, 0, 100);
+    lv_arc_set_value(battery, 68);
+    lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%d%%", 68);
 
     lv_screen_load(scr);
 }
@@ -116,7 +164,7 @@ void ui_update(void)
     uint8_t h = ((millis / 3600000) + 1) % 12;
     uint8_t m = (millis / 60000) % 60;
 
-    h = 9;
+    h += 9;
 
     uint16_t mangle = esp_timer_get_time() * (360 / 60) / 60000000;
     uint16_t sangle = esp_timer_get_time() * (360 / 60) / 1000000;
@@ -142,4 +190,39 @@ void ui_update(void)
 
     lv_label_set_text_fmt(hour, "%02d", h);
     lv_label_set_text_fmt(minute, "%02d", m);
+}
+
+lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol)
+{
+    lv_obj_t *arc = lv_arc_create(parent);
+
+    lv_obj_set_size(arc, 60, 60);
+
+    // Background Arc
+    lv_obj_set_style_arc_color(arc, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_arc_width(arc, 8, 0);
+    // lv_arc_set_angles(arc, min, max);
+
+    // Indicator Arc
+    lv_obj_set_style_arc_color(arc, color, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 8, LV_PART_INDICATOR);
+
+    // Knob
+    lv_obj_set_style_opa(arc, LV_OPA_0, LV_PART_KNOB);
+
+    lv_obj_t *icon = lv_label_create(arc);
+    SET_SYMBOL_14(icon, symbol);
+    lv_obj_align(icon, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_text_color(icon, lv_color_white(), 0);
+
+    lv_obj_t *value = lv_label_create(arc);
+    lv_obj_align(value, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_text_color(value, lv_color_white(), 0);
+
+    lv_obj_set_style_text_font(value, &ProductSansRegular_14, 0);
+    // lv_label_set_text_fmt(value, "%d", 27619);
+
+    lv_obj_set_name(value, "text");
+
+    return arc;
 }

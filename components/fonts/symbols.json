@@ -1,10 +1,12 @@
 {
     "symbol-bpp": 4,
     "symbols": [
-        {"name": "play", "hex": "f04b", "sizes": [40, 32]}
-    ],
+        {"name": "steps",    "char": "",  "sizes": [14] },
+        {"name": "battery",  "char": "",  "sizes": [14] },
+        {"name": "calendar", "char": "",  "sizes": [14] }
+    ], 
     "fonts": [
-        {"font":"ProductSans-Regular.ttf", "size": [10, 14], "range":"", "symbols":"0123456789",   "bpp":4},
-        {"font":"ProductSans-Bold.ttf",    "size": [24, 42], "range":"", "symbols":"0123456789: ", "bpp":4}
+        {"font":"ProductSans-Regular.ttf", "size": [10, 14], "range":"default", "symbols":"",   "bpp":4},
+        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 42], "range":"default", "symbols":"",    "bpp":4}
     ]
 }
