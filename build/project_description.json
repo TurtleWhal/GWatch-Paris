@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "GWatch-Paris",
-    "project_version":    "47b64ce-dirty",
+    "project_version":    "7ab7c64-dirty",
     "project_path":       "/Users/garrett/Documents/GWatch-Paris",
     "idf_path":           "/Users/garrett/esp/v5.5/esp-idf",
     "build_dir":          "/Users/garrett/Documents/GWatch-Paris/build",

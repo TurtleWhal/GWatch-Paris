@@ -84,6 +84,17 @@ void lvgl_timer_stop()
     }
 }
 
+void lv_task(void *args)
+{
+    while (true)
+    {
+        ui_update();
+        uint32_t d = lv_timer_handler();
+        // ESP_LOGI("lv_task", "d: %d", d);
+        vTaskDelay(pdMS_TO_TICKS(d));
+    }
+}
+
 void app_main(void)
 {
     // esp_pm_config_t pm_config = {
@@ -131,15 +142,24 @@ void app_main(void)
     // gc9a01_wake();
     // lvgl_timer_start();
 
+    xTaskCreatePinnedToCore(
+        lv_task,
+        "lv_task",
+        4096,
+        NULL,
+        0,
+        NULL,
+        1);
+
     // vTaskDelay(pdMS_TO_TICKS(1000)); // Let FreeRTOS idle
 
     // lv_task_handler();
 
-    while (1)
-    {
-        ui_update();
+    // while (1)
+    // {
+    //     ui_update();
 
-        lv_task_handler();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
+    //     lv_task_handler();
+    //     vTaskDelay(pdMS_TO_TICKS(10));
+    // }
 }
