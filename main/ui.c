@@ -3,6 +3,8 @@
 #include "fonts.h"
 #include "esp_timer.h"
 #include "math.h"
+#include "wifitime.h"
+#include "battery.h"
 
 #include "overlay.c"
 
@@ -22,6 +24,11 @@ lv_obj_t *secondscale;
 
 lv_obj_t *hour;
 lv_obj_t *minute;
+
+lv_obj_t *day;
+lv_obj_t *month;
+
+lv_obj_t *battery;
 
 void ui_create(void)
 {
@@ -96,9 +103,9 @@ void ui_create(void)
     lv_obj_set_style_length(secondscale, 4, LV_PART_ITEMS);     /* tick length */
     lv_obj_set_style_line_width(secondscale, 2, LV_PART_ITEMS); /* tick width */
 
-    lv_obj_t *edge = lv_image_create(scr);
-    lv_image_set_src(edge, &overlay);
-    lv_obj_center(edge);
+    // lv_obj_t *edge = lv_image_create(scr);
+    // lv_image_set_src(edge, &overlay);
+    // lv_obj_center(edge);
 
     hour = lv_label_create(scr);
     lv_label_set_text(hour, "09");
@@ -135,39 +142,67 @@ void ui_create(void)
     lv_obj_align(dateicon, LV_ALIGN_CENTER, 80, -22);
     lv_obj_set_style_text_color(dateicon, accent, 0);
 
-    lv_obj_t *month = lv_label_create(scr);
+    month = lv_label_create(scr);
     lv_obj_align(month, LV_ALIGN_CENTER, 80, 0);
     lv_obj_set_style_text_font(month, &ProductSansBold_20, 0);
     lv_obj_set_style_text_color(month, lv_color_white(), 0);
     lv_label_set_text(month, "AUG");
 
-    lv_obj_t *day = lv_label_create(scr);
+    day = lv_label_create(scr);
     lv_obj_align(day, LV_ALIGN_CENTER, 80, 22);
     lv_obj_set_style_text_font(day, &ProductSansBold_16, 0);
     lv_obj_set_style_text_color(day, lv_color_white(), 0);
     lv_label_set_text(day, "11");
 
-    lv_obj_t *battery = create_valuearc(scr, accent, FA_BATTERY);
+    battery = create_valuearc(scr, accent, FA_BATTERY);
     lv_obj_align(battery, LV_ALIGN_RIGHT_MID, -40, 68);
 
-    lv_arc_set_range(battery, 0, 100);
+    lv_arc_set_range(battery, 2800, 4200);
     lv_arc_set_value(battery, 68);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%d%%", 68);
+
+    /** Color Test **/
+    // lv_obj_t *red = lv_button_create(scr);
+    // lv_obj_align(red, LV_ALIGN_CENTER, 0, -60);
+    // lv_obj_set_size(red, 120, 60);
+    // lv_obj_set_style_bg_color(red, lv_color_hex(0xFF0000), 0);
+
+    // lv_obj_t *green = lv_button_create(scr);
+    // lv_obj_align(green, LV_ALIGN_CENTER, 0, 0);
+    // lv_obj_set_size(green, 120, 60);
+    // lv_obj_set_style_bg_color(green, lv_color_hex(0x00FF00), 0);
+
+    // lv_obj_t *blue = lv_button_create(scr);
+    // lv_obj_align(blue, LV_ALIGN_CENTER, 0, 60);
+    // lv_obj_set_size(blue, 120, 60);
+    // lv_obj_set_style_bg_color(blue, lv_color_hex(0x0000FF), 0);
 
     lv_screen_load(scr);
 }
 
 void ui_update(void)
 {
-    uint32_t millis = esp_timer_get_time() / 1000;
+    local_datetime_t time = get_local_datetime();
 
-    uint8_t h = ((millis / 3600000) + 1) % 12;
-    uint8_t m = (millis / 60000) % 60;
+    // uint32_t millis = esp_timer_get_time() / 1000;
 
-    h += 9;
+    // uint8_t h = ((millis / 3600000) + 1) % 12;
+    // uint8_t m = (millis / 60000) % 60;
 
-    uint16_t mangle = esp_timer_get_time() * (360 / 60) / 60000000;
-    uint16_t sangle = esp_timer_get_time() * (360 / 60) / 1000000;
+    // h += 9;
+
+    uint8_t h = time.hour;
+    uint8_t m = time.min;
+
+    h = h % 12;
+    if (h == 0)
+        h = 12;
+
+    // Calculate angles for minute and second hands
+    // uint16_t mangle = esp_timer_get_time() * (360 / 60) / 60000000;
+    // uint16_t sangle = esp_timer_get_time() * (360 / 60) / 1000000;
+    uint16_t mangle = time.sec * (360 / 60) / 60 + m * (360 / 60);
+    uint16_t sangle = time.ms * (360 / 60) / 1000 + time.sec * (360 / 60);
 
     // Make a writable copy of second_ticks
     static char *minticks[13];
@@ -185,11 +220,19 @@ void ui_update(void)
 
     lv_scale_set_text_src(minutescale, (const char **)minticks);
 
-    lv_scale_set_rotation(minutescale, mangle);
     lv_scale_set_rotation(secondscale, sangle);
+    lv_scale_set_rotation(minutescale, mangle);
 
     lv_label_set_text_fmt(hour, "%02d", h);
     lv_label_set_text_fmt(minute, "%02d", m);
+
+    lv_label_set_text_fmt(day, "%02d", time.day);
+    lv_label_set_text(month, months[time.month - 1]);
+
+    uint32_t battery_level = battery_get_mV();
+    lv_arc_set_value(battery, battery_level);
+
+    lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%ld", battery_level);
 }
 
 lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol)

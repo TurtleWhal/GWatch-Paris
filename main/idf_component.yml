@@ -15,3 +15,4 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   lvgl/lvgl: ^9.3.0
+  # espressif/adc_battery_estimation: ^0.2.0

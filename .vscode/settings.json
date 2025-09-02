@@ -26,6 +26,8 @@
     "esp_timer.h": "c",
     "ui.h": "c",
     "watchui.h": "c",
-    "watchui_gen.h": "c"
+    "watchui_gen.h": "c",
+    "fonts.h": "c",
+    "esp_log.h": "c"
   }
 }

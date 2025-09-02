@@ -7,8 +7,13 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(MINIMAL_BUILD ON)
 
 add_compile_definitions(${COMPONENT_LIB} PRIVATE
-    LV_COLOR_16_SWAP=1
+    LV_COLOR_16_SWAP=0
     LV_LVGL_H_INCLUDE_SIMPLE=1
+)
+
+add_definitions(
+    -DARDUINO_USB_MODE
+    -DARDUINO_USB_CDC_ON_BOOT
 )
 
 project(GWatch-Paris)
