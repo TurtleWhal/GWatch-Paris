@@ -37,6 +37,7 @@ $<TARGET_FILE:__idf_app_update>
 $<TARGET_FILE:__idf_esp_app_format>
 $<TARGET_FILE:__idf_esp_bootloader_format>
 $<TARGET_FILE:idf::esp_mm>
+$<TARGET_FILE:idf::esp_pm>
 $<TARGET_FILE:__idf_nvs_flash>
 $<TARGET_FILE:idf::mbedtls>
 $<TARGET_FILE:__idf_esp_wifi>
@@ -48,7 +49,6 @@ $<TARGET_FILE:__idf_esp_coex>
 $<TARGET_FILE:__idf_esp_security>
 $<TARGET_FILE:__idf_pthread>
 $<TARGET_FILE:idf::esp_driver_gpio>
-$<TARGET_FILE:idf::esp_pm>
 $<TARGET_FILE:idf::esp_app_format>
 $<TARGET_FILE:idf::esp_bootloader_format>
 $<TARGET_FILE:idf::app_update>

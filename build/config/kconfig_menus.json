@@ -10373,7 +10373,10 @@
                         "help": "The value of this option determines the calibration interval of the RTC_FAST/SLOW clock during sleep when\npower management is enabled. When it is configured as N, the RTC_FAST/SLOW clock will be calibrated\nevery N times of lightsleep.\nDecreasing this value will increase the time the chip is in the active state, thereby increasing the\naverage power consumption of the chip.\nIncreasing this value can reduce the average power consumption, but when the external environment changes\ndrastically and the chip RTC_FAST/SLOW oscillator frequency drifts, it may cause system instability.",
                         "id": "PM_LIGHTSLEEP_RTC_OSC_CAL_INTERVAL",
                         "name": "PM_LIGHTSLEEP_RTC_OSC_CAL_INTERVAL",
-                        "range": null,
+                        "range": [
+                            1,
+                            128
+                        ],
                         "title": "Calibrate the RTC_FAST/SLOW clock every N times of light sleep",
                         "type": "int"
                     },
@@ -11527,7 +11530,7 @@
                         "name": "ESP_CONSOLE_UART_BAUDRATE",
                         "range": [
                             1200,
-                            4000000
+                            1000000
                         ],
                         "title": "UART console baud rate",
                         "type": "int"

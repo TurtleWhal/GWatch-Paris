@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "GWatch-Paris",
-    "project_version":    "44ca18d-dirty",
+    "project_version":    "2319402-dirty",
     "project_path":       "/Users/garrett/Documents/GWatch-Paris",
     "idf_path":           "/Users/garrett/esp/v5.5/esp-idf",
     "build_dir":          "/Users/garrett/Documents/GWatch-Paris/build",
@@ -865,8 +865,8 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "lvgl__lvgl" ],
             "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/garrett/Documents/GWatch-Paris/main/main.c", "/Users/garrett/Documents/GWatch-Paris/main/ui.c", "/Users/garrett/Documents/GWatch-Paris/main/display.c", "/Users/garrett/Documents/GWatch-Paris/main/wifitime.c", "/Users/garrett/Documents/GWatch-Paris/main/battery.c", "/Users/garrett/Documents/GWatch-Paris/main/drivers/gc9a01_driver.h", "/Users/garrett/Documents/GWatch-Paris/main/drivers/cst816s.c" ],
-            "include_dirs": [ ".", "./drivers" ]
+            "sources": [ "/Users/garrett/Documents/GWatch-Paris/main/assets/overlay.c", "/Users/garrett/Documents/GWatch-Paris/main/display/cst816s.c", "/Users/garrett/Documents/GWatch-Paris/main/display/display.c", "/Users/garrett/Documents/GWatch-Paris/main/hardware/battery.c", "/Users/garrett/Documents/GWatch-Paris/main/main.c", "/Users/garrett/Documents/GWatch-Paris/main/system/wifitime.c", "/Users/garrett/Documents/GWatch-Paris/main/ui/ui.c" ],
+            "include_dirs": [ ".", "./display", "./hardware", "./system", "./ui" ]
         },
         "mbedtls": {
             "alias": "idf::mbedtls",
@@ -2356,7 +2356,7 @@
             "priv_reqs": [ "lvgl__lvgl" ],
             "managed_reqs": [],
             "managed_priv_reqs": [ "lvgl__lvgl" ],
-            "include_dirs": [ ".", "./drivers" ]
+            "include_dirs": [ ".", "./display", "./hardware", "./system", "./ui" ]
         },
         "fonts": {
             "alias": "idf::fonts",
