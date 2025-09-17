@@ -218,11 +218,11 @@ void cst816s_init(i2c_master_bus_handle_t bus)
     enable_auto_sleep();
     set_auto_sleep_time(1);
 
-    esp_sleep_enable_gpio_wakeup();
+    // esp_sleep_enable_gpio_wakeup();
 
     // Attach ISR handler for touch interrupt
     gpio_isr_handler_add(TOUCH_INT_GPIO, handleISR, NULL);
-    gpio_wakeup_enable(TOUCH_INT_GPIO, GPIO_INTR_LOW_LEVEL);
+    // gpio_wakeup_enable(TOUCH_INT_GPIO, GPIO_INTR_LOW_LEVEL);
 
     ESP_LOGI(TAG, "CST816S initialized (ver %d)", data.version);
 }

@@ -15,7 +15,7 @@
 
 #include "system.h"
 
-#define MAX_WIFI_APS 3 // adjust this as needed
+#define MAX_WIFI_APS 2 // adjust this as needed
 
 // List of WiFi credentials (try in order)
 typedef struct
@@ -25,10 +25,11 @@ typedef struct
 } wifi_ap_t;
 
 wifi_ap_t wifi_ap_list[MAX_WIFI_APS] = {
-    {"garrettphone", "40961024"},
+    // {"garrettphone", "40961024"},
+    {"Garrett's Phone", "40961024"},
     {"NetworkOfIOT", "40961024"},
     // {"SchoolNet", ""},
-    {"GuestNet", ""},
+    // {"GuestNet", ""},
 };
 
 static int current_ap_index = 0;
