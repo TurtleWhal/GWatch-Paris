@@ -54,4 +54,6 @@ idf_component_register(
         nvs_flash
         lwip
         esp_adc
+        esp_http_client
+        json
 )

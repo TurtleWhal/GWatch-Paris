@@ -1,4 +1,4 @@
-#include "battery.h"
+#include "system.h"
 
 #include "esp_adc_cal.h"
 #include <esp_adc/adc_oneshot.h>
@@ -8,15 +8,29 @@
 static adc_oneshot_unit_handle_t adc1_handle;
 esp_adc_cal_characteristics_t adc_chars;
 
-// void battery_task(void *)
-// {
-//     while (true)
-//     {
-//         // sysinfo.bat.voltage = battery_get_mV();
+void battery_task(void *)
+{
+    sysinfo.bat.voltage = battery_get_mV();
 
-//         vTaskDelay(pdMS_TO_TICKS(100));
-//     }
-// }
+    while (true)
+    {
+        uint16_t lastvoltage = sysinfo.bat.voltage;
+        sysinfo.bat.voltage = battery_get_mV();
+
+        int32_t diff = sysinfo.bat.voltage - lastvoltage;
+
+        if (diff < -100)
+        { // sudden voltage drop indicates unplugged
+            sysinfo.bat.charging = false;
+        }
+        else if (diff > 100)
+        { // vice versa
+            sysinfo.bat.charging = true;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1600));
+    }
+}
 
 void battery_init(void)
 {
@@ -34,6 +48,11 @@ void battery_init(void)
 
     // Characterize ADC for voltage calibration
     esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);
+
+    sysinfo.bat.voltage = UINT16_MAX;
+    sysinfo.bat.percent = UINT8_MAX;
+
+    xTaskCreate(battery_task, "battery_task", 1 * 1024, NULL, 2, NULL);
 }
 
 uint32_t battery_get_mV(void)

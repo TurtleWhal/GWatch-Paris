@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "GWatch-Paris",
-    "project_version":    "2319402-dirty",
+    "project_version":    "0004faf-dirty",
     "project_path":       "/Users/garrett/Documents/GWatch-Paris",
     "idf_path":           "/Users/garrett/esp/v5.5/esp-idf",
     "build_dir":          "/Users/garrett/Documents/GWatch-Paris/build",
@@ -21,12 +21,12 @@
     "monitor_toolprefix": "xtensa-esp32s3-elf-",
     "c_compiler":         "/Users/garrett/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc",
     "config_environment" : {
-        "COMPONENT_KCONFIGS" : "/Users/garrett/esp/v5.5/esp-idf/components/driver/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/efuse/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_adc/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_coex/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_common/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ana_cmpr/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_bitscrambler/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_dac/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gpio/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gptimer/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2c/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2s/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ledc/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_mcpwm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_parlio/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_pcnt/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_rmt/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_spi/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_tsens/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_twai/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_uart/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_usb_serial_jtag/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_event/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_hw_support/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_mm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_netif/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_partition/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_phy/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_pm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_ringbuf/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_rom/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_security/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_system/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_timer/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_wifi/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/freertos/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/hal/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/heap/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/log/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/lwip/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/mbedtls/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/newlib/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/nvs_flash/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/pthread/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/soc/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/vfs/Kconfig;/Users/garrett/Documents/GWatch-Paris/managed_components/lvgl__lvgl/Kconfig",
+        "COMPONENT_KCONFIGS" : "/Users/garrett/esp/v5.5/esp-idf/components/driver/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/efuse/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp-tls/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_adc/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_coex/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_common/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ana_cmpr/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_bitscrambler/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_dac/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gpio/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gptimer/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2c/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2s/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ledc/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_mcpwm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_parlio/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_pcnt/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_rmt/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_spi/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_tsens/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_twai/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_uart/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_usb_serial_jtag/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_event/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_hw_support/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_mm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_netif/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_partition/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_phy/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_pm/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_ringbuf/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_rom/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_security/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_system/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_timer/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/esp_wifi/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/freertos/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/hal/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/heap/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/log/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/lwip/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/mbedtls/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/newlib/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/nvs_flash/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/pthread/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/soc/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport/Kconfig;/Users/garrett/esp/v5.5/esp-idf/components/vfs/Kconfig;/Users/garrett/Documents/GWatch-Paris/managed_components/lvgl__lvgl/Kconfig",
         "COMPONENT_KCONFIGS_PROJBUILD" : "/Users/garrett/esp/v5.5/esp-idf/components/bootloader/Kconfig.projbuild;/Users/garrett/esp/v5.5/esp-idf/components/esp_app_format/Kconfig.projbuild;/Users/garrett/esp/v5.5/esp-idf/components/esp_rom/Kconfig.projbuild;/Users/garrett/esp/v5.5/esp-idf/components/esptool_py/Kconfig.projbuild;/Users/garrett/esp/v5.5/esp-idf/components/partition_table/Kconfig.projbuild"
     },
     "common_component_reqs": [ "cxx", "newlib", "freertos", "esp_hw_support", "heap", "log", "soc", "hal", "esp_rom", "esp_common", "esp_system", "xtensa" ],
-    "build_components" : [ "app_update", "bootloader", "bootloader_support", "cxx", "driver", "efuse", "esp_adc", "esp_app_format", "esp_bootloader_format", "esp_coex", "esp_common", "esp_driver_ana_cmpr", "esp_driver_bitscrambler", "esp_driver_dac", "esp_driver_gpio", "esp_driver_gptimer", "esp_driver_i2c", "esp_driver_i2s", "esp_driver_ledc", "esp_driver_mcpwm", "esp_driver_parlio", "esp_driver_pcnt", "esp_driver_rmt", "esp_driver_sdio", "esp_driver_sdm", "esp_driver_sdmmc", "esp_driver_sdspi", "esp_driver_spi", "esp_driver_tsens", "esp_driver_twai", "esp_driver_uart", "esp_driver_usb_serial_jtag", "esp_event", "esp_hw_support", "esp_mm", "esp_netif", "esp_netif_stack", "esp_partition", "esp_phy", "esp_pm", "esp_ringbuf", "esp_rom", "esp_security", "esp_system", "esp_timer", "esp_vfs_console", "esp_wifi", "esptool_py", "fonts", "freertos", "hal", "heap", "log", "lvgl__lvgl", "lwip", "main", "mbedtls", "newlib", "nvs_flash", "partition_table", "pthread", "sdmmc", "soc", "spi_flash", "vfs", "watchui", "wpa_supplicant", "xtensa", "" ],
-    "build_component_paths" : [ "/Users/garrett/esp/v5.5/esp-idf/components/app_update", "/Users/garrett/esp/v5.5/esp-idf/components/bootloader", "/Users/garrett/esp/v5.5/esp-idf/components/bootloader_support", "/Users/garrett/esp/v5.5/esp-idf/components/cxx", "/Users/garrett/esp/v5.5/esp-idf/components/driver", "/Users/garrett/esp/v5.5/esp-idf/components/efuse", "/Users/garrett/esp/v5.5/esp-idf/components/esp_adc", "/Users/garrett/esp/v5.5/esp-idf/components/esp_app_format", "/Users/garrett/esp/v5.5/esp-idf/components/esp_bootloader_format", "/Users/garrett/esp/v5.5/esp-idf/components/esp_coex", "/Users/garrett/esp/v5.5/esp-idf/components/esp_common", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ana_cmpr", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_bitscrambler", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_dac", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gpio", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gptimer", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2s", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ledc", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_mcpwm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_parlio", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_pcnt", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_rmt", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdio", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdmmc", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdspi", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_spi", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_tsens", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_twai", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_uart", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_usb_serial_jtag", "/Users/garrett/esp/v5.5/esp-idf/components/esp_event", "/Users/garrett/esp/v5.5/esp-idf/components/esp_hw_support", "/Users/garrett/esp/v5.5/esp-idf/components/esp_mm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_netif", "/Users/garrett/esp/v5.5/esp-idf/components/esp_netif_stack", "/Users/garrett/esp/v5.5/esp-idf/components/esp_partition", "/Users/garrett/esp/v5.5/esp-idf/components/esp_phy", "/Users/garrett/esp/v5.5/esp-idf/components/esp_pm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_ringbuf", "/Users/garrett/esp/v5.5/esp-idf/components/esp_rom", "/Users/garrett/esp/v5.5/esp-idf/components/esp_security", "/Users/garrett/esp/v5.5/esp-idf/components/esp_system", "/Users/garrett/esp/v5.5/esp-idf/components/esp_timer", "/Users/garrett/esp/v5.5/esp-idf/components/esp_vfs_console", "/Users/garrett/esp/v5.5/esp-idf/components/esp_wifi", "/Users/garrett/esp/v5.5/esp-idf/components/esptool_py", "/Users/garrett/Documents/GWatch-Paris/components/fonts", "/Users/garrett/esp/v5.5/esp-idf/components/freertos", "/Users/garrett/esp/v5.5/esp-idf/components/hal", "/Users/garrett/esp/v5.5/esp-idf/components/heap", "/Users/garrett/esp/v5.5/esp-idf/components/log", "/Users/garrett/Documents/GWatch-Paris/managed_components/lvgl__lvgl", "/Users/garrett/esp/v5.5/esp-idf/components/lwip", "/Users/garrett/Documents/GWatch-Paris/main", "/Users/garrett/esp/v5.5/esp-idf/components/mbedtls", "/Users/garrett/esp/v5.5/esp-idf/components/newlib", "/Users/garrett/esp/v5.5/esp-idf/components/nvs_flash", "/Users/garrett/esp/v5.5/esp-idf/components/partition_table", "/Users/garrett/esp/v5.5/esp-idf/components/pthread", "/Users/garrett/esp/v5.5/esp-idf/components/sdmmc", "/Users/garrett/esp/v5.5/esp-idf/components/soc", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash", "/Users/garrett/esp/v5.5/esp-idf/components/vfs", "/Users/garrett/Documents/GWatch-Paris/components/watchui", "/Users/garrett/esp/v5.5/esp-idf/components/wpa_supplicant", "/Users/garrett/esp/v5.5/esp-idf/components/xtensa", "" ],
+    "build_components" : [ "app_update", "bootloader", "bootloader_support", "cxx", "driver", "efuse", "esp-tls", "esp_adc", "esp_app_format", "esp_bootloader_format", "esp_coex", "esp_common", "esp_driver_ana_cmpr", "esp_driver_bitscrambler", "esp_driver_dac", "esp_driver_gpio", "esp_driver_gptimer", "esp_driver_i2c", "esp_driver_i2s", "esp_driver_ledc", "esp_driver_mcpwm", "esp_driver_parlio", "esp_driver_pcnt", "esp_driver_rmt", "esp_driver_sdio", "esp_driver_sdm", "esp_driver_sdmmc", "esp_driver_sdspi", "esp_driver_spi", "esp_driver_tsens", "esp_driver_twai", "esp_driver_uart", "esp_driver_usb_serial_jtag", "esp_event", "esp_http_client", "esp_hw_support", "esp_mm", "esp_netif", "esp_netif_stack", "esp_partition", "esp_phy", "esp_pm", "esp_ringbuf", "esp_rom", "esp_security", "esp_system", "esp_timer", "esp_vfs_console", "esp_wifi", "esptool_py", "fonts", "freertos", "hal", "heap", "http_parser", "json", "log", "lvgl__lvgl", "lwip", "main", "mbedtls", "newlib", "nvs_flash", "partition_table", "pthread", "sdmmc", "soc", "spi_flash", "tcp_transport", "vfs", "watchui", "wpa_supplicant", "xtensa", "" ],
+    "build_component_paths" : [ "/Users/garrett/esp/v5.5/esp-idf/components/app_update", "/Users/garrett/esp/v5.5/esp-idf/components/bootloader", "/Users/garrett/esp/v5.5/esp-idf/components/bootloader_support", "/Users/garrett/esp/v5.5/esp-idf/components/cxx", "/Users/garrett/esp/v5.5/esp-idf/components/driver", "/Users/garrett/esp/v5.5/esp-idf/components/efuse", "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls", "/Users/garrett/esp/v5.5/esp-idf/components/esp_adc", "/Users/garrett/esp/v5.5/esp-idf/components/esp_app_format", "/Users/garrett/esp/v5.5/esp-idf/components/esp_bootloader_format", "/Users/garrett/esp/v5.5/esp-idf/components/esp_coex", "/Users/garrett/esp/v5.5/esp-idf/components/esp_common", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ana_cmpr", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_bitscrambler", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_dac", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gpio", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_gptimer", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_i2s", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_ledc", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_mcpwm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_parlio", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_pcnt", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_rmt", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdio", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdmmc", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_sdspi", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_spi", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_tsens", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_twai", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_uart", "/Users/garrett/esp/v5.5/esp-idf/components/esp_driver_usb_serial_jtag", "/Users/garrett/esp/v5.5/esp-idf/components/esp_event", "/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client", "/Users/garrett/esp/v5.5/esp-idf/components/esp_hw_support", "/Users/garrett/esp/v5.5/esp-idf/components/esp_mm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_netif", "/Users/garrett/esp/v5.5/esp-idf/components/esp_netif_stack", "/Users/garrett/esp/v5.5/esp-idf/components/esp_partition", "/Users/garrett/esp/v5.5/esp-idf/components/esp_phy", "/Users/garrett/esp/v5.5/esp-idf/components/esp_pm", "/Users/garrett/esp/v5.5/esp-idf/components/esp_ringbuf", "/Users/garrett/esp/v5.5/esp-idf/components/esp_rom", "/Users/garrett/esp/v5.5/esp-idf/components/esp_security", "/Users/garrett/esp/v5.5/esp-idf/components/esp_system", "/Users/garrett/esp/v5.5/esp-idf/components/esp_timer", "/Users/garrett/esp/v5.5/esp-idf/components/esp_vfs_console", "/Users/garrett/esp/v5.5/esp-idf/components/esp_wifi", "/Users/garrett/esp/v5.5/esp-idf/components/esptool_py", "/Users/garrett/Documents/GWatch-Paris/components/fonts", "/Users/garrett/esp/v5.5/esp-idf/components/freertos", "/Users/garrett/esp/v5.5/esp-idf/components/hal", "/Users/garrett/esp/v5.5/esp-idf/components/heap", "/Users/garrett/esp/v5.5/esp-idf/components/http_parser", "/Users/garrett/esp/v5.5/esp-idf/components/json", "/Users/garrett/esp/v5.5/esp-idf/components/log", "/Users/garrett/Documents/GWatch-Paris/managed_components/lvgl__lvgl", "/Users/garrett/esp/v5.5/esp-idf/components/lwip", "/Users/garrett/Documents/GWatch-Paris/main", "/Users/garrett/esp/v5.5/esp-idf/components/mbedtls", "/Users/garrett/esp/v5.5/esp-idf/components/newlib", "/Users/garrett/esp/v5.5/esp-idf/components/nvs_flash", "/Users/garrett/esp/v5.5/esp-idf/components/partition_table", "/Users/garrett/esp/v5.5/esp-idf/components/pthread", "/Users/garrett/esp/v5.5/esp-idf/components/sdmmc", "/Users/garrett/esp/v5.5/esp-idf/components/soc", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash", "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport", "/Users/garrett/esp/v5.5/esp-idf/components/vfs", "/Users/garrett/Documents/GWatch-Paris/components/watchui", "/Users/garrett/esp/v5.5/esp-idf/components/wpa_supplicant", "/Users/garrett/esp/v5.5/esp-idf/components/xtensa", "" ],
     "build_component_info" : {
         "app_update": {
             "alias": "idf::app_update",
@@ -117,6 +117,21 @@
             "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/efuse/libefuse.a",
             "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/efuse/esp32s3/esp_efuse_table.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/esp32s3/esp_efuse_fields.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/esp32s3/esp_efuse_rtc_calib.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/esp32s3/esp_efuse_utility.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/src/esp_efuse_api.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/src/esp_efuse_fields.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/src/esp_efuse_utility.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/src/efuse_controller/keys/with_key_purposes/esp_efuse_api_key.c", "/Users/garrett/esp/v5.5/esp-idf/components/efuse/src/esp_efuse_startup.c" ],
             "include_dirs": [ "include", "esp32s3/include" ]
+        },
+        "esp-tls": {
+            "alias": "idf::esp-tls",
+            "target": "___idf_esp-tls",
+            "prefix": "idf",
+            "dir": "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls",
+            "type": "LIBRARY",
+            "lib": "__idf_esp-tls",
+            "reqs": [ "mbedtls" ],
+            "priv_reqs": [ "http_parser", "esp_timer", "lwip" ],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/esp-tls/libesp-tls.a",
+            "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls/esp_tls.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls/esp-tls-crypto/esp_tls_crypto.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls/esp_tls_error_capture.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls/esp_tls_platform_port.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls/esp_tls_mbedtls.c" ],
+            "include_dirs": [ "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls", "esp-tls-crypto" ]
         },
         "esp_adc": {
             "alias": "idf::esp_adc",
@@ -523,6 +538,21 @@
             "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/esp_event/default_event_loop.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_event/esp_event.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_event/esp_event_private.c" ],
             "include_dirs": [ "include" ]
         },
+        "esp_http_client": {
+            "alias": "idf::esp_http_client",
+            "target": "___idf_esp_http_client",
+            "prefix": "idf",
+            "dir": "/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client",
+            "type": "LIBRARY",
+            "lib": "__idf_esp_http_client",
+            "reqs": [ "lwip", "esp_event" ],
+            "priv_reqs": [ "tcp_transport", "http_parser" ],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/esp_http_client/libesp_http_client.a",
+            "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client/esp_http_client.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client/lib/http_auth.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client/lib/http_header.c", "/Users/garrett/esp/v5.5/esp-idf/components/esp_http_client/lib/http_utils.c" ],
+            "include_dirs": [ "include" ]
+        },
         "esp_hw_support": {
             "alias": "idf::esp_hw_support",
             "target": "___idf_esp_hw_support",
@@ -760,7 +790,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/fonts/libfonts.a",
-            "sources": [ "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/FontAwesome_14.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_16.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_20.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_24.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_42.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_10.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_14.c" ],
+            "sources": [ "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/FontAwesome_14.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_16.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_20.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_24.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansBold_42.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_10.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_14.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_16.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_20.c", "/Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_24.c" ],
             "include_dirs": [ "." ]
         },
         "freertos": {
@@ -807,6 +837,36 @@
             "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/heap/libheap.a",
             "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/heap/heap_caps_base.c", "/Users/garrett/esp/v5.5/esp-idf/components/heap/heap_caps.c", "/Users/garrett/esp/v5.5/esp-idf/components/heap/heap_caps_init.c", "/Users/garrett/esp/v5.5/esp-idf/components/heap/multi_heap.c", "/Users/garrett/esp/v5.5/esp-idf/components/heap/tlsf/tlsf.c", "/Users/garrett/esp/v5.5/esp-idf/components/heap/port/memory_layout_utils.c", "/Users/garrett/esp/v5.5/esp-idf/components/heap/port/esp32s3/memory_layout.c" ],
             "include_dirs": [ "include", "tlsf" ]
+        },
+        "http_parser": {
+            "alias": "idf::http_parser",
+            "target": "___idf_http_parser",
+            "prefix": "idf",
+            "dir": "/Users/garrett/esp/v5.5/esp-idf/components/http_parser",
+            "type": "LIBRARY",
+            "lib": "__idf_http_parser",
+            "reqs": [],
+            "priv_reqs": [],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/http_parser/libhttp_parser.a",
+            "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/http_parser/http_parser.c" ],
+            "include_dirs": [ "." ]
+        },
+        "json": {
+            "alias": "idf::json",
+            "target": "___idf_json",
+            "prefix": "idf",
+            "dir": "/Users/garrett/esp/v5.5/esp-idf/components/json",
+            "type": "LIBRARY",
+            "lib": "__idf_json",
+            "reqs": [],
+            "priv_reqs": [],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/json/libjson.a",
+            "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/json/cJSON/cJSON.c", "/Users/garrett/esp/v5.5/esp-idf/components/json/cJSON/cJSON_Utils.c" ],
+            "include_dirs": [ "cJSON" ]
         },
         "log": {
             "alias": "idf::log",
@@ -860,12 +920,12 @@
             "dir": "/Users/garrett/Documents/GWatch-Paris/main",
             "type": "LIBRARY",
             "lib": "__idf_main",
-            "reqs": [ "lvgl__lvgl", "fonts", "watchui", "driver", "esp_timer", "freertos", "esp_wifi", "esp_netif", "esp_event", "nvs_flash", "lwip", "esp_adc" ],
+            "reqs": [ "lvgl__lvgl", "fonts", "watchui", "driver", "esp_timer", "freertos", "esp_wifi", "esp_netif", "esp_event", "nvs_flash", "lwip", "esp_adc", "esp_http_client", "json" ],
             "priv_reqs": [ "lvgl__lvgl" ],
             "managed_reqs": [],
             "managed_priv_reqs": [ "lvgl__lvgl" ],
             "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/garrett/Documents/GWatch-Paris/main/assets/overlay.c", "/Users/garrett/Documents/GWatch-Paris/main/display/cst816s.c", "/Users/garrett/Documents/GWatch-Paris/main/display/display.c", "/Users/garrett/Documents/GWatch-Paris/main/hardware/battery.c", "/Users/garrett/Documents/GWatch-Paris/main/main.c", "/Users/garrett/Documents/GWatch-Paris/main/system/wifitime.c", "/Users/garrett/Documents/GWatch-Paris/main/ui/ui.c" ],
+            "sources": [ "/Users/garrett/Documents/GWatch-Paris/main/assets/overlay.c", "/Users/garrett/Documents/GWatch-Paris/main/display/cst816s.c", "/Users/garrett/Documents/GWatch-Paris/main/display/display.c", "/Users/garrett/Documents/GWatch-Paris/main/hardware/battery.c", "/Users/garrett/Documents/GWatch-Paris/main/main.c", "/Users/garrett/Documents/GWatch-Paris/main/system/wifitime.c", "/Users/garrett/Documents/GWatch-Paris/main/ui/ui.c", "/Users/garrett/Documents/GWatch-Paris/main/ui/watchscr.c", "/Users/garrett/Documents/GWatch-Paris/main/ui/wifiscr.c" ],
             "include_dirs": [ ".", "./display", "./hardware", "./system", "./ui" ]
         },
         "mbedtls": {
@@ -986,6 +1046,21 @@
             "managed_priv_reqs": [],
             "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/spi_flash/libspi_flash.a",
             "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/flash_brownout_hook.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/esp32s3/spi_flash_oct_flash_init.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_hpm_enable.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_drivers.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_generic.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_issi.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_mxic.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_gd.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_winbond.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_boya.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_mxic_opi.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_chip_th.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/memspi_host_driver.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/cache_utils.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/flash_mmap.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/flash_ops.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_wrap.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/esp_flash_api.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/esp_flash_spi_init.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_os_func_app.c", "/Users/garrett/esp/v5.5/esp-idf/components/spi_flash/spi_flash_os_func_noos.c" ],
+            "include_dirs": [ "include" ]
+        },
+        "tcp_transport": {
+            "alias": "idf::tcp_transport",
+            "target": "___idf_tcp_transport",
+            "prefix": "idf",
+            "dir": "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport",
+            "type": "LIBRARY",
+            "lib": "__idf_tcp_transport",
+            "reqs": [ "esp-tls", "lwip", "esp_timer" ],
+            "priv_reqs": [],
+            "managed_reqs": [],
+            "managed_priv_reqs": [],
+            "file": "/Users/garrett/Documents/GWatch-Paris/build/esp-idf/tcp_transport/libtcp_transport.a",
+            "sources": [ "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport/transport.c", "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport/transport_ssl.c", "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport/transport_internal.c", "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport/transport_socks_proxy.c", "/Users/garrett/esp/v5.5/esp-idf/components/tcp_transport/transport_ws.c" ],
             "include_dirs": [ "include" ]
         },
         "vfs": {
@@ -1180,7 +1255,7 @@
             "priv_reqs": [ "http_parser", "esp_timer", "lwip" ],
             "managed_reqs": [],
             "managed_priv_reqs": [],
-            "include_dirs": [ "/Users/garrett/Documents/GWatch-Paris/build", "esp-tls-crypto" ]
+            "include_dirs": [ "/Users/garrett/esp/v5.5/esp-idf/components/esp-tls", "esp-tls-crypto" ]
         },
         "esp_adc": {
             "alias": "idf::esp_adc",
@@ -2352,7 +2427,7 @@
             "prefix": "idf",
             "dir": "/Users/garrett/Documents/GWatch-Paris/main",
             "lib": "__idf_main",
-            "reqs": [ "lvgl__lvgl", "fonts", "watchui", "driver", "esp_timer", "freertos", "esp_wifi", "esp_netif", "esp_event", "nvs_flash", "lwip", "esp_adc" ],
+            "reqs": [ "lvgl__lvgl", "fonts", "watchui", "driver", "esp_timer", "freertos", "esp_wifi", "esp_netif", "esp_event", "nvs_flash", "lwip", "esp_adc", "esp_http_client", "json" ],
             "priv_reqs": [ "lvgl__lvgl" ],
             "managed_reqs": [],
             "managed_priv_reqs": [ "lvgl__lvgl" ],

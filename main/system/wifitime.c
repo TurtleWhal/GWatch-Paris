@@ -10,7 +10,10 @@
 #include "nvs_flash.h"
 #include "esp_sntp.h"
 
-#include "wifitime.h"
+#include "esp_http_client.h"
+#include "cJSON.h"
+
+#include "system.h"
 
 #define MAX_WIFI_APS 3 // adjust this as needed
 
@@ -22,7 +25,7 @@ typedef struct
 } wifi_ap_t;
 
 wifi_ap_t wifi_ap_list[MAX_WIFI_APS] = {
-    {"Garrett's Phone", "40961024"},
+    {"garrettphone", "40961024"},
     {"NetworkOfIOT", "40961024"},
     // {"SchoolNet", ""},
     {"GuestNet", ""},
@@ -67,6 +70,47 @@ static void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Time synchronization event");
 }
 
+static void update_timezone_from_api(void)
+{
+    esp_http_client_config_t config = {
+        .url = "http://worldtimeapi.org/api/ip",
+        .method = HTTP_METHOD_GET,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    if (esp_http_client_perform(client) == ESP_OK)
+    {
+        int content_length = esp_http_client_get_content_length(client);
+        char *buffer = malloc(content_length + 1);
+        if (buffer)
+        {
+            int read_len = esp_http_client_read(client, buffer, content_length);
+            buffer[read_len] = '\0';
+
+            // Parse JSON
+            cJSON *root = cJSON_Parse(buffer);
+            if (root)
+            {
+                cJSON *tz = cJSON_GetObjectItem(root, "timezone");
+                if (tz && cJSON_IsString(tz))
+                {
+                    ESP_LOGI(TAG, "Setting timezone to: %s", tz->valuestring);
+                    set_timezone(tz->valuestring); // <- updates TZ automatically
+                }
+                cJSON_Delete(root);
+            }
+            free(buffer);
+        }
+    }
+    esp_http_client_cleanup(client);
+}
+
+static void timezone_task(void *pvParameters)
+{
+    update_timezone_from_api(); // Your HTTP + cJSON code
+    vTaskDelete(NULL);          // Kill task after done
+}
+
 static void obtain_time(void)
 {
     ESP_LOGI(TAG, "Initializing SNTP");
@@ -75,16 +119,16 @@ static void obtain_time(void)
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     sntp_init();
 
-    // Wait for time to be set
+    // Wait for time to sync...
     time_t now = 0;
     struct tm timeinfo = {0};
     int retry = 0;
-    const int retry_count = 10;
+    const int retry_count = 20;
 
     while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count)
     {
-        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        ESP_LOGI(TAG, "Waiting for system time... (%d/%d)", retry, retry_count);
+        vTaskDelay(4000 / portTICK_PERIOD_MS);
         time(&now);
         localtime_r(&now, &timeinfo);
     }
@@ -93,12 +137,10 @@ static void obtain_time(void)
     {
         char strftime_buf[64];
         strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-        ESP_LOGI(TAG, "Current time: %s", strftime_buf);
+        ESP_LOGI(TAG, "NTP time (UTC): %s", strftime_buf);
 
-        // Turn off WiFi after time is obtained
-        ESP_LOGI(TAG, "Shutting down WiFi to save power");
-        esp_wifi_disconnect();
-        esp_wifi_stop();
+        // 🔹 Launch timezone fetch as a separate task
+        xTaskCreate(&timezone_task, "timezone_task", 8192, NULL, 5, NULL);
     }
     else
     {
@@ -139,11 +181,22 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
+        wifi_scan_config_t scan_config = {
+            .ssid = NULL,
+            .bssid = NULL,
+            .channel = 0,
+            .show_hidden = true};
+        esp_wifi_scan_start(&scan_config, true); // true = block until done
+
         connect_to_ap();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         ESP_LOGI(TAG, "Failed to connect to SSID: %s", wifi_ap_list[current_ap_index].ssid);
+
+        wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
+        ESP_LOGW(TAG, "Disconnect reason: %d", event->reason);
+
         current_ap_index++;
         connect_to_ap(); // try next AP
     }
@@ -175,8 +228,11 @@ void wifi_init(void)
                                                         NULL,
                                                         NULL));
 
+    ESP_LOGI(TAG, "wifi initalised.");
+}
+
+void wifi_connect()
+{
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
 }

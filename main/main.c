@@ -8,12 +8,12 @@
 #include "lvgl.h"
 #include <driver/i2c_master.h>
 #include <esp_pm.h>
-#include "display.h"
-#include "ui.h"
 #include "fonts.h"
-#include "wifitime.h"
-#include "battery.h"
 #include "driver/gpio.h"
+
+#include "system.h"
+
+struct SystemInfo sysinfo;
 
 static const char *TAG = "main";
 
@@ -46,7 +46,7 @@ void lv_task(void *args)
 {
     while (true)
     {
-        watchscr_update();
+        ui_update();
         lv_timer_handler();
         // uint32_t d = lv_timer_handler();
         // ESP_LOGI(TAG, "LVGL delay %d ms", d);
@@ -64,7 +64,7 @@ void timesync_task(void *args)
         if (t.day != lastday)
         {
             lastday = t.day;
-            wifi_init(); // fetch time again
+            wifi_connect(); // fetch time again
         }
 
         vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
@@ -124,6 +124,9 @@ void update_task(void *args)
 
 void app_main(void)
 {
+    ESP_LOGI("MEM", "Free heap: %d", esp_get_free_heap_size());
+    ESP_LOGI("MEM", "Largest block: %d", heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+
     esp_pm_config_t pm_config = {
         .max_freq_mhz = 240,
         .min_freq_mhz = 80,
@@ -154,13 +157,18 @@ void app_main(void)
 
     display_init(i2c_bus);
 
-    // Create demo UI
-    lv_obj_t *scr = watchscr_create();
-    // Define a dummy event callback function
-    lv_obj_add_event_cb(scr, ui_doubleclick_cb, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
-    lv_obj_add_event_cb(scr, ui_press_cb, LV_EVENT_PRESSED, NULL);
+    wifi_init();
 
-    set_timezone("PST8PDT,M3.2.0/2,M11.1.0/2");
+    ui_init();
+
+    // Create demo UI
+    lv_obj_t *scr = lv_screen_active();
+    // Define a dummy event callback function
+    // lv_obj_add_event_cb(scr, ui_doubleclick_cb, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
+    // lv_obj_add_event_cb(scr, ui_press_cb, LV_EVENT_PRESSED, NULL);
+
+    set_timezone("PST8PDT,M3.2.0/2,M11.1.0/2"); // Seattle
+    // set_timezone("MST7MDT,M3.2.0/2,M11.1.0/2"); // Mountain Time
 
     sleep_time = millis();
 
@@ -187,7 +195,7 @@ void app_main(void)
         "timesync_task",
         1024 * 4,
         NULL,
-        0,
+        4,
         NULL,
         0);
 

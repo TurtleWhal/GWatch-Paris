@@ -7770,7 +7770,7 @@
                                 "name": "RTC_CLK_CAL_CYCLES",
                                 "range": [
                                     0,
-                                    8190
+                                    32766
                                 ],
                                 "title": "Number of cycles for RTC_SLOW_CLK calibration",
                                 "type": "int"

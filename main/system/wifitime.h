@@ -14,3 +14,4 @@ extern const char *months[12];
 local_datetime_t get_local_datetime(void);
 void set_timezone(const char *tz);
 void wifi_init(void);
+void wifi_connect();

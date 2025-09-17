@@ -6,4 +6,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_42.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_10.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_14.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_16.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_20.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_24.c
 )
