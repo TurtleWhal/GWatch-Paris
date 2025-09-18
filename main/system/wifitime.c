@@ -40,26 +40,6 @@ const char *months[12] = {
     "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
     "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 
-local_datetime_t get_local_datetime(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-
-    struct tm tm_info;
-    localtime_r(&tv.tv_sec, &tm_info); // convert to local time
-
-    local_datetime_t t;
-    t.year = tm_info.tm_year + 1900;
-    t.month = tm_info.tm_mon + 1; // tm_mon = 0..11
-    t.day = tm_info.tm_mday;
-    t.hour = tm_info.tm_hour;
-    t.min = tm_info.tm_min;
-    t.sec = tm_info.tm_sec;
-    t.ms = tv.tv_usec / 1000; // milliseconds within the second
-
-    return t;
-}
-
 void set_timezone(const char *tz)
 {
     setenv("TZ", tz, 1); // e.g., "CET-1CEST,M3.5.0,M10.5.0/3"
@@ -129,7 +109,7 @@ static void obtain_time(void)
     while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count)
     {
         ESP_LOGI(TAG, "Waiting for system time... (%d/%d)", retry, retry_count);
-        vTaskDelay(4000 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(4000));
         time(&now);
         localtime_r(&now, &timeinfo);
     }
@@ -147,6 +127,8 @@ static void obtain_time(void)
     {
         ESP_LOGW(TAG, "Failed to get time from NTP");
     }
+
+    sysinfo.wifi.connected = false;
 }
 
 static void connect_to_ap(void)
@@ -187,7 +169,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             .bssid = NULL,
             .channel = 0,
             .show_hidden = true};
-        esp_wifi_scan_start(&scan_config, true); // true = block until done
+        // esp_wifi_scan_start(&scan_config, true); // true = block until done
 
         connect_to_ap();
     }
@@ -197,6 +179,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
         wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
         ESP_LOGW(TAG, "Disconnect reason: %d", event->reason);
+        sysinfo.wifi.connected = false;
 
         current_ap_index++;
         connect_to_ap(); // try next AP
@@ -204,7 +187,46 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         ESP_LOGI(TAG, "WiFi connected, got IP");
+        sysinfo.wifi.connected = true;
         obtain_time();
+    }
+}
+
+void update_time(void *args)
+{
+    while (true)
+    {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+
+        struct tm tm_info;
+        localtime_r(&tv.tv_sec, &tm_info); // convert to local time
+
+        sysinfo.time.year = tm_info.tm_year + 1900;
+        sysinfo.time.month = tm_info.tm_mon + 1; // tm_mon = 0..11
+        sysinfo.time.day = tm_info.tm_mday;
+        sysinfo.time.hour = tm_info.tm_hour;
+        sysinfo.time.min = tm_info.tm_min;
+        sysinfo.time.sec = tm_info.tm_sec;
+        sysinfo.time.ms = tv.tv_usec / 1000; // milliseconds within the second
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+void timesync_task(void *args)
+{
+    while (true)
+    {
+        static uint8_t lastday = -1;
+
+        if (sysinfo.time.day != lastday) // if day changed
+        {
+            lastday = sysinfo.time.day;
+            wifi_connect(); // fetch time again
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
     }
 }
 
@@ -230,6 +252,24 @@ void wifi_init(void)
                                                         NULL));
 
     ESP_LOGI(TAG, "wifi initalised.");
+
+    xTaskCreatePinnedToCore(
+        timesync_task,
+        "timesync_task",
+        1024 * 1,
+        NULL,
+        4,
+        NULL,
+        0);
+
+    xTaskCreatePinnedToCore(
+        update_time,
+        "update_time",
+        1024 * 4,
+        NULL,
+        4,
+        NULL,
+        0);
 }
 
 void wifi_connect()

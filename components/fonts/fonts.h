@@ -36,3 +36,4 @@ LV_FONT_DECLARE(ProductSansRegular_24);
 #define FA_BATTERY   "" // '', Sizes: [14]
 #define FA_CALENDAR  "" // '', Sizes: [14]
 #define FA_LIGHTNING "" // '', Sizes: [14]
+#define FA_WIFI      "" // '', Sizes: [14]

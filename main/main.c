@@ -54,23 +54,6 @@ void lv_task(void *args)
     }
 }
 
-void timesync_task(void *args)
-{
-    while (true)
-    {
-        static uint8_t lastday = -1;
-
-        local_datetime_t t = get_local_datetime();
-        if (t.day != lastday)
-        {
-            lastday = t.day;
-            wifi_connect(); // fetch time again
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
-    }
-}
-
 void update_task(void *args)
 {
     while (true)
@@ -187,15 +170,6 @@ void app_main(void)
         1024 * 4,
         NULL,
         0,
-        NULL,
-        0);
-
-    xTaskCreatePinnedToCore(
-        timesync_task,
-        "timesync_task",
-        1024 * 4,
-        NULL,
-        4,
         NULL,
         0);
 

@@ -21,6 +21,8 @@ lv_obj_t *month;
 
 lv_obj_t *battery;
 
+lv_obj_t *wifiicon;
+
 static uint8_t last_sec = 255, last_min = 255, last_hour = 255;
 static uint8_t last_day = 255, last_month = 255;
 static uint32_t last_battery_check = 0;
@@ -157,6 +159,15 @@ lv_obj_t *watchscr_create()
     lv_arc_set_value(battery, 3700);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%d", 3700);
 
+    wifiicon = lv_label_create(scr);
+    // lv_obj_set_pos(wifiicon, POLAR(120, 90));
+    lv_obj_align(wifiicon, LV_ALIGN_CENTER, POLAR(110, 90));
+
+    lv_obj_set_style_text_color(wifiicon, lv_color_white(), 0);
+    SET_SYMBOL_14(wifiicon, FA_WIFI);
+
+    lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
+
     lv_screen_load(scr);
 
     return scr;
@@ -164,17 +175,17 @@ lv_obj_t *watchscr_create()
 
 void watchscr_update()
 {
-    local_datetime_t time = get_local_datetime();
+    struct TimeInfo t = sysinfo.time;
 
     /* Rotate seconds smoothly */
-    uint16_t sangle = (time.ms * 360 / 1000) / 60 + (time.sec * 6);
+    uint16_t sangle = (t.ms * 360 / 1000) / 60 + (t.sec * 6);
     lv_scale_set_rotation(secondscale, sangle);
 
-    if (time.sec != last_sec)
+    if (t.sec != last_sec)
     {
-        last_sec = time.sec;
+        last_sec = t.sec;
 
-        uint16_t mangle = time.sec * (360 / 60) / 60 + time.min * (360 / 60);
+        uint16_t mangle = t.sec * (360 / 60) / 60 + t.min * (360 / 60);
         lv_scale_set_rotation(minutescale, mangle);
 
         for (int i = 0; i < 13; ++i)
@@ -190,17 +201,17 @@ void watchscr_update()
     }
 
     /* Update minute/hour only when changed */
-    if (time.min != last_min)
+    if (t.min != last_min)
     {
-        last_min = time.min;
+        last_min = t.min;
         char buf[4];
         snprintf(buf, sizeof(buf), "%02d", last_min);
         lv_label_set_text(minute, buf);
     }
 
-    if (time.hour != last_hour)
+    if (t.hour != last_hour)
     {
-        last_hour = time.hour % 12;
+        last_hour = t.hour % 12;
         if (last_hour == 0)
             last_hour = 12;
         char buf[4];
@@ -209,16 +220,16 @@ void watchscr_update()
     }
 
     /* Update date once a day */
-    if (time.day != last_day)
+    if (t.day != last_day)
     {
-        last_day = time.day;
+        last_day = t.day;
         char buf[4];
         snprintf(buf, sizeof(buf), "%02d", last_day);
         lv_label_set_text(day, buf);
     }
-    if (time.month != last_month)
+    if (t.month != last_month)
     {
-        last_month = time.month;
+        last_month = t.month;
         lv_label_set_text(month, months[last_month - 1]);
     }
 
@@ -236,6 +247,11 @@ void watchscr_update()
     lv_arc_set_value(battery, sysinfo.bat.voltage);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"),
                           "%d", sysinfo.bat.voltage);
+
+    if (sysinfo.wifi.connected)
+        lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
     SET_SYMBOL_14(lv_obj_get_child_by_name(battery, "icon"), sysinfo.bat.charging ? FA_LIGHTNING : FA_BATTERY);
 }

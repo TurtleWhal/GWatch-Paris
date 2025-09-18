@@ -1,10 +1,11 @@
 {
     "symbol-bpp": 4,
     "symbols": [
-        {"name": "steps",    "char": "",  "sizes": [14] },
-        {"name": "battery",  "char": "",  "sizes": [14] },
-        {"name": "calendar", "char": "",  "sizes": [14] },
-        {"name": "lightning", "char": "",  "sizes": [14] }
+        {"name": "steps",     "char": "",  "sizes": [14] },
+        {"name": "battery",   "char": "",  "sizes": [14] },
+        {"name": "calendar",  "char": "",  "sizes": [14] },
+        {"name": "lightning", "char": "",  "sizes": [14] },
+        {"name": "wifi",      "char": "",  "sizes": [14] }
     ], 
     "fonts": [
         {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"", "bpp":4},

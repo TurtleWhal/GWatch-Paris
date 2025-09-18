@@ -29,9 +29,7 @@ lv_obj_t *wifiscr_create()
 
 void wifiscr_update()
 {
-    local_datetime_t time = get_local_datetime();
-
-    uint8_t h = time.hour % 12;
+    uint8_t h = sysinfo.time.hour % 12;
     if (h == 0)
         h = 12;
 
@@ -39,6 +37,6 @@ void wifiscr_update()
     // lv_label_set_text_fmt(timelbl, "%i", time.sec);
 
     char buf[20];
-    snprintf(buf, sizeof(buf), "Time: %02d:%02d:%02d", h, time.min, time.sec);
+    snprintf(buf, sizeof(buf), "Time: %02d:%02d:%02d", h, sysinfo.time.min, sysinfo.time.sec);
     lv_label_set_text(timelbl, buf);
 }
