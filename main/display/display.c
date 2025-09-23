@@ -3,11 +3,12 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 
-#include "display.h"
 #include "lvgl.h"
 #include "gc9a01_driver.h"
 
 #include "driver/ledc.h"
+
+#include "system/system.h"
 
 #define TAG "DISPLAY"
 
@@ -132,6 +133,7 @@ void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *touch)
 
     if (cst816s_available())
     {
+        wakeup();
 
         touch_data data = cst816s_touch_read();
 

@@ -32,6 +32,7 @@
     "task.h": "c",
     "supplier.h": "c",
     "system.h": "c",
-    "semphr.h": "c"
+    "semphr.h": "c",
+    "display.h": "c"
   }
 }

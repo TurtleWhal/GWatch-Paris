@@ -10,6 +10,9 @@
 #include "ui.h"
 #include "display.h"
 
+void wakeup();
+void systemsleep();
+
 struct TimeInfo
 {
     int year;  // full year, e.g., 2025
@@ -38,6 +41,8 @@ struct SystemInfo
     struct TimeInfo time;
     struct BatteryInfo bat;
     struct WiFiInfo wifi;
+
+    bool sleeping; // is system asleep
 };
 
 extern struct SystemInfo sysinfo;

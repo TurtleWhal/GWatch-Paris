@@ -42,6 +42,40 @@ void ui_doubleclick_cb(lv_event_t *e) { esp_restart(); }
 void ui_press_cb(lv_event_t *e) { touching = true; }
 // void ui_release_cb(lv_event_t *e) { touching = false; }
 
+void wakeup()
+{
+    if (sysinfo.sleeping)
+    {
+        esp_pm_lock_acquire(pm_lock);
+        // display_wake();
+        // vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskResume(lv_task_handle);
+        // lv_refr_now(lv_display_get_default());
+        vTaskDelay(pdMS_TO_TICKS(300)); // wait for the display to refresh
+    }
+
+    // gpio_set_level(2, 1);
+    setBacklight(brightness);
+
+    sleep_time = millis(); // reset sleep timer on touch
+    sysinfo.sleeping = false;
+}
+
+void systemsleep()
+{
+    if (!sysinfo.sleeping)
+    {
+        // gpio_set_level(2, 0);
+        setBacklightGradual(0, 1000);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskSuspend(lv_task_handle);
+        // display_sleep();
+        sysinfo.sleeping = true;
+
+        esp_pm_lock_release(pm_lock);
+    }
+}
+
 void lv_task(void *args)
 {
     while (true)
@@ -60,44 +94,18 @@ void update_task(void *args)
     {
         // ESP_LOGI("loop", "CPU Freq: %d", esp_clk_cpu_freq());
 
-        if (!sleeping) // if awake
+        if (!sysinfo.sleeping) // if awake
         {
-
-            // if (cst816s_available())
-            if (touching)
+            if (millis() - sleep_time > 14000)
             {
-                sleep_time = millis(); // reset sleep timer on touch
-                touching = false;
-            }
-            else if (millis() - sleep_time > 14000)
-            {
-                // gpio_set_level(2, 0);
-                setBacklightGradual(0, 1000);
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                vTaskSuspend(lv_task_handle);
-                // display_sleep();
-                sleeping = true;
-
-                esp_pm_lock_release(pm_lock);
+                systemsleep();
             }
         }
         else
         {
-            if (cst816s_available())
-            // if (touching)
+            if (cst816s_available()) // if screen touched
             {
-                esp_pm_lock_acquire(pm_lock);
-                // display_wake();
-                // vTaskDelay(pdMS_TO_TICKS(50));
-                vTaskResume(lv_task_handle);
-                // lv_refr_now(lv_display_get_default());
-                vTaskDelay(pdMS_TO_TICKS(300)); // wait for the display to refresh
-                // gpio_set_level(2, 1);
-                setBacklight(brightness);
-
-                sleep_time = millis(); // reset sleep timer on touch
-                sleeping = false;
-                touching = false;
+                wakeup();
             }
         }
 
@@ -154,6 +162,7 @@ void app_main(void)
     // set_timezone("MST7MDT,M3.2.0/2,M11.1.0/2"); // Mountain Time
 
     sleep_time = millis();
+    sysinfo.sleeping = false;
 
     xTaskCreatePinnedToCore(
         lv_task,
