@@ -63,6 +63,12 @@ void Display::set_backlight(int16_t val)
     ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
 }
 
+// void backlight_task(void *pvParameters)
+// {
+//     auto *obj = static_cast<Display *>(pvParameters);
+//     obj->backlight_updata();
+// }
+
 void Display::backlight_updata()
 {
     while (1) // in its own thread so its fine
@@ -234,25 +240,27 @@ void Display::init(i2c_master_bus_handle_t bus)
         .hpoint = 0};
     ledc_channel_config(&ledc_channel);
 
-    // xTaskCreatePinnedToCore([](void *pvParameters)
-    //                         {
-    //                             auto *obj = static_cast<Display *>(pvParameters);
-    //                             obj->backlight_updata(); },
-    //                         "backlight", 1024 * 4, NULL, 2, &backlightHandle, 0);
+    xTaskCreatePinnedToCore([](void *pvParameters)
+                            {
+                                auto *obj = static_cast<Display *>(pvParameters);
+                                obj->backlight_updata(); },
+                            "backlight", 1024 * 4, this, 2, &backlightHandle, 0);
 
     // xTaskCreatePinnedToCore(backlight_task, "backlight", 1024 * 4, NULL, 2, &backlightHandle, 0);
 
-    set_backlight(100);
+    // set_backlight(100);
 
-    while (true)
-    {
-        fillScreen(COLOR_RED);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        fillScreen(COLOR_GREEN);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        fillScreen(COLOR_BLUE);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
+    // while (true)
+    // {
+    //     fillScreen(COLOR_RED);
+    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //     fillScreen(COLOR_GREEN);
+    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //     fillScreen(COLOR_BLUE);
+    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // }
+
+    fillScreen(COLOR_MAGENTA);
 }
 
 // void display_sleep()
