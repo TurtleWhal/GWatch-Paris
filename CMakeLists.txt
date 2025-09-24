@@ -16,4 +16,7 @@ add_definitions(
     -DARDUINO_USB_CDC_ON_BOOT
 )
 
+add_compile_definitions(ENV_WAVESHARE)
+# add_compile_definitions(ENV_ SOMETHING ELSE?)
+
 project(GWatch-Paris)

@@ -29,9 +29,13 @@
 #         esp_adc
 # )
 
-file(GLOB_RECURSE SOURCES
+file(GLOB_RECURSE C_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
 )
+file(GLOB_RECURSE CPP_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+)
+set(SOURCES ${C_SOURCES} ${CPP_SOURCES})
 
 idf_component_register(
     SRCS ${SOURCES}

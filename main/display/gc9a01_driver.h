@@ -9,15 +9,15 @@
 #include <driver/spi_master.h>
 #include <driver/gpio.h>
 #include <esp_log.h>
+#include <esp_err.h>
 
 // Configuration defines - adjust these for your setup
 #define GC9A01_SPI_HOST SPI2_HOST
-#define GC9A01_PIN_MOSI 11
-#define GC9A01_PIN_CLK 10
-#define GC9A01_PIN_CS 9
-#define GC9A01_PIN_DC 8
-#define GC9A01_PIN_RST 14
-#define GC9A01_PIN_BLK -1 // Set to -1 if not used
+#define GC9A01_PIN_MOSI (gpio_num_t)11
+#define GC9A01_PIN_CLK (gpio_num_t)10
+#define GC9A01_PIN_CS (gpio_num_t)9
+#define GC9A01_PIN_DC (gpio_num_t)8
+#define GC9A01_PIN_RST (gpio_num_t)14
 
 // Display dimensions
 #define GC9A01_WIDTH 240
@@ -53,10 +53,9 @@ static const char *TAG = "GC9A01_DMA";
 typedef struct
 {
     spi_device_handle_t spi;
-    int pin_dc;
-    int pin_rst;
-    int pin_cs;
-    int pin_blk;
+    gpio_num_t pin_dc;
+    gpio_num_t pin_rst;
+    gpio_num_t pin_cs;
     uint8_t rotation;
     bool swap_bytes;
     bool dma_enabled;
@@ -143,7 +142,7 @@ static void gc9a01_set_addr_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16
 }
 
 // Initialize DMA
-esp_err_t initDMA(void)
+esp_err_t gc9a01_initDMA(void)
 {
     if (gc9a01.dma_mutex == NULL)
     {
@@ -160,7 +159,7 @@ esp_err_t initDMA(void)
 }
 
 // Initialize the display
-esp_err_t begin(void)
+esp_err_t gc9a01_begin(void)
 {
     esp_err_t ret;
 
@@ -169,7 +168,6 @@ esp_err_t begin(void)
     gc9a01.pin_dc = GC9A01_PIN_DC;
     gc9a01.pin_rst = GC9A01_PIN_RST;
     gc9a01.pin_cs = GC9A01_PIN_CS;
-    gc9a01.pin_blk = GC9A01_PIN_BLK;
     gc9a01.rotation = 0;
     gc9a01.swap_bytes = false;
     gc9a01.width = GC9A01_WIDTH;
@@ -184,18 +182,14 @@ esp_err_t begin(void)
     {
         io_conf.pin_bit_mask |= (1ULL << gc9a01.pin_rst);
     }
-    if (gc9a01.pin_blk >= 0)
-    {
-        io_conf.pin_bit_mask |= (1ULL << gc9a01.pin_blk);
-    }
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
+    io_conf.pull_down_en = (gpio_pulldown_t)0;
+    io_conf.pull_up_en = (gpio_pullup_t)0;
     gpio_config(&io_conf);
 
     // Configure SPI bus
     spi_bus_config_t buscfg = {
-        .miso_io_num = -1,
         .mosi_io_num = GC9A01_PIN_MOSI,
+        .miso_io_num = -1,
         .sclk_io_num = GC9A01_PIN_CLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
@@ -211,11 +205,11 @@ esp_err_t begin(void)
 
     // Configure SPI device
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = GC9A01_SPI_CLOCK_SPEED,
         .mode = 0,
+        .clock_speed_hz = GC9A01_SPI_CLOCK_SPEED,
         .spics_io_num = gc9a01.pin_cs,
-        .queue_size = 1, // Reduced queue size for better performance
         .flags = SPI_DEVICE_NO_DUMMY,
+        .queue_size = 1, // Reduced queue size for better performance
         .pre_cb = NULL,
         .post_cb = NULL};
 
@@ -228,12 +222,6 @@ esp_err_t begin(void)
 
     // Hardware reset
     gc9a01_hard_reset();
-
-    // Turn on backlight if configured
-    if (gc9a01.pin_blk >= 0)
-    {
-        gpio_set_level(gc9a01.pin_blk, 1);
-    }
 
     // Initialize display with GC9A01 specific commands
     gc9a01_send_cmd(0xEF);
@@ -470,7 +458,7 @@ esp_err_t begin(void)
     vTaskDelay(pdMS_TO_TICKS(120));
 
     // Initialize DMA
-    initDMA();
+    gc9a01_initDMA();
 
     ESP_LOGI(TAG, "GC9A01 display initialized successfully");
     return ESP_OK;
@@ -491,8 +479,8 @@ esp_err_t gc9a01_spi_reinit(void)
 
     // Re-init SPI bus
     spi_bus_config_t buscfg = {
-        .miso_io_num = -1,
         .mosi_io_num = GC9A01_PIN_MOSI,
+        .miso_io_num = -1,
         .sclk_io_num = GC9A01_PIN_CLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
@@ -506,11 +494,12 @@ esp_err_t gc9a01_spi_reinit(void)
 
     // Re-add device
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = GC9A01_SPI_CLOCK_SPEED,
         .mode = 0,
+        .clock_speed_hz = GC9A01_SPI_CLOCK_SPEED,
         .spics_io_num = gc9a01.pin_cs,
+        .flags = SPI_DEVICE_NO_DUMMY,
         .queue_size = 1,
-        .flags = SPI_DEVICE_NO_DUMMY};
+    };
     ret = spi_bus_add_device(GC9A01_SPI_HOST, &devcfg, &gc9a01.spi);
     if (ret != ESP_OK)
     {
@@ -518,13 +507,13 @@ esp_err_t gc9a01_spi_reinit(void)
         return ret;
     }
 
-    initDMA();
+    gc9a01_initDMA();
     ESP_LOGI(TAG, "SPI bus/device re-initialized successfully");
     return ESP_OK;
 }
 
 // Set byte swapping
-void setSwapBytes(bool swap)
+void gc9a01_setSwapBytes(bool swap)
 {
     gc9a01.swap_bytes = swap;
 }
@@ -565,7 +554,7 @@ void gc9a01_setRotation(uint8_t rotation)
 }
 
 // Start write transaction
-void startWrite(void)
+void gc9a01_startWrite(void)
 {
     if (gc9a01.dma_enabled && gc9a01.dma_mutex)
     {
@@ -575,7 +564,7 @@ void startWrite(void)
 }
 
 // End write transaction
-void endWrite(void)
+void gc9a01_endWrite(void)
 {
     gc9a01.transaction_started = false;
     if (gc9a01.dma_enabled && gc9a01.dma_mutex)
@@ -585,7 +574,7 @@ void endWrite(void)
 }
 
 // Byte swap function
-static void swap_bytes_inplace(uint16_t *data, size_t len)
+static void gc9a01_swap_bytes_inplace(uint16_t *data, size_t len)
 {
     for (size_t i = 0; i < len; i++)
     {
@@ -594,7 +583,7 @@ static void swap_bytes_inplace(uint16_t *data, size_t len)
 }
 
 // Push image data using DMA
-esp_err_t pushImageDMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *data)
+esp_err_t gc9a01_pushImageDMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *data)
 {
     if (!gc9a01.spi)
     {
@@ -633,7 +622,7 @@ esp_err_t pushImageDMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t 
     bool transaction_started_here = false;
     if (!gc9a01.transaction_started)
     {
-        startWrite();
+        gc9a01_startWrite();
         transaction_started_here = true;
     }
 
@@ -731,26 +720,26 @@ esp_err_t pushImageDMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t 
 
     if (transaction_started_here)
     {
-        endWrite();
+        gc9a01_endWrite();
     }
 
     return ret;
 }
 
 // Convenience function to push image data to full screen
-esp_err_t pushImageDMA_fullscreen(uint16_t *data)
+esp_err_t gc9a01_pushImageDMA_fullscreen(uint16_t *data)
 {
-    return pushImageDMA(0, 0, gc9a01.width, gc9a01.height, data);
+    return gc9a01_pushImageDMA(0, 0, gc9a01.width, gc9a01.height, data);
 }
 
 // Get current display width (affected by rotation)
-uint16_t getWidth(void)
+uint16_t gc9a01_getWidth(void)
 {
     return gc9a01.width;
 }
 
 // Get current display height (affected by rotation)
-uint16_t getHeight(void)
+uint16_t gc9a01_getHeight(void)
 {
     return gc9a01.height;
 }
@@ -772,21 +761,21 @@ esp_err_t fillScreen(uint16_t color)
         line_buffer[i] = color;
     }
 
-    startWrite();
+    gc9a01_startWrite();
 
     // Send line by line to avoid large memory allocation
     for (int y = 0; y < gc9a01.height; y++)
     {
-        esp_err_t ret = pushImageDMA(0, y, gc9a01.width, 1, line_buffer);
+        esp_err_t ret = gc9a01_pushImageDMA(0, y, gc9a01.width, 1, line_buffer);
         if (ret != ESP_OK)
         {
             free(line_buffer);
-            endWrite();
+            gc9a01_endWrite();
             return ret;
         }
     }
 
-    endWrite();
+    gc9a01_endWrite();
     free(line_buffer);
     return ESP_OK;
 }
@@ -799,17 +788,7 @@ esp_err_t drawPixel(uint16_t x, uint16_t y, uint16_t color)
         return ESP_FAIL;
     }
 
-    return pushImageDMA(x, y, 1, 1, &color);
-}
-
-// Set display brightness (if backlight pin is configured)
-void setBrightness(uint8_t brightness)
-{
-    if (gc9a01.pin_blk >= 0)
-    {
-        // Simple on/off control - for PWM brightness control, use ledc driver
-        gpio_set_level(gc9a01.pin_blk, brightness > 0 ? 1 : 0);
-    }
+    return gc9a01_pushImageDMA(x, y, 1, 1, &color);
 }
 
 // Put display to sleep
@@ -827,25 +806,25 @@ void gc9a01_wakeup(void)
 }
 
 // Turn display on
-void displayOn(void)
+void gc9a01_displayOn(void)
 {
     gc9a01_send_cmd(GC9A01_DISPON);
 }
 
 // Turn display off
-void displayOff(void)
+void gc9a01_displayOff(void)
 {
     gc9a01_send_cmd(GC9A01_DISPOFF);
 }
 
 // Invert display colors
-void invertDisplay(bool invert)
+void gc9a01_invertDisplay(bool invert)
 {
     gc9a01_send_cmd(invert ? GC9A01_INVON : GC9A01_INVOFF);
 }
 
 // Get DMA status
-bool isDMAEnabled(void)
+bool gc9a01_isDMAEnabled(void)
 {
     return gc9a01.dma_enabled;
 }

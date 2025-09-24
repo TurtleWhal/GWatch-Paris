@@ -1,26 +1,37 @@
-#include "lvgl.h"
-#include "esp_log.h"
+// #include "lvgl.h"
+// #include "esp_log.h"
 #include "driver/i2c_master.h"
-#include <string.h>
-#include <stdlib.h>
-#include "driver/gpio.h"
-#include "esp_sleep.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "display.h"
+// #include <string.h>
+// #include <stdlib.h>
+// #include "driver/gpio.h"
+// #include "esp_sleep.h"
+// #include "freertos/FreeRTOS.h"
+// #include "freertos/task.h"
+// #include "display.h"
 
 #define TAG "MAIN"
 
 // Adjust these to your setup
 #define I2C_PORT I2C_NUM_0
-#define TOUCH_RST_GPIO 13
-#define TOUCH_INT_GPIO 5
+#define TOUCH_RST_GPIO (gpio_num_t)13
+#define TOUCH_INT_GPIO (gpio_num_t)5
 
 #define CST816S_ADDRESS 0x15
 
 // Global I2C handles
 static i2c_master_bus_handle_t i2c_bus = NULL;
 static i2c_master_dev_handle_t cst816s_dev = NULL;
+
+typedef struct touch_data
+{
+    uint8_t gestureID; // Gesture ID
+    uint8_t points;    // Number of touch points
+    uint8_t event;     // Event (0 = Down, 1 = Up, 2 = Contact)
+    int x;
+    int y;
+    uint8_t version;
+    uint8_t versionInfo[3];
+} touch_data;
 
 enum GESTURE
 {
@@ -36,16 +47,16 @@ enum GESTURE
 
 touch_data data;
 
-static uint8_t i2c_read(uint8_t reg_addr, uint8_t *reg_data, size_t length);
-static uint8_t i2c_write(uint8_t reg_addr, const uint8_t *reg_data, size_t length);
+static uint8_t cst816s_i2c_read(uint8_t reg_addr, uint8_t *reg_data, size_t length);
+static uint8_t cst816s_i2c_write(uint8_t reg_addr, const uint8_t *reg_data, size_t length);
 
 /*!
     @brief  read touch data
 */
-void read_touch()
+void cst816s_read_touch()
 {
     uint8_t data_raw[8];
-    i2c_read(0x01, data_raw, 6);
+    cst816s_i2c_read(0x01, data_raw, 6);
 
     data.gestureID = data_raw[0];
     data.points = data_raw[1];
@@ -56,7 +67,7 @@ void read_touch()
 
 volatile bool _event_available;
 
-void IRAM_ATTR handleISR(void *arg)
+void IRAM_ATTR cst816s_handleISR(void *arg)
 {
     _event_available = true;
 }
@@ -64,31 +75,31 @@ void IRAM_ATTR handleISR(void *arg)
 /*!
     @brief  enable double click
 */
-void enable_double_click(void)
+void cst816s_enable_double_click(void)
 {
     const uint8_t enableDoubleTap = 0x01;
-    i2c_write(0xEC, &enableDoubleTap, 1);
+    cst816s_i2c_write(0xEC, &enableDoubleTap, 1);
 }
 
 /*!
     @brief  Disable auto sleep mode
 */
-void disable_auto_sleep(void)
+void cst816s_disable_auto_sleep(void)
 {
     const uint8_t disableAutoSleep = 0xFE;
-    i2c_write(0xFE, &disableAutoSleep, 1);
+    cst816s_i2c_write(0xFE, &disableAutoSleep, 1);
 }
 
 /*!
     @brief  Enable auto sleep mode
 */
-void enable_auto_sleep(void)
+void cst816s_enable_auto_sleep(void)
 {
     const uint8_t enableAutoSleep = 0x00;
-    i2c_write(0xFE, &enableAutoSleep, 1);
+    cst816s_i2c_write(0xFE, &enableAutoSleep, 1);
 }
 
-void set_auto_sleep_time(int seconds)
+void cst816s_set_auto_sleep_time(int seconds)
 {
     if (seconds < 1)
         seconds = 1;
@@ -96,7 +107,7 @@ void set_auto_sleep_time(int seconds)
         seconds = 255;
 
     uint8_t sleepTime = (uint8_t)seconds;
-    i2c_write(0xF9, &sleepTime, 1);
+    cst816s_i2c_write(0xF9, &sleepTime, 1);
 }
 
 /*!
@@ -106,24 +117,24 @@ bool cst816s_available(void)
 {
     if (_event_available)
     {
-        read_touch();
+        cst816s_read_touch();
         _event_available = false;
         return true;
     }
     return false;
 }
 
-void touchpad_sleep()
+void cst816s_touchpad_sleep()
 {
     gpio_set_level(TOUCH_RST_GPIO, 0);
     vTaskDelay(pdMS_TO_TICKS(5));
     gpio_set_level(TOUCH_RST_GPIO, 1);
     vTaskDelay(pdMS_TO_TICKS(50));
     uint8_t standby_value = 0x03;
-    i2c_write(0xA5, &standby_value, 1);
+    cst816s_i2c_write(0xA5, &standby_value, 1);
 }
 
-const char *gesture()
+const char *cst816s_gesture()
 {
     switch (data.gestureID)
     {
@@ -150,7 +161,7 @@ const char *gesture()
 
 /* ------------ New I²C NG Read/Write ------------ */
 
-static uint8_t i2c_read(uint8_t reg_addr, uint8_t *reg_data, size_t length)
+static uint8_t cst816s_i2c_read(uint8_t reg_addr, uint8_t *reg_data, size_t length)
 {
     esp_err_t ret;
     ret = i2c_master_transmit(cst816s_dev, &reg_addr, 1, -1);
@@ -161,9 +172,9 @@ static uint8_t i2c_read(uint8_t reg_addr, uint8_t *reg_data, size_t length)
     return (ret == ESP_OK) ? 0 : -1;
 }
 
-static uint8_t i2c_write(uint8_t reg_addr, const uint8_t *reg_data, size_t length)
+static uint8_t cst816s_i2c_write(uint8_t reg_addr, const uint8_t *reg_data, size_t length)
 {
-    uint8_t *buf = malloc(length + 1);
+    uint8_t *buf = (uint8_t *)malloc(length + 1);
     if (!buf)
         return -1;
 
@@ -211,17 +222,17 @@ void cst816s_init(i2c_master_bus_handle_t bus)
     vTaskDelay(pdMS_TO_TICKS(50));
 
     // Read version and version info
-    i2c_read(0x15, &data.version, 1);
+    cst816s_i2c_read(0x15, &data.version, 1);
     vTaskDelay(pdMS_TO_TICKS(5));
-    i2c_read(0xA7, data.versionInfo, 3);
+    cst816s_i2c_read(0xA7, data.versionInfo, 3);
 
-    enable_auto_sleep();
-    set_auto_sleep_time(1);
+    cst816s_enable_auto_sleep();
+    cst816s_set_auto_sleep_time(1);
 
     // esp_sleep_enable_gpio_wakeup();
 
     // Attach ISR handler for touch interrupt
-    gpio_isr_handler_add(TOUCH_INT_GPIO, handleISR, NULL);
+    gpio_isr_handler_add(TOUCH_INT_GPIO, cst816s_handleISR, NULL);
     // gpio_wakeup_enable(TOUCH_INT_GPIO, GPIO_INTR_LOW_LEVEL);
 
     ESP_LOGI(TAG, "CST816S initialized (ver %d)", data.version);

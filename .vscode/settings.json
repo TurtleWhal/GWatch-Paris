@@ -5,7 +5,7 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "idf.port": "/dev/tty.wchusbserial57350173211",
+  "idf.port": "/dev/tty.wchusbserial578E0235041",
   "idf.toolsPath": "/Users/garrett/.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
@@ -33,6 +33,20 @@
     "supplier.h": "c",
     "system.h": "c",
     "semphr.h": "c",
-    "display.h": "c"
-  }
+    "display.h": "c",
+    "stdio.h": "c",
+    "array": "cpp",
+    "deque": "cpp",
+    "list": "cpp",
+    "string": "cpp",
+    "unordered_map": "cpp",
+    "vector": "cpp",
+    "string_view": "cpp",
+    "format": "cpp",
+    "initializer_list": "cpp",
+    "span": "cpp",
+    "text_encoding": "cpp",
+    "regex": "cpp"
+  },
+  "C_Cpp.errorSquiggles": "enabled"
 }
