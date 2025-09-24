@@ -39,6 +39,7 @@ struct WiFiInfo
 
 #ifdef __cplusplus
 
+/** Main watch class to link and provide access to all subsystems */
 class Watch
 {
 private:

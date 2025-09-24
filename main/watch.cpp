@@ -3,6 +3,7 @@
 
 Watch watch;
 
+/** Enter sleep mode */
 void Watch::sleep()
 {
     if (!this->sleeping)
@@ -16,6 +17,7 @@ void Watch::sleep()
     }
 }
 
+/** Exit sleep mode */
 void Watch::wakeup()
 {
     if (sleeping)
@@ -33,6 +35,7 @@ void Watch::wakeup()
     this->sleeping = false;
 }
 
+/** Initialise power management */
 void Watch::pm_init()
 {
     esp_pm_config_t pm_config = {
@@ -48,6 +51,7 @@ void Watch::pm_init()
     esp_pm_lock_acquire(pm_lock);
 }
 
+/** Initialise I²C */
 void Watch::iic_init()
 {
 #define I2C_MASTER_NUM I2C_NUM_0
@@ -65,6 +69,7 @@ void Watch::iic_init()
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_cfg, &i2c_bus));
 }
 
+/** Initialise all watch subsystems */
 void Watch::init()
 {
     gpio_install_isr_service(0);
@@ -79,6 +84,7 @@ void Watch::init()
     display.set_backlight(100);
 }
 
+/** Wrapper for C -> C++ shenanigans */
 void watch_init()
 {
     watch.init();

@@ -23,9 +23,15 @@
 #define LEDC_DUTY_RES LEDC_TIMER_13_BIT // 13-bit: 0 - 8191
 #define LEDC_FREQUENCY 5000             // 5 kHz PWM frequency
 
+/** Get current backlight brightness
+ * @returns Current backlight value (0-100)
+ */
 uint16_t Display::get_brightness() { return bgval; }
 
-// val is 0-100
+/** Fade on backlight
+ * @param val Backlight target brightness (0-100)
+ * @param ms Time to take to get to brightness in milliseconds
+ */
 void Display::set_backlight_gradual(int16_t val, uint32_t ms)
 {
     int32_t tempbk;
@@ -43,7 +49,9 @@ void Display::set_backlight_gradual(int16_t val, uint32_t ms)
     vTaskResume(backlightHandle);
 }
 
-// Backlight Pin: 2
+/** Set backlight brightness
+ * @param val Backlight brightness
+ */
 void Display::set_backlight(int16_t val)
 {
     uint32_t duty = 0;
@@ -63,13 +71,8 @@ void Display::set_backlight(int16_t val)
     ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
 }
 
-// void backlight_task(void *pvParameters)
-// {
-//     auto *obj = static_cast<Display *>(pvParameters);
-//     obj->backlight_updata();
-// }
-
-void Display::backlight_updata()
+/** Update task for gradual backlight */
+void Display::backlight_update()
 {
     while (1) // in its own thread so its fine
     {
@@ -166,6 +169,9 @@ void Display::backlight_updata()
 //     gc9a01_setRotation((4 - lv_display_get_rotation(disp)) % 4);
 // }
 
+/** Initialise the LCD and Touchscreen
+ * @param bus master I²C bus reference (for touchscreen)
+ */
 void Display::init(i2c_master_bus_handle_t bus)
 {
     esp_err_t ret = gc9a01_begin();
@@ -243,7 +249,7 @@ void Display::init(i2c_master_bus_handle_t bus)
     xTaskCreatePinnedToCore([](void *pvParameters)
                             {
                                 auto *obj = static_cast<Display *>(pvParameters);
-                                obj->backlight_updata(); },
+                                obj->backlight_update(); },
                             "backlight", 1024 * 4, this, 2, &backlightHandle, 0);
 
     // xTaskCreatePinnedToCore(backlight_task, "backlight", 1024 * 4, NULL, 2, &backlightHandle, 0);

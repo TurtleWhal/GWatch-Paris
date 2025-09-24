@@ -13,7 +13,7 @@
 class Display
 {
 private:
-    void backlight_updata();
+    void backlight_update();
 
     uint16_t bgval;
     TaskHandle_t backlightHandle = NULL;

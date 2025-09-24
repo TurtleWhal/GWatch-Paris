@@ -6,6 +6,7 @@
 static adc_oneshot_unit_handle_t adc1_handle;
 esp_adc_cal_characteristics_t adc_chars;
 
+/** Update task for battery */
 void battery_task(void *)
 {
     watch.battery.voltage = battery_get_mV();
@@ -30,6 +31,7 @@ void battery_task(void *)
     }
 }
 
+/** Initialise the battery susbsystem */
 void battery_init(void)
 {
     // --- Configure ADC1 ---
@@ -53,6 +55,9 @@ void battery_init(void)
     xTaskCreate(battery_task, "battery_task", 1 * 1024, NULL, 2, NULL);
 }
 
+/** Get curent battery voltage
+ * @returns current battery voltage in millivolts
+ */
 uint32_t battery_get_mV(void)
 {
 #ifdef ENV_WAVESHARE
