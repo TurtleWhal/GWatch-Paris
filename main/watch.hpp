@@ -51,6 +51,8 @@ private:
     void pm_init();
     void iic_init();
 
+    void pm_update();
+
 public:
     struct TimeInfo time;
     struct BatteryInfo battery;

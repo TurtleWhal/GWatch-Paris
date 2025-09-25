@@ -9,8 +9,6 @@
 // #include "freertos/task.h"
 // #include "display.h"
 
-#define TAG "MAIN"
-
 // Adjust these to your setup
 #define I2C_PORT I2C_NUM_0
 #define TOUCH_RST_GPIO (gpio_num_t)13
@@ -235,5 +233,5 @@ void cst816s_init(i2c_master_bus_handle_t bus)
     gpio_isr_handler_add(TOUCH_INT_GPIO, cst816s_handleISR, NULL);
     // gpio_wakeup_enable(TOUCH_INT_GPIO, GPIO_INTR_LOW_LEVEL);
 
-    ESP_LOGI(TAG, "CST816S initialized (ver %d)", data.version);
+    ESP_LOGI("cst816s", "CST816S initialized (ver %d)", data.version);
 }

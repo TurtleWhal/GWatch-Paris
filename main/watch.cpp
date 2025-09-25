@@ -3,14 +3,40 @@
 
 Watch watch;
 
+/** Update power management and sleep logic */
+void Watch::pm_update()
+{
+    while (true)
+    {
+        // ESP_LOGI("loop", "CPU Freq: %d", esp_clk_cpu_freq());
+
+        if (!watch.sleeping) // if awake
+        {
+            if (esp_timer_get_time() / 1000 - sleep_time > 14000)
+            {
+                sleep();
+            }
+        }
+        else
+        {
+            if (display.is_touching())
+                wakeup();
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
 /** Enter sleep mode */
 void Watch::sleep()
 {
     if (!this->sleeping)
     {
-        //     setBacklightGradual(0, 1000);
+        display.set_backlight_gradual(0, 1000);
         vTaskDelay(pdMS_TO_TICKS(1000));
-        //     vTaskSuspend(lv_task_handle);
+
+        display.sleep();
+
         this->sleeping = true;
 
         esp_pm_lock_release(pm_lock);
@@ -23,14 +49,17 @@ void Watch::wakeup()
     if (sleeping)
     {
         esp_pm_lock_acquire(pm_lock);
-        //     vTaskResume(lv_task_handle);
-        vTaskDelay(pdMS_TO_TICKS(300)); // wait for the display to refresh
+
+        display.wake();
+
+        lv_obj_invalidate(lv_screen_active()); // Mark screen dirty
+        lv_task_handler();                     // Process drawing immediately
+
+        // vTaskDelay(pdMS_TO_TICKS(300)); // wait for the display to refresh
     }
 
-    // // gpio_set_level(2, 1);
-    // setBacklight(brightness);
+    display.set_backlight(100);
 
-    // this->sleep_time = millis(); // reset sleep timer on touch
     this->sleep_time = esp_timer_get_time() / 1000; // reset sleep timer on touch
     this->sleeping = false;
 }
@@ -49,6 +78,12 @@ void Watch::pm_init()
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "lvgl_lock", &pm_lock));
 
     esp_pm_lock_acquire(pm_lock);
+
+    xTaskCreatePinnedToCore([](void *pvParameters)
+                            {
+                                auto *obj = static_cast<Watch *>(pvParameters);
+                                obj->pm_update(); },
+                            "pm", 1024 * 4, this, 0, NULL, 0);
 }
 
 /** Initialise I²C */
@@ -80,6 +115,9 @@ void Watch::init()
     battery_init();
 
     display.init(i2c_bus);
+
+    lv_obj_invalidate(lv_screen_active()); // Mark screen dirty
+    lv_task_handler();                     // Process drawing immediately
 
     display.set_backlight(100);
 }

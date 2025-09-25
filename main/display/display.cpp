@@ -4,16 +4,14 @@
 // #include "esp_heap_caps.h"
 
 // #include "lvgl.h"
-#include "gc9a01_driver.h"
-#include "cst816s_driver.h"
+#include "drivers/gc9a01_driver.h"
+#include "drivers/cst816s_driver.h"
 
 #include "driver/ledc.h"
 
 // #include "system/system.h"
 
 #include "watch.hpp"
-
-// #define TAG "DISPLAY"
 
 // static lv_display_t *disp;
 
@@ -35,8 +33,8 @@ uint16_t Display::get_brightness() { return bgval; }
 void Display::set_backlight_gradual(int16_t val, uint32_t ms)
 {
     int32_t tempbk;
-    oldBacklight = bgval;
-    tempbk = (val - oldBacklight);
+    old_backlight = bgval;
+    tempbk = (val - old_backlight);
     endtime = (esp_timer_get_time() / 1000) + ms;
     starttime = esp_timer_get_time() / 1000;
 
@@ -46,7 +44,7 @@ void Display::set_backlight_gradual(int16_t val, uint32_t ms)
     // Log.verboseln("Backlight Gradual | Val: %d | Length: %d | Step: %f/ms", val, ms, k);
 
     adjust = true;
-    vTaskResume(backlightHandle);
+    vTaskResume(backlight_handle);
 }
 
 /** Set backlight brightness
@@ -88,8 +86,8 @@ void Display::backlight_update()
             if (mils - Millis > time_ms)
             {
                 duration = mils - starttime;
-                set_backlight((uint16_t)((k * duration) + oldBacklight));
-                // ESP_LOGI("backlight", "K: %f duration: %d old: %d current: %d\n", k, duration, oldBacklight, bgval);
+                set_backlight((uint16_t)((k * duration) + old_backlight));
+                // ESP_LOGI("backlight", "K: %f duration: %d old: %d current: %d\n", k, duration, old_backlight, bgval);
 
                 if (Millis > endtime)
                 {
@@ -101,73 +99,81 @@ void Display::backlight_update()
         }
         else
         {
-            vTaskSuspend(backlightHandle);
+            vTaskSuspend(backlight_handle);
         }
 
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
-// static void disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
-// {
-//     uint32_t w = (area->x2 - area->x1 + 1);
-//     uint32_t h = (area->y2 - area->y1 + 1);
-//     // uint32_t size = w * h;
+/** Set the rotation of the display
+ * @param rotation LVGL rotation value (ex: LV_DISPLAY_ROTATION_90)
+ */
+void Display::set_rotation(lv_display_rotation_t rotation)
+{
+    lv_display_set_rotation(disp, rotation); // lvgl rotation is counter-clockwise
+    gc9a01_setRotation((4 - lv_display_get_rotation(disp)) % 4);
+}
 
-//     // gc9a01_set_addr_window(area->x1, area->y1, area->x2, area->y2);
-//     // gc9a01_send_data(px_map, size * 2);
+/** Display flush callback for LVGL */
+void lvgl_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
+{
+    uint32_t w = (area->x2 - area->x1 + 1);
+    uint32_t h = (area->y2 - area->y1 + 1);
+    // uint32_t size = w * h;
 
-//     // gc9a01_update_full_screen_dma((uint16_t *)px_map);
-//     startWrite();
-//     // pushImageDMA(70, 70, 100, 100, image_data);
-//     // pushImageDMA_fullscreen((uint16_t *)px_map);
-//     pushImageDMA(area->x1, area->y1, w, h, (uint16_t *)px_map);
-//     endWrite();
+#ifdef ENV_WAVESHARE
+    gc9a01_startWrite();
+    gc9a01_pushImageDMA(area->x1, area->y1, w, h, (uint16_t *)px_map);
+    gc9a01_endWrite();
+#endif // ENV_WAVESHARE
 
-//     lv_display_flush_ready(disp);
-// }
+    lv_display_flush_ready(disp);
+}
 
-// void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *touch)
-// {
-//     static uint16_t last_x = 0;
-//     static uint16_t last_y = 0;
-//     static bool touching = false;
+/** Touch read callback for LVGL */
+void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch)
+{
+    static uint16_t last_x = 0;
+    static uint16_t last_y = 0;
+    static bool touching = false;
 
-//     if (cst816s_available())
-//     {
-//         wakeup();
+#ifdef ENV_WAVESHARE
+    if (cst816s_available())
+    {
+        watch.wakeup();
 
-//         touch_data data = cst816s_touch_read();
+        touch_data data = cst816s_touch_read();
 
-//         if (!touching)
-//             ESP_LOGI("cst816s", "Screen Touched at: %d, %d", data.x, data.y);
+        if (!touching)
+            ESP_LOGI("cst816s", "Screen Touched at: %d, %d", data.x, data.y);
 
-//         touching = true;
+        touching = true;
 
-//         last_x = data.x;
-//         last_y = data.y;
-//         touch->state = LV_INDEV_STATE_PR;
-//     }
-//     else
-//     {
-//         touching = false;
-//         touch->state = LV_INDEV_STATE_REL;
-//     }
-//     touch->point.x = last_x;
-//     touch->point.y = last_y;
-// }
+        last_x = data.x;
+        last_y = data.y;
+        touch->state = LV_INDEV_STATE_PR;
+    }
+    else
+    {
+        touching = false;
+        touch->state = LV_INDEV_STATE_REL;
+    }
 
-// // Custom tick function for LVGL
-// static uint32_t custom_tick_get_cb(void)
-// {
-//     return esp_timer_get_time() / 1000;
-// }
+    touch->point.x = last_x;
+    touch->point.y = last_y;
+#endif // ENV_WAVESHARE
+}
 
-// void setRotation(lv_display_rotation_t rotation)
-// {
-//     lv_display_set_rotation(disp, rotation); // lvgl rotation is counter-clockwise
-//     gc9a01_setRotation((4 - lv_display_get_rotation(disp)) % 4);
-// }
+/** Check if the screen is being touched
+ * @returns whether the screen is being touched or not
+ */
+bool Display::is_touching()
+{
+#ifdef ENV_WAVESHARE
+    return cst816s_available();
+#endif // ENV_WAVESHARE
+}
 
 /** Initialise the LCD and Touchscreen
  * @param bus master I²C bus reference (for touchscreen)
@@ -186,43 +192,7 @@ void Display::init(i2c_master_bus_handle_t bus)
 
     cst816s_init(bus);
 
-    // // Initialize LVGL
-    // lv_init();
-
-    // // Set custom tick function
-    // lv_tick_set_cb(custom_tick_get_cb);
-
-    // // Create display
-    // disp = lv_display_create(DISP_HOR_RES, DISP_VER_RES);
-
-    // // lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_90);
-
-    // // Set flush callback
-    // lv_display_set_flush_cb(disp, disp_flush);
-
-    // lv_display_set_default(disp);
-
-    // setRotation(LV_DISPLAY_ROTATION_90);
-
-    // lv_indev_t *indev = lv_indev_create();           /* Create input device connected to Default Display. */
-    // lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER); /* Touch pad is a pointer-like device. */
-    // lv_indev_set_read_cb(indev, lvgl_touch_read_cb); /* Set driver function. */
-
-    // // Allocate draw buffers
-    // size_t buf_size = DISP_HOR_RES * 240 * sizeof(lv_color_t);
-    // void *buf1 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
-    // // void *buf2 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
-    // void *buf2 = NULL;
-
-    // if (buf1)
-    // {
-    //     lv_display_set_buffers(disp, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_DIRECT);
-    //     // lv_display_set_buffers(disp, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
-    // }
-    // else
-    // {
-    //     ESP_LOGE(TAG, "Failed to allocate LVGL draw buffers");
-    // }
+    this->init_graphics();
 
     //* Configure Backlight *//
 
@@ -250,9 +220,7 @@ void Display::init(i2c_master_bus_handle_t bus)
                             {
                                 auto *obj = static_cast<Display *>(pvParameters);
                                 obj->backlight_update(); },
-                            "backlight", 1024 * 4, this, 2, &backlightHandle, 0);
-
-    // xTaskCreatePinnedToCore(backlight_task, "backlight", 1024 * 4, NULL, 2, &backlightHandle, 0);
+                            "backlight", 1024 * 4, this, 2, &backlight_handle, 0);
 
     // set_backlight(100);
 
@@ -266,37 +234,41 @@ void Display::init(i2c_master_bus_handle_t bus)
     //     vTaskDelay(1000 / portTICK_PERIOD_MS);
     // }
 
-    fillScreen(COLOR_MAGENTA);
+    // fillScreen(COLOR_MAGENTA);
 }
 
-// void display_sleep()
-// {
-//     // setBrightness(0);
-//     vTaskDelay(pdMS_TO_TICKS(100)); // wait for any ongoing transfers
-//     gc9a01_sleep();
-//     // displayOff();
-//     // gc9a01_cleanup();
-//     // vTaskDelay(pdMS_TO_TICKS(200)); // wait for any ongoing transfers
-// }
+/** Put the dispay to sleep and stop graphics */
+void Display::sleep()
+{
+    // vTaskDelay(pdMS_TO_TICKS(100)); // wait for any ongoing transfers
+    gc9a01_sleep();
+    // displayOff();
+    // gc9a01_cleanup();
+    // vTaskDelay(pdMS_TO_TICKS(200)); // wait for any ongoing transfers
 
-// void display_wake()
-// {
-//     // gc9a01_spi_reinit(); // Re-initialize SPI
+    vTaskSuspend(lv_task_handle);
+}
 
-//     // gpio_set_level(GC9A01_PIN_RST, 0);
-//     // vTaskDelay(pdMS_TO_TICKS(20));
-//     // gpio_set_level(GC9A01_PIN_RST, 1);
-//     // vTaskDelay(pdMS_TO_TICKS(120));
+/** Wake up the display and graphics */
+void Display::wake()
+{
+    // gc9a01_spi_reinit(); // Re-initialize SPI
 
-//     // // 3. Run full init sequence (same as gc9a01_init)
-//     // gc9a01_init_registers();
+    // gpio_set_level(GC9A01_PIN_RST, 0);
+    // vTaskDelay(pdMS_TO_TICKS(20));
+    // gpio_set_level(GC9A01_PIN_RST, 1);
+    // vTaskDelay(pdMS_TO_TICKS(120));
 
-//     gc9a01_wakeup(); // Wake display
-//     // displayOn();
-//     // setBrightness(255);
+    // // 3. Run full init sequence (same as gc9a01_init)
+    // gc9a01_init_registers();
 
-//     // begin();
-//     // setSwapBytes(true);
-//     // gc9a01_setRotation(3);
-//     // setRotation(lv_display_get_rotation(disp));
-// }
+    gc9a01_wakeup(); // Wake display
+    // displayOn();
+
+    // begin();
+    // setSwapBytes(true);
+    // gc9a01_setRotation(3);
+    // setRotation(lv_display_get_rotation(disp));
+
+    vTaskResume(lv_task_handle);
+}

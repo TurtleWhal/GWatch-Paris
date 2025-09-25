@@ -48,7 +48,7 @@
 #define GC9A01_MADCTL_BGR 0x08
 #define GC9A01_MADCTL_MH 0x04
 
-static const char *TAG = "GC9A01_DMA";
+static const char *TAG = "gc9a01";
 
 typedef struct
 {
