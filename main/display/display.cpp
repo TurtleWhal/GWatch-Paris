@@ -240,35 +240,25 @@ void Display::init(i2c_master_bus_handle_t bus)
 /** Put the dispay to sleep and stop graphics */
 void Display::sleep()
 {
-    // vTaskDelay(pdMS_TO_TICKS(100)); // wait for any ongoing transfers
     gc9a01_sleep();
-    // displayOff();
-    // gc9a01_cleanup();
-    // vTaskDelay(pdMS_TO_TICKS(200)); // wait for any ongoing transfers
+    gc9a01_displayOff();
+    gc9a01_cleanup();
 
     vTaskSuspend(lv_task_handle);
+
+    gpio_wakeup_enable(GPIO_NUM_5, GPIO_INTR_LOW_LEVEL);
 }
 
 /** Wake up the display and graphics */
 void Display::wake()
 {
-    // gc9a01_spi_reinit(); // Re-initialize SPI
 
-    // gpio_set_level(GC9A01_PIN_RST, 0);
-    // vTaskDelay(pdMS_TO_TICKS(20));
-    // gpio_set_level(GC9A01_PIN_RST, 1);
-    // vTaskDelay(pdMS_TO_TICKS(120));
+    // gc9a01_wakeup(); // Wake display
+    // gc9a01_displayOn();
 
-    // // 3. Run full init sequence (same as gc9a01_init)
-    // gc9a01_init_registers();
-
-    gc9a01_wakeup(); // Wake display
-    // displayOn();
-
-    // begin();
-    // setSwapBytes(true);
-    // gc9a01_setRotation(3);
-    // setRotation(lv_display_get_rotation(disp));
+    gc9a01_begin();
+    gc9a01_setSwapBytes(true);
+    set_rotation(lv_display_get_rotation(disp));
 
     vTaskResume(lv_task_handle);
 }

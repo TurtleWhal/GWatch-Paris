@@ -12,18 +12,18 @@ void Watch::pm_update()
 
         if (!watch.sleeping) // if awake
         {
-            if (esp_timer_get_time() / 1000 - sleep_time > 14000)
+            if (esp_timer_get_time() / 1000 - sleep_time > 5000)
             {
                 sleep();
             }
         }
-        else
-        {
-            if (display.is_touching())
-                wakeup();
-        }
+        // else
+        // {
+        //     if (display.is_touching())
+        //         wakeup();
+        // }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -40,6 +40,11 @@ void Watch::sleep()
         this->sleeping = true;
 
         esp_pm_lock_release(pm_lock);
+
+        esp_sleep_enable_gpio_wakeup();
+        esp_light_sleep_start();
+
+        wakeup();
     }
 }
 
