@@ -4,16 +4,15 @@
 // #include <stdio.h>
 // #include <string.h>
 
-// #include "esp_wifi.h"
-// #include "esp_event.h"
-// #include "esp_log.h"
-// #include "nvs_flash.h"
-// #include "esp_sntp.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+// #include "nvs_netif.h"
+#include "esp_wifi.h"
 
 // #include "esp_http_client.h"
 // #include "cJSON.h"
 
-// #include "system.h"
+#include "watch.hpp"
 
 // #define MAX_WIFI_APS 2 // adjust this as needed
 
@@ -34,7 +33,7 @@
 
 // static int current_ap_index = 0;
 
-// const static char *TAG = "wifitime";
+const static char *TAG = "wifi";
 
 // const char *months[12] = {
 //     "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
@@ -131,68 +130,61 @@
 //     sysinfo.wifi.connected = false;
 // }
 
-// static void connect_to_ap(void)
-// {
-//     if (current_ap_index >= MAX_WIFI_APS)
-//     {
-//         ESP_LOGW(TAG, "No more APs to try");
-//         return;
-//     }
+void WiFi::connect_to_ap(char *ssid, char *pass)
+{
+    status = WIFI_CONNECTING;
 
-//     sysinfo.wifi.connected = true;
+    wifi_config_t wifi_config = {0};
 
-//     wifi_config_t wifi_config = {0};
+    strcpy((char *)wifi_config.sta.ssid, ssid);
+    strcpy((char *)wifi_config.sta.password, pass);
 
-//     strcpy((char *)wifi_config.sta.ssid, wifi_ap_list[current_ap_index].ssid);
-//     strcpy((char *)wifi_config.sta.password, wifi_ap_list[current_ap_index].password);
+    if (strlen(pass) == 0)
+    {
+        wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
+        ESP_LOGI(TAG, "Trying to connect to OPEN SSID: %s", ssid);
+    }
+    else
+    {
+        wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        ESP_LOGI(TAG, "Trying to connect to WPA2 SSID: %s", ssid);
+    }
 
-//     if (strlen(wifi_ap_list[current_ap_index].password) == 0)
-//     {
-//         wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
-//         ESP_LOGI(TAG, "Trying to connect to OPEN SSID: %s", wifi_ap_list[current_ap_index].ssid);
-//     }
-//     else
-//     {
-//         wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-//         ESP_LOGI(TAG, "Trying to connect to WPA2 SSID: %s", wifi_ap_list[current_ap_index].ssid);
-//     }
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    esp_wifi_connect();
+}
 
-//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-//     esp_wifi_connect();
-// }
+void wifi_event_handler(void *arg, esp_event_base_t event_base,
+                        int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    {
+        // wifi_scan_config_t scan_config = {
+        //     .ssid = NULL,
+        //     .bssid = NULL,
+        //     .channel = 0,
+        //     .show_hidden = true};
+        // esp_wifi_scan_start(&scan_config, true); // true = block until done
 
-// static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-//                                int32_t event_id, void *event_data)
-// {
-//     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
-//     {
-//         wifi_scan_config_t scan_config = {
-//             .ssid = NULL,
-//             .bssid = NULL,
-//             .channel = 0,
-//             .show_hidden = true};
-//         // esp_wifi_scan_start(&scan_config, true); // true = block until done
+        // connect_to_ap();
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
+        ESP_LOGI(TAG, "Failed to connect to SSID: %s, Disconnect Reason: %d", event->ssid, event->reason);
 
-//         connect_to_ap();
-//     }
-//     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
-//     {
-//         ESP_LOGI(TAG, "Failed to connect to SSID: %s", wifi_ap_list[current_ap_index].ssid);
+        watch.wifi.status = WIFI_DISCONNECTED;
 
-//         wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
-//         ESP_LOGW(TAG, "Disconnect reason: %d", event->reason);
-//         sysinfo.wifi.connected = false;
-
-//         current_ap_index++;
-//         connect_to_ap(); // try next AP
-//     }
-//     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
-//     {
-//         ESP_LOGI(TAG, "WiFi connected, got IP");
-//         sysinfo.wifi.connected = true;
-//         obtain_time();
-//     }
-// }
+        // current_ap_index++;
+        // connect_to_ap(); // try next AP
+    }
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ESP_LOGI(TAG, "WiFi connected, got IP");
+        watch.wifi.status = WIFI_CONNECTED;
+        // obtain_time();
+    }
+}
 
 // void update_time(void *args)
 // {
@@ -232,50 +224,60 @@
 //     }
 // }
 
-// void wifi_init(void)
-// {
-//     ESP_ERROR_CHECK(nvs_flash_init());
-//     ESP_ERROR_CHECK(esp_netif_init());
-//     ESP_ERROR_CHECK(esp_event_loop_create_default());
-//     esp_netif_create_default_wifi_sta();
+void WiFi::init()
+{
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    esp_netif_create_default_wifi_sta();
 
-//     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-//                                                         ESP_EVENT_ANY_ID,
-//                                                         &wifi_event_handler,
-//                                                         NULL,
-//                                                         NULL));
-//     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-//                                                         IP_EVENT_STA_GOT_IP,
-//                                                         &wifi_event_handler,
-//                                                         NULL,
-//                                                         NULL));
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-//     ESP_LOGI(TAG, "wifi initalised.");
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
 
-//     xTaskCreatePinnedToCore(
-//         timesync_task,
-//         "timesync_task",
-//         1024 * 1,
-//         NULL,
-//         4,
-//         NULL,
-//         0);
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
 
-//     xTaskCreatePinnedToCore(
-//         update_time,
-//         "update_time",
-//         1024 * 4,
-//         NULL,
-//         4,
-//         NULL,
-//         0);
-// }
+    // ESP_LOGI(TAG, "wifi initalised.");
 
-// void wifi_connect()
-// {
-//     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-//     ESP_ERROR_CHECK(esp_wifi_start());
-// }
+    // xTaskCreatePinnedToCore(
+    //     timesync_task,
+    //     "timesync_task",
+    //     1024 * 1,
+    //     NULL,
+    //     4,
+    //     NULL,
+    //     0);
+
+    // xTaskCreatePinnedToCore(
+    //     update_time,
+    //     "update_time",
+    //     1024 * 4,
+    //     NULL,
+    //     4,
+    //     NULL,
+    //     0);
+}
+
+void WiFi::connect()
+{
+    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    connect_to_ap("garrettphone", "40961024");
+}
+
+void WiFi::diconnect()
+{
+}

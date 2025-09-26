@@ -17,7 +17,7 @@
 #include "pins.h"
 
 #include "battery.h"
-#include "wifitime.h"
+#include "wifi.hpp"
 #include "ui.h"
 #include "display.hpp"
 
@@ -32,18 +32,14 @@ struct TimeInfo
     int ms;    // 0..999
 };
 
-struct WiFiInfo
-{
-    bool connected;
-};
-
 #ifdef __cplusplus
 
 /** Main watch class to link and provide access to all subsystems */
 class Watch
 {
 private:
-    esp_pm_lock_handle_t pm_lock;
+    esp_pm_lock_handle_t pm_freq_lock;
+    esp_pm_lock_handle_t pm_sleep_lock;
     i2c_master_bus_handle_t i2c_bus;
 
     uint32_t sleep_time;
@@ -56,7 +52,7 @@ private:
 public:
     struct TimeInfo time;
     struct BatteryInfo battery;
-    struct WiFiInfo wifi;
+    struct WiFi wifi;
 
     Display display;
 

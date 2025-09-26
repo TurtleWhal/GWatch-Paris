@@ -1,7 +1,7 @@
 {
   "C_Cpp.intelliSenseEngine": "default",
   "idf.espIdfPath": "/Users/garrett/esp/v5.5/esp-idf",
-  "idf.pythonInstallPath": "/opt/homebrew/bin/python3",
+  "idf.pythonInstallPath": "/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/bin/python3",
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],

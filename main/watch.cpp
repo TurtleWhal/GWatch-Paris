@@ -17,11 +17,11 @@ void Watch::pm_update()
                 sleep();
             }
         }
-        // else
-        // {
-        //     if (display.is_touching())
-        //         wakeup();
-        // }
+        else
+        {
+            if (display.is_touching())
+                wakeup();
+        }
 
         vTaskDelay(pdMS_TO_TICKS(200));
     }
@@ -39,12 +39,13 @@ void Watch::sleep()
 
         this->sleeping = true;
 
-        esp_pm_lock_release(pm_lock);
+        esp_pm_lock_release(pm_freq_lock);
+        esp_pm_lock_release(pm_sleep_lock);
 
         esp_sleep_enable_gpio_wakeup();
-        esp_light_sleep_start();
+        // esp_light_sleep_start();
 
-        wakeup();
+        // wakeup();
     }
 }
 
@@ -53,7 +54,8 @@ void Watch::wakeup()
 {
     if (sleeping)
     {
-        esp_pm_lock_acquire(pm_lock);
+        esp_pm_lock_acquire(pm_freq_lock);
+        esp_pm_lock_acquire(pm_sleep_lock);
 
         display.wake();
 
@@ -75,14 +77,15 @@ void Watch::pm_init()
     esp_pm_config_t pm_config = {
         .max_freq_mhz = 240,
         .min_freq_mhz = 10,
-        .light_sleep_enable = false,
+        .light_sleep_enable = true,
     };
     ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
 
-    // ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "lvgl_lock", &pm_lock));
-    ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "lvgl_lock", &pm_lock));
+    ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "freq_lock", &pm_freq_lock));
+    ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "sleep_lock", &pm_sleep_lock));
 
-    esp_pm_lock_acquire(pm_lock);
+    esp_pm_lock_acquire(pm_freq_lock);
+    esp_pm_lock_acquire(pm_sleep_lock);
 
     xTaskCreatePinnedToCore([](void *pvParameters)
                             {
@@ -125,6 +128,10 @@ void Watch::init()
     lv_task_handler();                     // Process drawing immediately
 
     display.set_backlight(100);
+
+    wifi.init();
+
+    wifi.connect();
 }
 
 /** Wrapper for C -> C++ shenanigans */

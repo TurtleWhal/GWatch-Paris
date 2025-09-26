@@ -46,11 +46,16 @@ void Display::init_graphics()
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER); /* Touch pad is a pointer-like device. */
     lv_indev_set_read_cb(indev, lvgl_touch_read);    /* Set driver function. */
 
+    // ESP_LOGI("graphics", "Available DMA Memory Before: %dkB", heap_caps_get_largest_free_block(MALLOC_CAP_DMA) / 1000);
+
     // Allocate draw buffers
-    size_t buf_size = LCD_WIDTH * 240 * sizeof(lv_color_t);
+    size_t buf_size = LCD_WIDTH * (240 / 2) * sizeof(lv_color_t); // 240 * 240 * 2 = 115,200 Bytes
+    // void *buf1 = heap_caps_aligned_alloc(8, buf_size, MALLOC_CAP_DMA);
     void *buf1 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
-    // void *buf2 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
-    void *buf2 = NULL;
+    void *buf2 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
+    // void *buf2 = NULL;
+
+    // ESP_LOGI("graphics", "Available DMA Memory After: %dkB", heap_caps_get_largest_free_block(MALLOC_CAP_DMA) / 1000);
 
     if (buf1)
     {
