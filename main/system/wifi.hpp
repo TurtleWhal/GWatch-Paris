@@ -33,13 +33,12 @@ class WiFi
 {
 private:
     void connect_to_ap(char *ssid, char *pass);
-    void event_handler(void *arg, esp_event_base_t event_base,
-                       int32_t event_id, void *event_data);
+    void timesync_task();
 
 public:
     void init();
     void connect();
-    void diconnect();
+    void disconnect();
 
     WiFiStatus status = WIFI_DISCONNECTED;
 };

@@ -131,7 +131,7 @@ void Watch::init()
 
     wifi.init();
 
-    wifi.connect();
+    // wifi.connect();
 }
 
 /** Wrapper for C -> C++ shenanigans */

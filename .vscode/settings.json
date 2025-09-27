@@ -1,7 +1,7 @@
 {
   "C_Cpp.intelliSenseEngine": "default",
   "idf.espIdfPath": "/Users/garrett/esp/v5.5/esp-idf",
-  "idf.pythonInstallPath": "C:\\Users\\garre\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.pythonInstallPath": "/usr/local/bin/python",
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],

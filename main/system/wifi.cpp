@@ -1,135 +1,62 @@
-// #include <sys/time.h>
+#include <sys/time.h>
 // #include <time.h>
-// #include <stdint.h>
-// #include <stdio.h>
-// #include <string.h>
 
 #include "esp_log.h"
 #include "nvs_flash.h"
-// #include "nvs_netif.h"
 #include "esp_wifi.h"
 
-// #include "esp_http_client.h"
-// #include "cJSON.h"
-
 #include "watch.hpp"
-
-// #define MAX_WIFI_APS 2 // adjust this as needed
-
-// // List of WiFi credentials (try in order)
-// typedef struct
-// {
-//     const char *ssid;
-//     const char *password;
-// } wifi_ap_t;
-
-// wifi_ap_t wifi_ap_list[MAX_WIFI_APS] = {
-//     {"garrettphone", "40961024"},
-//     // {"Garrett's Phone", "40961024"},
-//     {"NetworkOfIOT", "40961024"},
-//     // {"SchoolNet", ""},
-//     // {"GuestNet", ""},
-// };
-
-// static int current_ap_index = 0;
+#include <esp_http_client.h>
+#include <esp_sntp.h>
 
 const static char *TAG = "wifi";
 
-// const char *months[12] = {
-//     "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-//     "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+static void time_sync_notification_cb(struct timeval *tv)
+{
+    ESP_LOGI(TAG, "Time synchronization event");
+}
 
-// void set_timezone(const char *tz)
-// {
-//     setenv("TZ", tz, 1); // e.g., "CET-1CEST,M3.5.0,M10.5.0/3"
-//     tzset();             // apply the new TZ
-// }
+/** Function to fetch the time from pool.ntp.org and update the system time */
+static void obtain_time(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+    sntp_init();
 
-// static void time_sync_notification_cb(struct timeval *tv)
-// {
-//     ESP_LOGI(TAG, "Time synchronization event");
-// }
+    // Wait for time to sync...
+    time_t now = 0;
+    struct tm timeinfo = {0};
+    int retry = 0;
+    const int retry_count = 20;
 
-// static void update_timezone_from_api(void)
-// {
-//     esp_http_client_config_t config = {
-//         .url = "http://worldtimeapi.org/api/ip",
-//         .method = HTTP_METHOD_GET,
-//     };
-//     esp_http_client_handle_t client = esp_http_client_init(&config);
+    while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count)
+    {
+        ESP_LOGI(TAG, "Waiting for system time... (%d/%d)", retry, retry_count);
+        vTaskDelay(pdMS_TO_TICKS(4000));
+        time(&now);
+        localtime_r(&now, &timeinfo);
+    }
 
-//     if (esp_http_client_perform(client) == ESP_OK)
-//     {
-//         int content_length = esp_http_client_get_content_length(client);
-//         char *buffer = malloc(content_length + 1);
-//         if (buffer)
-//         {
-//             int read_len = esp_http_client_read(client, buffer, content_length);
-//             buffer[read_len] = '\0';
+    if (timeinfo.tm_year >= (2016 - 1900))
+    {
+        char strftime_buf[64];
+        strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+        ESP_LOGI(TAG, "NTP time (UTC): %s", strftime_buf);
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Failed to get time from NTP");
+    }
 
-//             // Parse JSON
-//             cJSON *root = cJSON_Parse(buffer);
-//             if (root)
-//             {
-//                 cJSON *tz = cJSON_GetObjectItem(root, "timezone");
-//                 if (tz && cJSON_IsString(tz))
-//                 {
-//                     ESP_LOGI(TAG, "Setting timezone to: %s", tz->valuestring);
-//                     set_timezone(tz->valuestring); // <- updates TZ automatically
-//                 }
-//                 cJSON_Delete(root);
-//             }
-//             free(buffer);
-//         }
-//     }
-//     esp_http_client_cleanup(client);
-// }
+    watch.wifi.disconnect();
+}
 
-// static void timezone_task(void *pvParameters)
-// {
-//     update_timezone_from_api(); // Your HTTP + cJSON code
-//     vTaskDelete(NULL);          // Kill task after done
-// }
-
-// static void obtain_time(void)
-// {
-//     ESP_LOGI(TAG, "Initializing SNTP");
-//     sntp_setoperatingmode(SNTP_OPMODE_POLL);
-//     sntp_setservername(0, "pool.ntp.org");
-//     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-//     sntp_init();
-
-//     // Wait for time to sync...
-//     time_t now = 0;
-//     struct tm timeinfo = {0};
-//     int retry = 0;
-//     const int retry_count = 20;
-
-//     while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count)
-//     {
-//         ESP_LOGI(TAG, "Waiting for system time... (%d/%d)", retry, retry_count);
-//         vTaskDelay(pdMS_TO_TICKS(4000));
-//         time(&now);
-//         localtime_r(&now, &timeinfo);
-//     }
-
-//     if (timeinfo.tm_year >= (2016 - 1900))
-//     {
-//         char strftime_buf[64];
-//         strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-//         ESP_LOGI(TAG, "NTP time (UTC): %s", strftime_buf);
-
-//         // 🔹 Launch timezone fetch as a separate task
-//         xTaskCreate(&timezone_task, "timezone_task", 8192, NULL, 5, NULL);
-//     }
-//     else
-//     {
-//         ESP_LOGW(TAG, "Failed to get time from NTP");
-//     }
-
-//     sysinfo.wifi.connected = false;
-// }
-
+/** Connect to a wireless access point
+ * @param ssid the network ssid
+ * @param pass the network password
+ */
 void WiFi::connect_to_ap(char *ssid, char *pass)
 {
     status = WIFI_CONNECTING;
@@ -154,6 +81,7 @@ void WiFi::connect_to_ap(char *ssid, char *pass)
     esp_wifi_connect();
 }
 
+/** handles wifi events */
 void wifi_event_handler(void *arg, esp_event_base_t event_base,
                         int32_t event_id, void *event_data)
 {
@@ -171,59 +99,46 @@ void wifi_event_handler(void *arg, esp_event_base_t event_base,
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
-        ESP_LOGI(TAG, "Failed to connect to SSID: %s, Disconnect Reason: %d", event->ssid, event->reason);
+        ESP_LOGI(TAG, "WiFi Disconnected. Reason: %d", event->reason);
 
         watch.wifi.status = WIFI_DISCONNECTED;
-
-        // current_ap_index++;
-        // connect_to_ap(); // try next AP
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         ESP_LOGI(TAG, "WiFi connected, got IP");
         watch.wifi.status = WIFI_CONNECTED;
-        // obtain_time();
+
+        xTaskCreate([](void *args)
+                    { obtain_time(); vTaskDelete(NULL); }, "obtain_time", 1024 * 3, NULL, 3, NULL);
     }
 }
 
-// void update_time(void *args)
-// {
-//     while (true)
-//     {
-//         struct timeval tv;
-//         gettimeofday(&tv, NULL);
+/** runs once a day (checks every hour) to synchronize the time */
+void WiFi::timesync_task()
+{
+    while (true)
+    {
+        static uint8_t lastday = -1;
 
-//         struct tm tm_info;
-//         localtime_r(&tv.tv_sec, &tm_info); // convert to local time
+        time_t now;
+        time(&now);
 
-//         sysinfo.time.year = tm_info.tm_year + 1900;
-//         sysinfo.time.month = tm_info.tm_mon + 1; // tm_mon = 0..11
-//         sysinfo.time.day = tm_info.tm_mday;
-//         sysinfo.time.hour = tm_info.tm_hour;
-//         sysinfo.time.min = tm_info.tm_min;
-//         sysinfo.time.sec = tm_info.tm_sec;
-//         sysinfo.time.ms = tv.tv_usec / 1000; // milliseconds within the second
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
 
-//         vTaskDelay(pdMS_TO_TICKS(10));
-//     }
-// }
+        if (timeinfo.tm_wday != lastday) // if day changed
+        {
+            lastday = timeinfo.tm_wday;
 
-// void timesync_task(void *args)
-// {
-//     while (true)
-//     {
-//         static uint8_t lastday = -1;
+            connect();
+            // obtain_time();
+        }
 
-//         if (sysinfo.time.day != lastday) // if day changed
-//         {
-//             lastday = sysinfo.time.day;
-//             wifi_connect(); // fetch time again
-//         }
+        vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
+    }
+}
 
-//         vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
-//     }
-// }
-
+/** Initialize WiFi */
 void WiFi::init()
 {
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -247,27 +162,26 @@ void WiFi::init()
                                                         NULL,
                                                         NULL));
 
+    setenv("TZ", "PST8PDT,M3.2.0/2,M11.1.0/2", 1);
+    tzset();
+
     // ESP_LOGI(TAG, "wifi initalised.");
 
-    // xTaskCreatePinnedToCore(
-    //     timesync_task,
-    //     "timesync_task",
-    //     1024 * 1,
-    //     NULL,
-    //     4,
-    //     NULL,
-    //     0);
-
-    // xTaskCreatePinnedToCore(
-    //     update_time,
-    //     "update_time",
-    //     1024 * 4,
-    //     NULL,
-    //     4,
-    //     NULL,
-    //     0);
+    xTaskCreatePinnedToCore(
+        [](void *pvParameters)
+        {
+            auto *obj = static_cast<WiFi *>(pvParameters);
+            obj->timesync_task();
+        },
+        "timesync_task",
+        1024 * 3,
+        this,
+        4,
+        NULL,
+        0);
 }
 
+/** Connect WiFI */
 void WiFi::connect()
 {
     esp_wifi_set_storage(WIFI_STORAGE_FLASH);
@@ -275,9 +189,21 @@ void WiFi::connect()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    connect_to_ap("garrettphone", "40961024");
+    // connect_to_ap("garrettphone", "40961024");
+    connect_to_ap("NetworkOfIOT", "40961024");
 }
 
-void WiFi::diconnect()
+/** Disconnect WiFI */
+void WiFi::disconnect()
 {
+    esp_err_t err = esp_wifi_disconnect();
+    if (err != ESP_OK)
+    {
+        // Handle error
+        ESP_LOGE("WiFi", "Failed to disconnect from Wi-Fi: %s", esp_err_to_name(err));
+    }
+    else
+    {
+        // ESP_LOGI("WiFi", "Disconnected from Wi-Fi");
+    }
 }
