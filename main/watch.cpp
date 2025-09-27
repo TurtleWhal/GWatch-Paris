@@ -130,8 +130,6 @@ void Watch::init()
     display.set_backlight(100);
 
     wifi.init();
-
-    // wifi.connect();
 }
 
 /** Wrapper for C -> C++ shenanigans */

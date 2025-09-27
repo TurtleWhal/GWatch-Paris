@@ -11,6 +11,20 @@
 
 const static char *TAG = "wifi";
 
+/** List of known WiFi networks */
+typedef struct
+{
+    const char *ssid;
+    const char *password;
+} wifi_ap_entry_t;
+
+static wifi_ap_entry_t known_aps[] = {
+    {"NetworkOfIOT", "40961024"},
+    {"garrettphone", "40961024"},
+};
+
+static const int known_ap_count = sizeof(known_aps) / sizeof(known_aps[0]);
+
 static void time_sync_notification_cb(struct timeval *tv)
 {
     ESP_LOGI(TAG, "Time synchronization event");
@@ -189,8 +203,45 @@ void WiFi::connect()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    // connect_to_ap("garrettphone", "40961024");
-    connect_to_ap("NetworkOfIOT", "40961024");
+    // Start a blocking scan
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true};
+
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
+
+    // Get scan results
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+
+    wifi_ap_record_t *ap_records = (wifi_ap_record_t *)malloc(ap_count * sizeof(wifi_ap_record_t));
+    if (!ap_records)
+    {
+        ESP_LOGE(TAG, "Failed to allocate memory for AP records");
+        return;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
+
+    // Try to connect to the first known AP that is available
+    for (int i = 0; i < known_ap_count; i++)
+    {
+        for (int j = 0; j < ap_count; j++)
+        {
+            if (strcmp((char *)ap_records[j].ssid, known_aps[i].ssid) == 0)
+            {
+                ESP_LOGI(TAG, "Found known AP: %s, trying to connect", known_aps[i].ssid);
+                connect_to_ap((char *)known_aps[i].ssid, (char *)known_aps[i].password);
+                free(ap_records);
+                return;
+            }
+        }
+    }
+
+    ESP_LOGW(TAG, "No known APs found in scan");
+    free(ap_records);
 }
 
 /** Disconnect WiFI */
