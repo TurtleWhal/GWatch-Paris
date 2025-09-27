@@ -1,5 +1,4 @@
 #include <sys/time.h>
-// #include <time.h>
 
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -99,18 +98,19 @@ void WiFi::connect_to_ap(char *ssid, char *pass)
 void wifi_event_handler(void *arg, esp_event_base_t event_base,
                         int32_t event_id, void *event_data)
 {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
-    {
-        // wifi_scan_config_t scan_config = {
-        //     .ssid = NULL,
-        //     .bssid = NULL,
-        //     .channel = 0,
-        //     .show_hidden = true};
-        // esp_wifi_scan_start(&scan_config, true); // true = block until done
+    // if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    // {
+    //     // wifi_scan_config_t scan_config = {
+    //     //     .ssid = NULL,
+    //     //     .bssid = NULL,
+    //     //     .channel = 0,
+    //     //     .show_hidden = true};
+    //     // esp_wifi_scan_start(&scan_config, true); // true = block until done
 
-        // connect_to_ap();
-    }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    //     // connect_to_ap();
+    // }
+    // else
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
         ESP_LOGI(TAG, "WiFi Disconnected. Reason: %d", event->reason);
@@ -145,7 +145,6 @@ void WiFi::timesync_task()
             lastday = timeinfo.tm_wday;
 
             connect();
-            // obtain_time();
         }
 
         vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
@@ -178,8 +177,6 @@ void WiFi::init()
 
     setenv("TZ", "PST8PDT,M3.2.0/2,M11.1.0/2", 1);
     tzset();
-
-    // ESP_LOGI(TAG, "wifi initalised.");
 
     xTaskCreatePinnedToCore(
         [](void *pvParameters)

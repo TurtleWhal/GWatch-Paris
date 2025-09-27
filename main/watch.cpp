@@ -1,6 +1,9 @@
 #include "watch.hpp"
 #include "driver/gpio.h"
 
+#define SLEEP_DELAY 5000
+#define BACKLIGHT_FADE_MS 2000
+
 Watch watch;
 
 /** Update power management and sleep logic */
@@ -8,11 +11,9 @@ void Watch::pm_update()
 {
     while (true)
     {
-        // ESP_LOGI("loop", "CPU Freq: %d", esp_clk_cpu_freq());
-
         if (!watch.sleeping) // if awake
         {
-            if (esp_timer_get_time() / 1000 - sleep_time > 5000)
+            if (esp_timer_get_time() / 1000 - sleep_time > SLEEP_DELAY)
             {
                 sleep();
             }
@@ -30,37 +31,40 @@ void Watch::pm_update()
 /** Enter sleep mode */
 void Watch::sleep()
 {
-    if (!this->sleeping)
+    if (!sleeping)
     {
-        display.set_backlight_gradual(0, 1000);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        goingtosleep = true;
 
-        display.sleep();
+        display.set_backlight_gradual(0, BACKLIGHT_FADE_MS);
+        vTaskDelay(pdMS_TO_TICKS(BACKLIGHT_FADE_MS));
 
-        this->sleeping = true;
+        // make sure the display hasn't been touched while the display was fading off
+        if (goingtosleep)
+        {
+            display.sleep();
 
-        esp_pm_lock_release(pm_freq_lock);
-        esp_pm_lock_release(pm_sleep_lock);
+            this->sleeping = true;
 
-        esp_sleep_enable_gpio_wakeup();
-        // esp_light_sleep_start();
+            esp_sleep_enable_gpio_wakeup();
 
-        // wakeup();
+            esp_pm_lock_release(pm_freq_lock);
+            esp_pm_lock_release(pm_sleep_lock);
+        }
     }
 }
 
 /** Exit sleep mode */
 void Watch::wakeup()
 {
+    goingtosleep = false;
+
     if (sleeping)
     {
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
         display.wake();
-
-        lv_obj_invalidate(lv_screen_active()); // Mark screen dirty
-        lv_task_handler();                     // Process drawing immediately
+        display.refresh();
 
         // vTaskDelay(pdMS_TO_TICKS(300)); // wait for the display to refresh
     }
@@ -124,8 +128,7 @@ void Watch::init()
 
     display.init(i2c_bus);
 
-    lv_obj_invalidate(lv_screen_active()); // Mark screen dirty
-    lv_task_handler();                     // Process drawing immediately
+    display.refresh();
 
     display.set_backlight(100);
 

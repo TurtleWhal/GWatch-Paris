@@ -37,12 +37,14 @@ public:
     void sleep();
     void wake();
 
+    void refresh();
+
     bool is_touching();
 
     void set_rotation(lv_display_rotation_t rotation);
 
     void set_backlight_gradual(int16_t val, uint32_t ms);
-    void set_backlight(int16_t val);
+    void set_backlight(int16_t val, bool stopgrad = true);
     uint16_t get_brightness();
 };
 

@@ -44,6 +44,8 @@ private:
 
     uint32_t sleep_time;
 
+    bool goingtosleep;
+
     void pm_init();
     void iic_init();
 

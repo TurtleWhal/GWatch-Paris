@@ -3,8 +3,12 @@
 #include "esp_timer.h"
 #include <esp_heap_caps.h>
 #include <esp_log.h>
-// #include "drivers/gc9a01_driver.h"
-// #include "drivers/cst816s_driver.h"
+
+#include "time.h"
+#include <sys/time.h>
+
+lv_obj_t *timelbl;
+lv_obj_t *wifilbl;
 
 /** Custom tick function for LVGL */
 static uint32_t lvgl_tick_get_cb(void)
@@ -12,15 +16,38 @@ static uint32_t lvgl_tick_get_cb(void)
     return esp_timer_get_time() / 1000;
 }
 
+/** Update all ui elements */
+void ui_update()
+{
+    switch (watch.wifi.status)
+    {
+    case WIFI_CONNECTED:
+        lv_label_set_text(wifilbl, "wifi connected");
+        break;
+    case WIFI_CONNECTING:
+        lv_label_set_text(wifilbl, "wifi connecting");
+        break;
+    case WIFI_DISCONNECTED:
+        lv_label_set_text(wifilbl, "wifi not connected");
+        break;
+    }
+
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    uint64_t ms = (uint64_t)ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+    lv_label_set_text_fmt(timelbl, "ms: %lld", ms);
+}
+
+static void ui_update_cb(lv_timer_t *timer)
+{
+    ui_update();
+}
+
 void lv_task(void *args)
 {
     while (true)
     {
-        // ui_update();
         lv_timer_handler();
-        // uint32_t d = lv_timer_handler();
-        // ESP_LOGI(TAG, "LVGL delay %d ms", d);
-        // vTaskDelay(pdMS_TO_TICKS(d));
     }
 }
 
@@ -69,16 +96,29 @@ void Display::init_graphics()
 
     lv_obj_t *scr = lv_obj_create(NULL);
 
+    lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_flex_main_place(scr, LV_FLEX_ALIGN_CENTER, 0);
+    lv_obj_set_style_flex_cross_place(scr, LV_FLEX_ALIGN_CENTER, 0);
+    lv_obj_set_style_flex_track_place(scr, LV_FLEX_ALIGN_CENTER, 0);
+
+    timelbl = lv_label_create(scr);
+    lv_label_set_text(timelbl, "time");
+
     lv_obj_t *button = lv_button_create(scr);
-    lv_obj_center(button);
+    // lv_obj_center(button);
 
     lv_obj_t *label = lv_label_create(button);
     lv_label_set_text(label, "Press Me");
+
+    wifilbl = lv_label_create(scr);
+    lv_label_set_text(wifilbl, "wifi");
 
     lv_screen_load(scr);
 
     lv_obj_add_event_cb(button, [](lv_event_t *e)
                         { ESP_LOGI("graphics", "button pressed"); }, LV_EVENT_PRESSED, NULL);
+
+    lv_timer_create(ui_update_cb, 1000, NULL); // call every 1s
 
     xTaskCreatePinnedToCore(
         lv_task,
@@ -88,4 +128,13 @@ void Display::init_graphics()
         0,
         &lv_task_handle,
         1);
+}
+
+/** Force update and redraw graphics */
+void Display::refresh()
+{
+    ui_update();
+
+    lv_obj_invalidate(lv_screen_active()); // Mark screen dirty
+    lv_task_handler();                     // Process drawing immediately
 }

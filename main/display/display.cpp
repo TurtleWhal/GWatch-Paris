@@ -1,19 +1,9 @@
-// #include <stdio.h>
-// #include "esp_log.h"
-// #include "esp_timer.h"
-// #include "esp_heap_caps.h"
-
-// #include "lvgl.h"
 #include "drivers/gc9a01_driver.h"
 #include "drivers/cst816s_driver.h"
 
 #include "driver/ledc.h"
 
-// #include "system/system.h"
-
 #include "watch.hpp"
-
-// static lv_display_t *disp;
 
 #define LEDC_CHANNEL LEDC_CHANNEL_0
 #define LEDC_TIMER LEDC_TIMER_0
@@ -49,9 +39,13 @@ void Display::set_backlight_gradual(int16_t val, uint32_t ms)
 
 /** Set backlight brightness
  * @param val Backlight brightness
+ * @param stopgrad default true, cancels any current gradual backlight adjustment
  */
-void Display::set_backlight(int16_t val)
+void Display::set_backlight(int16_t val, bool stopgrad)
 {
+    if (stopgrad)
+        adjust = false;
+
     uint32_t duty = 0;
 
     if (val < 100)
@@ -86,7 +80,7 @@ void Display::backlight_update()
             if (mils - Millis > time_ms)
             {
                 duration = mils - starttime;
-                set_backlight((uint16_t)((k * duration) + old_backlight));
+                set_backlight((uint16_t)((k * duration) + old_backlight), false);
                 // ESP_LOGI("backlight", "K: %f duration: %d old: %d current: %d\n", k, duration, old_backlight, bgval);
 
                 if (Millis > endtime)
