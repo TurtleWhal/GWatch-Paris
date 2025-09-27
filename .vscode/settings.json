@@ -1,7 +1,7 @@
 {
   "C_Cpp.intelliSenseEngine": "default",
   "idf.espIdfPath": "/Users/garrett/esp/v5.5/esp-idf",
-  "idf.pythonInstallPath": "/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/bin/python3",
+  "idf.pythonInstallPath": "C:\\Users\\garre\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
@@ -49,5 +49,6 @@
     "text_encoding": "cpp",
     "regex": "cpp"
   },
-  "C_Cpp.errorSquiggles": "enabled"
+  "C_Cpp.errorSquiggles": "enabled",
+  "idf.portWin": "COM4"
 }

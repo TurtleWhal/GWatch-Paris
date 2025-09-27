@@ -23,7 +23,7 @@ void Watch::pm_update()
                 wakeup();
         }
 
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
