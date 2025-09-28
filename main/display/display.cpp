@@ -250,9 +250,15 @@ void Display::wake()
     // gc9a01_wakeup(); // Wake display
     // gc9a01_displayOn();
 
+    ESP_LOGI("displaywake", "Begin");
     gc9a01_begin();
+    ESP_LOGI("displaywake", "swap");
     gc9a01_setSwapBytes(true);
-    set_rotation(lv_display_get_rotation(disp));
+    ESP_LOGI("displaywake", "rotate");
+    // set_rotation(lv_display_get_rotation(disp));
+    gc9a01_setRotation(3);
+    ESP_LOGI("displaywake", "resume");
 
     vTaskResume(lv_task_handle);
+    ESP_LOGI("displaywake", "done");
 }

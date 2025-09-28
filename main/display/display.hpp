@@ -1,6 +1,8 @@
 #include "driver/i2c_master.h"
 #include "lvgl.h"
 
+#include "fonts.h"
+
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
@@ -17,6 +19,10 @@ class Display
 {
 private:
     void backlight_update();
+    void init_graphics();
+
+    void ui_init();
+    void ui_update();
 
     uint16_t bgval;
     TaskHandle_t backlight_handle = NULL;
@@ -32,7 +38,6 @@ private:
 
 public:
     void init(i2c_master_bus_handle_t bus);
-    void init_graphics();
 
     void sleep();
     void wake();

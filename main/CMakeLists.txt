@@ -48,7 +48,7 @@ idf_component_register(
     REQUIRES
         lvgl 
         fonts 
-        watchui 
+        # watchui 
         driver 
         esp_timer 
         freertos

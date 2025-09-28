@@ -11,9 +11,11 @@ void Watch::pm_update()
 {
     while (true)
     {
-        if (!watch.sleeping) // if awake
+        ESP_LOGW("pm", "sleeping: %d, timer: %d", this->sleeping, this->sleep_time);
+
+        if (!this->sleeping) // if awake
         {
-            if (esp_timer_get_time() / 1000 - sleep_time > SLEEP_DELAY)
+            if (esp_timer_get_time() / 1000 - this->sleep_time > SLEEP_DELAY)
             {
                 sleep();
             }
@@ -29,9 +31,11 @@ void Watch::pm_update()
 }
 
 /** Enter sleep mode */
-void Watch::sleep()
+void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT ONLY WORKS THIS WAY
 {
-    if (!sleeping)
+    ESP_LOGW("pm", "SLEEP");
+
+    if (!this->sleeping)
     {
         goingtosleep = true;
 
@@ -43,36 +47,49 @@ void Watch::sleep()
         {
             display.sleep();
 
-            this->sleeping = true;
+            esp_pm_lock_release(pm_freq_lock);
+            esp_pm_lock_release(pm_sleep_lock);
 
             esp_sleep_enable_gpio_wakeup();
 
-            esp_pm_lock_release(pm_freq_lock);
-            esp_pm_lock_release(pm_sleep_lock);
+            this->sleeping = true;
         }
     }
 }
 
 /** Exit sleep mode */
-void Watch::wakeup()
+void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT ONLY WORKS THIS WAY
 {
+    static bool wakeup_in_progress = false; // Add this guard
+
+    ESP_LOGW("pm", "WAKEUP");
     goingtosleep = false;
 
-    if (sleeping)
-    {
+    if (this->sleeping && !wakeup_in_progress)
+    {                              // Check the guard
+        wakeup_in_progress = true; // Set guard
+
+        ESP_LOGI("wakeup", "sleeping");
+        this->sleeping = false;
+
+        ESP_LOGI("wakeup", "aquire locks");
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
+        ESP_LOGI("wakeup", "display wake");
         display.wake();
+
+        ESP_LOGI("wakeup", "display refresh");
         display.refresh();
 
-        // vTaskDelay(pdMS_TO_TICKS(300)); // wait for the display to refresh
+        wakeup_in_progress = false; // Clear guard
     }
 
-    display.set_backlight(100);
-
-    this->sleep_time = esp_timer_get_time() / 1000; // reset sleep timer on touch
     this->sleeping = false;
+    ESP_LOGI("wakeup", "backlight");
+    display.set_backlight(100);
+    this->sleep_time = esp_timer_get_time() / 1000;
+    ESP_LOGI("wakeup", "wakeup complete");
 }
 
 /** Initialise power management */

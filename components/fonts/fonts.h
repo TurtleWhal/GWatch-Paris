@@ -32,8 +32,9 @@ LV_FONT_DECLARE(ProductSansRegular_24);
 #define SET_SYMBOL_egular_20(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansRegular_20, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_egular_24(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansRegular_24, LV_PART_MAIN); lv_label_set_text(obj, sym);
 
-#define FA_STEPS     "" // '', Sizes: [14]
-#define FA_BATTERY   "" // '', Sizes: [14]
-#define FA_CALENDAR  "" // '', Sizes: [14]
-#define FA_LIGHTNING "" // '', Sizes: [14]
-#define FA_WIFI      "" // '', Sizes: [14]
+#define FA_STEPS      "" // '', Sizes: [14]
+#define FA_BATTERY    "" // '', Sizes: [14]
+#define FA_CALENDAR   "" // '', Sizes: [14]
+#define FA_LIGHTNING  "" // '', Sizes: [14]
+#define FA_WIFI       "" // '', Sizes: [14]
+#define FA_CONNECTING "" // '', Sizes: [14]

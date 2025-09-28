@@ -18,7 +18,7 @@
 
 #include "battery.h"
 #include "wifi.hpp"
-#include "ui.h"
+// #include "ui.h"
 #include "display.hpp"
 
 struct TimeInfo
