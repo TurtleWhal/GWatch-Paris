@@ -42,6 +42,8 @@ private:
     esp_pm_lock_handle_t pm_sleep_lock;
     i2c_master_bus_handle_t i2c_bus;
 
+    TaskHandle_t pm_task;
+
     uint32_t sleep_time;
 
     bool goingtosleep;

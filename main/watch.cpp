@@ -11,7 +11,7 @@ void Watch::pm_update()
 {
     while (true)
     {
-        ESP_LOGW("pm", "sleeping: %d, timer: %d", this->sleeping, this->sleep_time);
+        // ESP_LOGW("pm", "sleeping: %d, timer: %d", this->sleeping, this->sleep_time);
 
         if (!this->sleeping) // if awake
         {
@@ -79,8 +79,12 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         ESP_LOGI("wakeup", "display wake");
         display.wake();
 
-        ESP_LOGI("wakeup", "display refresh");
-        display.refresh();
+        // Required to reset the watchdog
+        vTaskDelay(pdMS_TO_TICKS(1));
+
+        // breaks everything
+        // ESP_LOGI("wakeup", "display refresh");
+        // display.refresh();
 
         wakeup_in_progress = false; // Clear guard
     }
@@ -112,7 +116,7 @@ void Watch::pm_init()
                             {
                                 auto *obj = static_cast<Watch *>(pvParameters);
                                 obj->pm_update(); },
-                            "pm", 1024 * 4, this, 0, NULL, 0);
+                            "pm", 1024 * 4, this, 0, &pm_task, 0);
 }
 
 /** Initialise I²C */
