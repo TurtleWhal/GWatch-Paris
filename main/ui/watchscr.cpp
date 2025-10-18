@@ -1,9 +1,7 @@
 #include "ui.hpp"
 #include <sys/time.h>
 
-// #include "assets/overlay.c"
-
-LV_IMAGE_DECLARE(overlay);
+LV_IMAGE_DECLARE(croppedoverlay);
 
 const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
@@ -109,6 +107,10 @@ lv_obj_t *watchscr_create()
     lv_obj_set_style_line_color(secondscale, gray, LV_PART_ITEMS);
     lv_obj_set_style_length(secondscale, 4, LV_PART_ITEMS);
     lv_obj_set_style_line_width(secondscale, 2, LV_PART_ITEMS);
+
+    lv_obj_t *overlayimg = lv_img_create(scr);
+    lv_image_set_src(overlayimg, &croppedoverlay);
+    lv_obj_align(overlayimg, LV_ALIGN_LEFT_MID, 0, 0);
 
     lv_obj_t *minutemask = lv_obj_create(scr);
     lv_obj_set_size(minutemask, 38, 36);

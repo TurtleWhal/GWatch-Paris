@@ -111,7 +111,7 @@ void Watch::pm_init()
                             {
                                 auto *obj = static_cast<Watch *>(pvParameters);
                                 obj->pm_update(); },
-                            "pm", 1024 * 4, this, 0, &pm_task, 0);
+                            "pm", 1024 * 6, this, 0, &pm_task, 0);
 }
 
 #define I2C_MASTER_NUM I2C_NUM_0
