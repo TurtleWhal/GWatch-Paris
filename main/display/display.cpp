@@ -4,6 +4,7 @@
 #include "driver/ledc.h"
 
 #include "watch.hpp"
+#include <cmath>
 
 #define LEDC_CHANNEL LEDC_CHANNEL_0
 #define LEDC_TIMER LEDC_TIMER_0
@@ -131,18 +132,32 @@ void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch)
     static uint16_t last_x = 0;
     static uint16_t last_y = 0;
     static bool touching = false;
+    static int64_t touch_start_ms = 0;
+    static bool reboot_scheduled = false;
 
 #ifdef ENV_WAVESHARE
     if (cst816s_available())
     {
         watch.wakeup();
-
         touch_data data = cst816s_touch_read();
 
         if (!touching)
+        {
             ESP_LOGI("cst816s", "Screen Touched at: %d, %d", data.x, data.y);
-
-        touching = true;
+            touching = true;
+            touch_start_ms = esp_timer_get_time() / 1000;
+            reboot_scheduled = false;
+        }
+        else
+        {
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            if (!reboot_scheduled && (now_ms - touch_start_ms) >= 30000)
+            {
+                ESP_LOGW("cst816s", "Screen held >30s, rebooting");
+                reboot_scheduled = true;
+                esp_restart();
+            }
+        }
 
         last_x = data.x;
         last_y = data.y;
@@ -151,6 +166,8 @@ void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch)
     else
     {
         touching = false;
+        touch_start_ms = 0;
+        reboot_scheduled = false;
         touch->state = LV_INDEV_STATE_REL;
     }
 
@@ -166,6 +183,14 @@ bool Display::is_touching()
 {
 #ifdef ENV_WAVESHARE
     return cst816s_available();
+    // return cst816s_available_soft();
+#endif // ENV_WAVESHARE
+}
+
+void Display::reset_touch()
+{
+#ifdef ENV_WAVESHARE
+    cst816s_read_touch();
 #endif // ENV_WAVESHARE
 }
 
@@ -234,13 +259,50 @@ void Display::init(i2c_master_bus_handle_t bus)
 /** Put the dispay to sleep and stop graphics */
 void Display::sleep()
 {
+    goingtosleep = true;
+    ESP_LOGI("sleep", "goingtosleep set");
+
+    // ESP_LOGI("sleep", "Begin");
+    // vTaskSuspend(lv_task_handle);
+
+    // ESP_LOGI("sleep", "check spi");
+    // // give time for any pending SPI
+    // vTaskDelay(pdMS_TO_TICKS(30));
+    // spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
+    // spi_device_release_bus(gc9a01.spi);
+
+    // ESP_LOGI("sleep", "display sleep");
+    // gc9a01_sleep();
+    // gc9a01_displayOff();
+    // gc9a01_cleanup();
+
+    // gpio_wakeup_enable(GPIO_NUM_5, GPIO_INTR_LOW_LEVEL);
+}
+
+void Display::lvgl_done()
+{
+    // ESP_LOGI("lvgl_done", "goingtosleep: %d", goingtosleep);
+
+    if (!goingtosleep)
+        return;
+
+    goingtosleep = false;
+
+    ESP_LOGI("sleep", "Begin");
+
+    ESP_LOGI("sleep", "check spi");
+    // give time for any pending SPI
+    vTaskDelay(pdMS_TO_TICKS(30));
+    spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
+    spi_device_release_bus(gc9a01.spi);
+
+    ESP_LOGI("sleep", "display sleep");
     gc9a01_sleep();
     gc9a01_displayOff();
     gc9a01_cleanup();
 
+    ESP_LOGI("sleep", "done");
     vTaskSuspend(lv_task_handle);
-
-    gpio_wakeup_enable(GPIO_NUM_5, GPIO_INTR_LOW_LEVEL);
 }
 
 /** Wake up the display and graphics */
@@ -250,15 +312,23 @@ void Display::wake()
     // gc9a01_wakeup(); // Wake display
     // gc9a01_displayOn();
 
-    ESP_LOGI("displaywake", "Begin");
+    // ESP_LOGI("displaywake", "Begin");
     gc9a01_begin();
-    ESP_LOGI("displaywake", "swap");
+    // ESP_LOGI("displaywake", "swap");
     gc9a01_setSwapBytes(true);
-    ESP_LOGI("displaywake", "rotate");
+    // ESP_LOGI("displaywake", "rotate");
     // set_rotation(lv_display_get_rotation(disp));
     gc9a01_setRotation(3);
-    ESP_LOGI("displaywake", "resume");
+    // ESP_LOGI("displaywake", "resume");
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // refresh();
 
     vTaskResume(lv_task_handle);
-    ESP_LOGI("displaywake", "done");
+
+    // TaskStatus_t status;
+    // vTaskGetInfo(lv_task_handle, &status, pdFALSE, eTaskGetState(lv_task_handle));
+
+    // ESP_LOGI("displaywake", "done");
 }

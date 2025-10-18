@@ -6,6 +6,27 @@
 static adc_oneshot_unit_handle_t adc1_handle;
 esp_adc_cal_characteristics_t adc_chars;
 
+/** Get curent battery voltage
+ * @returns current battery voltage in millivolts
+ */
+uint32_t battery_get_mV(void)
+{
+#ifdef ENV_WAVESHARE
+
+    int raw;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw));
+
+    uint32_t voltage = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
+
+    // 🤷‍♂️ I honestly don't know but it was in the old code and it works
+    uint32_t bat_voltage = ((voltage * 3300 * 3) / 4096) + 200;
+    return bat_voltage;
+
+#endif // ENV_WAVESHARE
+
+    return 0;
+}
+
 /** Update task for battery */
 void battery_task(void *)
 {
@@ -53,27 +74,6 @@ void battery_init(void)
     watch.battery.percent = UINT8_MAX;
 
     xTaskCreate(battery_task, "battery_task", 1 * 1024, NULL, 2, NULL);
-}
-
-/** Get curent battery voltage
- * @returns current battery voltage in millivolts
- */
-uint32_t battery_get_mV(void)
-{
-#ifdef ENV_WAVESHARE
-
-    int raw;
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw));
-
-    uint32_t voltage = esp_adc_cal_raw_to_voltage(raw, &adc_chars);
-
-    // 🤷‍♂️ I honestly don't know but it was in the old code and it works
-    uint32_t bat_voltage = ((voltage * 3300 * 3) / 4096) + 200;
-    return bat_voltage;
-
-#endif // ENV_WAVESHARE
-
-    return 0;
 }
 
 #ifndef ENV_WAVESHARE

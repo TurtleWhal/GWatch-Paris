@@ -23,7 +23,10 @@ void Watch::pm_update()
         else
         {
             if (display.is_touching())
+            {
                 wakeup();
+                // display.reset_touch();
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -47,10 +50,14 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
         {
             display.sleep();
 
+            // vTaskDelay(pdMS_TO_TICKS(20));
+
+            // enable touchscreen to wake the device
+            esp_sleep_enable_gpio_wakeup();
+            gpio_wakeup_enable(GPIO_NUM_5, GPIO_INTR_LOW_LEVEL);
+
             esp_pm_lock_release(pm_freq_lock);
             esp_pm_lock_release(pm_sleep_lock);
-
-            esp_sleep_enable_gpio_wakeup();
 
             this->sleeping = true;
         }
@@ -62,25 +69,28 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 {
     static bool wakeup_in_progress = false; // Add this guard
 
-    ESP_LOGW("pm", "WAKEUP");
     goingtosleep = false;
 
     if (this->sleeping && !wakeup_in_progress)
-    {                              // Check the guard
+    { // Check the guard
+        ESP_LOGW("pm", "WAKEUP");
+
         wakeup_in_progress = true; // Set guard
 
-        ESP_LOGI("wakeup", "sleeping");
+        // ESP_LOGI("wakeup", "sleeping");
         this->sleeping = false;
 
-        ESP_LOGI("wakeup", "aquire locks");
+        // ESP_LOGI("wakeup", "aquire locks");
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
-        ESP_LOGI("wakeup", "display wake");
+        vTaskDelay(pdMS_TO_TICKS(10));
+
+        // ESP_LOGI("wakeup", "display wake");
         display.wake();
 
         // Required to reset the watchdog
-        vTaskDelay(pdMS_TO_TICKS(1));
+        // vTaskDelay(pdMS_TO_TICKS(10));
 
         // breaks everything
         // ESP_LOGI("wakeup", "display refresh");
@@ -90,10 +100,10 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
     }
 
     this->sleeping = false;
-    ESP_LOGI("wakeup", "backlight");
+    // ESP_LOGI("wakeup", "backlight");
     display.set_backlight(100);
     this->sleep_time = esp_timer_get_time() / 1000;
-    ESP_LOGI("wakeup", "wakeup complete");
+    // ESP_LOGI("wakeup", "wakeup complete");
 }
 
 /** Initialise power management */
@@ -119,11 +129,12 @@ void Watch::pm_init()
                             "pm", 1024 * 4, this, 0, &pm_task, 0);
 }
 
+#define I2C_MASTER_NUM I2C_NUM_0
+#define I2C_MASTER_FREQ_HZ 400000
+
 /** Initialise I²C */
 void Watch::iic_init()
 {
-#define I2C_MASTER_NUM I2C_NUM_0
-#define I2C_MASTER_FREQ_HZ 400000
 
     i2c_master_bus_config_t i2c_cfg = {
         .i2c_port = I2C_MASTER_NUM,
@@ -137,15 +148,32 @@ void Watch::iic_init()
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_cfg, &i2c_bus));
 }
 
+void Watch::i2c_scan()
+{
+    ESP_LOGI("scan", "Scanning I2C bus...");
+    for (uint8_t addr = 1; addr < 127; addr++)
+    {
+        uint8_t data = 0;
+        esp_err_t ret = i2c_master_probe(i2c_bus, addr, 100);
+        if (ret == ESP_OK)
+        {
+            ESP_LOGI("scan", "Found device at 0x%02X", addr);
+        }
+    }
+    ESP_LOGI("scan", "I2C scan complete.");
+}
+
 /** Initialise all watch subsystems */
 void Watch::init()
 {
-    gpio_install_isr_service(0);
+    gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
 
     pm_init();
     iic_init();
 
     battery_init();
+
+    imu_init(i2c_bus);
 
     display.init(i2c_bus);
 
@@ -154,6 +182,8 @@ void Watch::init()
     display.set_backlight(100);
 
     wifi.init();
+
+    // i2c_scan();
 }
 
 /** Wrapper for C -> C++ shenanigans */

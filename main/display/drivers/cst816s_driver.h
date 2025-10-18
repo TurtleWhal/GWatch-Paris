@@ -122,6 +122,18 @@ bool cst816s_available(void)
     return false;
 }
 
+/** checks if the interrupt has triggered without reading i2c */
+bool cst816s_available_soft()
+{
+    if (_event_available)
+    {
+        _event_available = false;
+        return true;
+    }
+
+    return false;
+}
+
 void cst816s_touchpad_sleep()
 {
     gpio_set_level(TOUCH_RST_GPIO, 0);

@@ -24,6 +24,9 @@ private:
     void ui_init();
     void ui_update();
 
+    void start_lvgl_task();
+    void stop_lvgl_task();
+
     uint16_t bgval;
     TaskHandle_t backlight_handle = NULL;
 
@@ -36,6 +39,8 @@ private:
     lv_display_t *disp;
     TaskHandle_t lv_task_handle = NULL;
 
+    bool goingtosleep = false;
+
 public:
     void init(i2c_master_bus_handle_t bus);
 
@@ -45,12 +50,15 @@ public:
     void refresh();
 
     bool is_touching();
+    void reset_touch();
 
     void set_rotation(lv_display_rotation_t rotation);
 
     void set_backlight_gradual(int16_t val, uint32_t ms);
     void set_backlight(int16_t val, bool stopgrad = true);
     uint16_t get_brightness();
+
+    void lvgl_done();
 };
 
 #endif // __cplusplus

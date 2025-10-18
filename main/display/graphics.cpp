@@ -6,6 +6,7 @@
 
 #include "time.h"
 #include <sys/time.h>
+#include <esp_task_wdt.h>
 
 lv_obj_t *timelbl;
 lv_obj_t *wifilbl;
@@ -45,11 +46,17 @@ static uint32_t lvgl_tick_get_cb(void)
 
 void lv_task(void *args)
 {
+    // esp_task_wdt_delete(NULL); // removes the current task from TWDT
+
+    ESP_LOGI("lv_task", "started");
+
     while (true)
     {
         // ESP_LOGI("lv_task", "running");
         lv_timer_handler();
-        // vTaskDelay(pdMS_TO_TICKS(5));
+        watch.display.lvgl_done();
+
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
 
@@ -124,14 +131,24 @@ void Display::init_graphics()
 
     ui_init();
 
+    start_lvgl_task();
+}
+
+void Display::start_lvgl_task()
+{
     xTaskCreatePinnedToCore(
         lv_task,
         "lv_task",
         1024 * 8,
         NULL,
-        0,
+        1,
         &lv_task_handle,
         1);
+}
+void Display::stop_lvgl_task()
+{
+    vTaskDelete(lv_task_handle);
+    lv_task_handle = NULL;
 }
 
 /** Force update and redraw graphics */

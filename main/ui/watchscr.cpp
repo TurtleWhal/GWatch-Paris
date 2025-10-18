@@ -23,6 +23,7 @@ lv_obj_t *day;
 lv_obj_t *month;
 
 lv_obj_t *battery;
+lv_obj_t *steps;
 
 lv_obj_t *wifiicon;
 
@@ -129,7 +130,7 @@ lv_obj_t *watchscr_create()
     lv_obj_align(bound, LV_ALIGN_LEFT_MID, 60, 0);
 
     /* Steps */
-    lv_obj_t *steps = create_valuearc(scr, accent, FA_STEPS);
+    steps = create_valuearc(scr, accent, FA_STEPS);
     lv_obj_align(steps, LV_ALIGN_RIGHT_MID, -40, -68);
     lv_arc_set_range(steps, 0, 6500);
     lv_arc_set_value(steps, 1234);
@@ -247,6 +248,10 @@ void watchscr_update()
     lv_arc_set_value(battery, watch.battery.voltage);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"),
                           "%d", watch.battery.voltage);
+
+    lv_arc_set_value(steps, watch.imu.steps);
+    lv_label_set_text_fmt(lv_obj_get_child_by_name(steps, "text"),
+                          "%ld", watch.imu.steps);
 
     // if (watch.wifi.status)
     //     lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);

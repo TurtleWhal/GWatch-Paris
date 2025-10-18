@@ -16,9 +16,9 @@
 
 #include "pins.h"
 
-#include "battery.h"
+#include "battery.hpp"
+#include "imu.hpp"
 #include "wifi.hpp"
-// #include "ui.h"
 #include "display.hpp"
 
 struct TimeInfo
@@ -50,6 +50,7 @@ private:
 
     void pm_init();
     void iic_init();
+    void i2c_scan();
 
     void pm_update();
 
@@ -57,6 +58,7 @@ public:
     struct TimeInfo time;
     struct BatteryInfo battery;
     struct WiFi wifi;
+    struct IMUInfo imu;
 
     Display display;
 

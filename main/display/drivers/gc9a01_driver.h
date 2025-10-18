@@ -77,7 +77,11 @@ static void gc9a01_send_cmd(uint8_t cmd)
     gpio_set_level(gc9a01.pin_dc, 0); // Command mode
     t.length = 8;
     t.tx_buffer = &cmd;
+
+    // spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
     ret = spi_device_polling_transmit(gc9a01.spi, &t);
+    // spi_device_release_bus(gc9a01.spi);
+
     assert(ret == ESP_OK);
 }
 
@@ -94,7 +98,11 @@ static void gc9a01_send_data(const uint8_t *data, int len)
     gpio_set_level(gc9a01.pin_dc, 1); // Data mode
     t.length = len * 8;
     t.tx_buffer = data;
+
+    // spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
     ret = spi_device_polling_transmit(gc9a01.spi, &t);
+    // spi_device_release_bus(gc9a01.spi);
+
     assert(ret == ESP_OK);
 }
 
@@ -619,6 +627,8 @@ esp_err_t gc9a01_pushImageDMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, ui
         return ESP_OK; // Nothing to draw
     }
 
+    // spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
+
     bool transaction_started_here = false;
     if (!gc9a01.transaction_started)
     {
@@ -722,6 +732,8 @@ esp_err_t gc9a01_pushImageDMA(uint16_t x, uint16_t y, uint16_t w, uint16_t h, ui
     {
         gc9a01_endWrite();
     }
+
+    // spi_device_release_bus(gc9a01.spi);
 
     return ret;
 }
