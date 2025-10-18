@@ -1,53 +1,42 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | Linux |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | ----- |
+# G-Watch Paris
+<!-- # The third major version of the G-Watch project, named Paris because I was in Paris when I started it -->
 
-# Hello World Example
+This watch is a personal project that I have worked on for fun over the last few years. The goal is to build a bluetooth smartwatch that has all the features that I would ever want on a smartwatch, all in a compact format that I can actually wear around all day.
 
-Starts a FreeRTOS task to print "Hello World".
+This specific version is the third major code revision, named Paris because I was in Paris when I started working on it (I'm trying to do a cool version name thing).
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
-
-## How to use example
-
-Follow detailed instructions provided specifically for this example.
-
-Select the instructions depending on Espressif chip installed on your development board:
-
-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+# Features
+* LVGL UI
+* Touchscreen
+* Step Tracking
+* Super low power (~7mA using esp32-s3 light sleep)
+* WiFi time synchronization (To be replaced by bluetooth eventually)
+* USB-C Charging
+* Clock (Obviously)
 
 
-## Example folder contents
+I am starting slow with basic functionaliy and adding features as I go, being careful to preserve stability and power efficiency, hence the 3rd code revision
 
-The project **hello_world** contains one source file in C language [hello_world_main.c](main/hello_world_main.c). The file is located in folder [main](main).
+**To-Do List**
+* Bluetooth (Using [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge))
+  - Phone Notifications
+  - Music Control
+* Haptic Vibration Motor (Motor is already installed, just need to add code)
+* Timer
+* Stopwatch
+* Alarms
 
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both).
 
-Below is short explanation of remaining files in the project folder.
+# Hardware
+When I started this project, the [Lilygo T-Watch 2021][lilygo] was the only option on the market for a round screen + processor combo, but then Waveshare released their [ESP32-S3 Dev Board with 1.28in LCD][waveshare] which after desoldering some connectors is significantly thinner than the Lilygo option due to the more integrated processor.
 
-```
-├── CMakeLists.txt
-├── pytest_hello_world.py      Python script used for automated testing
-├── main
-│   ├── CMakeLists.txt
-│   └── hello_world_main.c
-└── README.md                  This is the file you are currently reading
-```
+**Specs (Waveshare)**
+* ESP32-S3R2 240MHz SoC with 16MB of flash and 2MB of PSRAM
+* GC9A01 1.28in round LCD with CST816S capacitive touchscreen
+* QMI8658 6-axis IMU
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
+[waveshare]: https://www.waveshare.com/esp32-s3-touch-lcd-1.28.htm
+[lilygo]: https://lilygo.cc/products/t-watch-2021
 
-## Troubleshooting
-
-* Program upload failure
-
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
-
-## Technical support and feedback
-
-Please use the following feedback channels:
-
-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
-
-We will get back to you as soon as possible.
+# Construction
+The shell of the watch is entirely 3D-Printed, with the main body printed in PLA and the bands printed out of flexible TPU
