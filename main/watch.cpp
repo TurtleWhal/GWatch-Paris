@@ -1,7 +1,7 @@
 #include "watch.hpp"
 #include "driver/gpio.h"
 
-#define SLEEP_DELAY 5000
+#define SLEEP_DELAY 15000
 #define BACKLIGHT_FADE_MS 2000
 
 Watch watch;
@@ -11,8 +11,6 @@ void Watch::pm_update()
 {
     while (true)
     {
-        // ESP_LOGW("pm", "sleeping: %d, timer: %d", this->sleeping, this->sleep_time);
-
         if (!this->sleeping) // if awake
         {
             if (esp_timer_get_time() / 1000 - this->sleep_time > SLEEP_DELAY)
@@ -25,7 +23,6 @@ void Watch::pm_update()
             if (display.is_touching())
             {
                 wakeup();
-                // display.reset_touch();
             }
         }
 
@@ -36,10 +33,10 @@ void Watch::pm_update()
 /** Enter sleep mode */
 void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT ONLY WORKS THIS WAY
 {
-    ESP_LOGW("pm", "SLEEP");
-
     if (!this->sleeping)
     {
+        ESP_LOGI("pm", "SLEEP");
+
         goingtosleep = true;
 
         display.set_backlight_gradual(0, BACKLIGHT_FADE_MS);
@@ -49,8 +46,6 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
         if (goingtosleep)
         {
             display.sleep();
-
-            // vTaskDelay(pdMS_TO_TICKS(20));
 
             // enable touchscreen to wake the device
             esp_sleep_enable_gpio_wakeup();
@@ -73,37 +68,27 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 
     if (this->sleeping && !wakeup_in_progress)
     { // Check the guard
-        ESP_LOGW("pm", "WAKEUP");
+        ESP_LOGI("pm", "WAKEUP");
 
         wakeup_in_progress = true; // Set guard
 
-        // ESP_LOGI("wakeup", "sleeping");
         this->sleeping = false;
 
-        // ESP_LOGI("wakeup", "aquire locks");
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
-        vTaskDelay(pdMS_TO_TICKS(10));
-
-        // ESP_LOGI("wakeup", "display wake");
         display.wake();
 
-        // Required to reset the watchdog
-        // vTaskDelay(pdMS_TO_TICKS(10));
-
-        // breaks everything
-        // ESP_LOGI("wakeup", "display refresh");
-        // display.refresh();
+        // update display before turning on backlight
+        display.refresh();
 
         wakeup_in_progress = false; // Clear guard
     }
 
     this->sleeping = false;
-    // ESP_LOGI("wakeup", "backlight");
+
     display.set_backlight(100);
     this->sleep_time = esp_timer_get_time() / 1000;
-    // ESP_LOGI("wakeup", "wakeup complete");
 }
 
 /** Initialise power management */

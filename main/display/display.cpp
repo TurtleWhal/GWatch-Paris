@@ -240,95 +240,43 @@ void Display::init(i2c_master_bus_handle_t bus)
                                 auto *obj = static_cast<Display *>(pvParameters);
                                 obj->backlight_update(); },
                             "backlight", 1024 * 4, this, 2, &backlight_handle, 0);
-
-    // set_backlight(100);
-
-    // while (true)
-    // {
-    //     fillScreen(COLOR_RED);
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    //     fillScreen(COLOR_GREEN);
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    //     fillScreen(COLOR_BLUE);
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // }
-
-    // fillScreen(COLOR_MAGENTA);
 }
 
 /** Put the dispay to sleep and stop graphics */
 void Display::sleep()
 {
     goingtosleep = true;
-    ESP_LOGI("sleep", "goingtosleep set");
-
-    // ESP_LOGI("sleep", "Begin");
-    // vTaskSuspend(lv_task_handle);
-
-    // ESP_LOGI("sleep", "check spi");
-    // // give time for any pending SPI
-    // vTaskDelay(pdMS_TO_TICKS(30));
-    // spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
-    // spi_device_release_bus(gc9a01.spi);
-
-    // ESP_LOGI("sleep", "display sleep");
-    // gc9a01_sleep();
-    // gc9a01_displayOff();
-    // gc9a01_cleanup();
-
-    // gpio_wakeup_enable(GPIO_NUM_5, GPIO_INTR_LOW_LEVEL);
 }
 
+/** Runs after every lvgl loop */
 void Display::lvgl_done()
 {
-    // ESP_LOGI("lvgl_done", "goingtosleep: %d", goingtosleep);
-
     if (!goingtosleep)
         return;
 
     goingtosleep = false;
 
-    ESP_LOGI("sleep", "Begin");
-
-    ESP_LOGI("sleep", "check spi");
     // give time for any pending SPI
     vTaskDelay(pdMS_TO_TICKS(30));
     spi_device_acquire_bus(gc9a01.spi, portMAX_DELAY);
     spi_device_release_bus(gc9a01.spi);
 
-    ESP_LOGI("sleep", "display sleep");
+    // put the display in low power mode
     gc9a01_sleep();
     gc9a01_displayOff();
     gc9a01_cleanup();
 
-    ESP_LOGI("sleep", "done");
+    // stop the lvgl task at the end since this function is called in lvgl task context
     vTaskSuspend(lv_task_handle);
 }
 
 /** Wake up the display and graphics */
 void Display::wake()
 {
-
-    // gc9a01_wakeup(); // Wake display
-    // gc9a01_displayOn();
-
-    // ESP_LOGI("displaywake", "Begin");
+    /** Reinitalize the display */
     gc9a01_begin();
-    // ESP_LOGI("displaywake", "swap");
     gc9a01_setSwapBytes(true);
-    // ESP_LOGI("displaywake", "rotate");
-    // set_rotation(lv_display_get_rotation(disp));
     gc9a01_setRotation(3);
-    // ESP_LOGI("displaywake", "resume");
-
-    vTaskDelay(pdMS_TO_TICKS(10));
-
-    // refresh();
 
     vTaskResume(lv_task_handle);
-
-    // TaskStatus_t status;
-    // vTaskGetInfo(lv_task_handle, &status, pdFALSE, eTaskGetState(lv_task_handle));
-
-    // ESP_LOGI("displaywake", "done");
 }

@@ -1,7 +1,5 @@
 #include "watch.hpp"
 
-// #include "drivers/qmi8658.h"
-// #include "SensorQMI8658.hpp"
 #include "../components/cfscn__sensorlib/src/SensorQMI8658.hpp"
 #include <math.h>
 #include <driver/gpio.h>

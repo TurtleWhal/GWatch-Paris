@@ -24,9 +24,6 @@ private:
     void ui_init();
     void ui_update();
 
-    void start_lvgl_task();
-    void stop_lvgl_task();
-
     uint16_t bgval;
     TaskHandle_t backlight_handle = NULL;
 
