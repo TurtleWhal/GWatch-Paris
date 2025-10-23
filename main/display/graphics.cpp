@@ -23,10 +23,10 @@ void lv_task(void *args)
 
     while (true)
     {
-        lv_timer_handler();
+        uint32_t d = lv_timer_handler();
         watch.display.lvgl_done();
 
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(d));
     }
 }
 

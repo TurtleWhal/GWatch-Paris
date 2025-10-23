@@ -11,6 +11,7 @@
 // 0˚ is the top, angle goes counter-clockwise
 #define POLAR(r, t) cos(DEG2RAD *t) * r, sin(DEG2RAD *t) * r
 
+lv_obj_t *create_screen();
 lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol);
 
 lv_obj_t *watchscr_create();
@@ -18,3 +19,6 @@ void watchscr_update();
 
 // lv_obj_t *wifiscr_create();
 // void wifiscr_update();
+
+lv_obj_t *apps_screen_create();
+void apps_screen_update();

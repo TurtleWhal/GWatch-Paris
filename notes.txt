@@ -1,0 +1,5 @@
+During battery length test:
+ - occasionally resetting (know because steps are resetting)
+ - at one point voltage readout was displaying steps ??!??!?!!???
+ - touchscreen issues after a while (tap the screen a bunch before it turns on, but then touch coordinates work fine but then issue repeats upon sleep again)
+ Lasted 74 hours and 26 minutes, screen dimmed near end

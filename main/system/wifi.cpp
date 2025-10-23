@@ -18,8 +18,8 @@ typedef struct
 } wifi_ap_entry_t;
 
 static wifi_ap_entry_t known_aps[] = {
-    {"NetworkOfIOT", "40961024"},
     {"garrettphone", "40961024"},
+    {"NetworkOfIOT", "40961024"},
 };
 
 static const int known_ap_count = sizeof(known_aps) / sizeof(known_aps[0]);
