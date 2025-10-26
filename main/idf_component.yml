@@ -14,7 +14,7 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
-  lvgl/lvgl: ^9.3.0
+  lvgl/lvgl: ^9.4.0
   # cfscn/sensorlib: ^0.2.2
   # waveshare/qmi8658: ^1.0.1
   # espressif/adc_battery_estimation: ^0.2.0

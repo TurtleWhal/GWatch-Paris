@@ -43,4 +43,5 @@ LV_FONT_DECLARE(ProductSansRegular_24);
 #define FA_SETTINGS     "" // '', Sizes: [28]
 #define FA_FLASHLIGHT   "" // '', Sizes: [28]
 #define FA_BLUETOOTH    "" // '', Sizes: [28]
+#define FA_POWEROFF     "" // '', Sizes: [28]
 #define FA_DONOTDISTURB "" // '', Sizes: [28]

@@ -195,50 +195,63 @@ void WiFi::init()
 /** Connect WiFI */
 void WiFi::connect()
 {
-    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    // Start a blocking scan
-    wifi_scan_config_t scan_config = {
-        .ssid = NULL,
-        .bssid = NULL,
-        .channel = 0,
-        .show_hidden = true};
-
-    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
-
-    // Get scan results
-    uint16_t ap_count = 0;
-    esp_wifi_scan_get_ap_num(&ap_count);
-
-    wifi_ap_record_t *ap_records = (wifi_ap_record_t *)malloc(ap_count * sizeof(wifi_ap_record_t));
-    if (!ap_records)
-    {
-        ESP_LOGE(TAG, "Failed to allocate memory for AP records");
-        return;
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
-
-    // Try to connect to the first known AP that is available
-    for (int i = 0; i < known_ap_count; i++)
-    {
-        for (int j = 0; j < ap_count; j++)
+    xTaskCreatePinnedToCore(
+        [](void *pvParameters)
         {
-            if (strcmp((char *)ap_records[j].ssid, known_aps[i].ssid) == 0)
+            esp_wifi_set_storage(WIFI_STORAGE_FLASH);
+
+            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+            ESP_ERROR_CHECK(esp_wifi_start());
+
+            // Start a blocking scan
+            wifi_scan_config_t scan_config = {
+                .ssid = NULL,
+                .bssid = NULL,
+                .channel = 0,
+                .show_hidden = true};
+
+            ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
+
+            // Get scan results
+            uint16_t ap_count = 0;
+            esp_wifi_scan_get_ap_num(&ap_count);
+
+            wifi_ap_record_t *ap_records = (wifi_ap_record_t *)malloc(ap_count * sizeof(wifi_ap_record_t));
+            if (!ap_records)
             {
-                ESP_LOGI(TAG, "Found known AP: %s, trying to connect", known_aps[i].ssid);
-                connect_to_ap((char *)known_aps[i].ssid, (char *)known_aps[i].password);
-                free(ap_records);
+                ESP_LOGE(TAG, "Failed to allocate memory for AP records");
+                vTaskDelete(NULL);
                 return;
             }
-        }
-    }
 
-    ESP_LOGW(TAG, "No known APs found in scan");
-    free(ap_records);
+            ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
+
+            // Try to connect to the first known AP that is available
+            for (int i = 0; i < known_ap_count; i++)
+            {
+                for (int j = 0; j < ap_count; j++)
+                {
+                    if (strcmp((char *)ap_records[j].ssid, known_aps[i].ssid) == 0)
+                    {
+                        ESP_LOGI(TAG, "Found known AP: %s, trying to connect", known_aps[i].ssid);
+                        watch.wifi.connect_to_ap((char *)known_aps[i].ssid, (char *)known_aps[i].password);
+                        free(ap_records);
+                        vTaskDelete(NULL);
+                        return;
+                    }
+                }
+            }
+
+            ESP_LOGW(TAG, "No known APs found in scan");
+            free(ap_records);
+            vTaskDelete(NULL);
+        },
+        "wifi_connect",
+        4096,
+        NULL,
+        4,
+        NULL,
+        0);
 }
 
 /** Disconnect WiFI */

@@ -80,7 +80,7 @@ void Display::ui_init()
 
     lv_screen_load(main_screen);
 
-    lv_obj_scroll_to_y(main_screen, lv_obj_get_y(watchscr), LV_ANIM_ON);
+    lv_obj_scroll_to_view(watchscr, LV_ANIM_OFF);
 }
 
 void Display::ui_update()

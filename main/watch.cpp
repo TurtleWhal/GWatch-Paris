@@ -80,7 +80,7 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         display.wake();
 
         // update display before turning on backlight
-        display.refresh();
+        // display.refresh();
 
         wakeup_in_progress = false; // Clear guard
     }

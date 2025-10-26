@@ -8,8 +8,13 @@
 #define DEG2RAD 0.017453292519943295
 
 // Radius, angle (degrees)
-// 0˚ is the top, angle goes counter-clockwise
+// 0˚ is pointing to the right, angle goes counter-clockwise
 #define POLAR(r, t) cos(DEG2RAD *t) * r, sin(DEG2RAD *t) * r
+
+extern lv_obj_t *main_screen;
+
+extern lv_obj_t *watchscr;
+extern lv_obj_t *appsscreen;
 
 lv_obj_t *create_screen();
 lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol);

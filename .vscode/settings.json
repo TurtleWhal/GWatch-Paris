@@ -48,7 +48,8 @@
     "span": "cpp",
     "text_encoding": "cpp",
     "regex": "cpp",
-    "ostream": "cpp"
+    "ostream": "cpp",
+    "chrono": "cpp"
   },
   "C_Cpp.errorSquiggles": "enabled",
   "idf.portWin": "COM4"

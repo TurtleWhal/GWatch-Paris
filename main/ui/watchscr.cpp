@@ -18,8 +18,7 @@ lv_obj_t *secondscale;
 lv_obj_t *hour;
 lv_obj_t *minute;
 
-lv_obj_t *day;
-lv_obj_t *month;
+lv_obj_t *mday;
 lv_obj_t *wday;
 lv_obj_t *date;
 
@@ -145,55 +144,49 @@ lv_obj_t *watchscr_create()
     // lv_obj_set_style_text_color(dateicon, accent, 0);
 
     wday = lv_label_create(scr);
-    lv_obj_align(wday, LV_ALIGN_CENTER, 80, -22);
+    lv_obj_align(wday, LV_ALIGN_CENTER, 80, -20);
     lv_obj_set_style_text_font(wday, &ProductSansBold_16, 0);
     lv_obj_set_style_text_color(wday, accent, 0);
     lv_label_set_text(wday, "WED");
 
-    month = lv_label_create(scr);
-    lv_obj_align(month, LV_ALIGN_CENTER, 80, 0);
-    lv_obj_set_style_text_font(month, &ProductSansBold_20, 0);
-    lv_obj_set_style_text_color(month, lv_color_white(), 0);
-    lv_label_set_text(month, "DEC");
-
-    day = lv_label_create(scr);
-    lv_obj_align(day, LV_ALIGN_CENTER, 80, 22);
-    lv_obj_set_style_text_font(day, &ProductSansBold_16, 0);
-    lv_obj_set_style_text_color(day, lv_color_white(), 0);
-    lv_label_set_text(day, "03");
+    mday = lv_label_create(scr);
+    lv_obj_align(mday, LV_ALIGN_CENTER, 80, 0);
+    lv_obj_set_style_text_font(mday, &ProductSansBold_20, 0);
+    lv_obj_set_style_text_color(mday, lv_color_white(), 0);
+    lv_label_set_text(mday, "DEC");
 
     date = lv_label_create(scr);
-    lv_obj_align(date, LV_ALIGN_CENTER, 80, 0);
-    lv_obj_set_style_text_font(date, &ProductSansBold_16, 0);
+    lv_obj_align(date, LV_ALIGN_CENTER, 80, 20);
+    lv_obj_set_style_text_font(date, &ProductSansRegular_16, 0);
     lv_obj_set_style_text_color(date, accent, 0);
     lv_label_set_text(date, "12/03/25");
 
-    lv_obj_add_flag(wday, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_flag(month, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_flag(day, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_flag(date, LV_OBJ_FLAG_CLICKABLE);
+    // lv_obj_add_flag(wday, LV_OBJ_FLAG_CLICKABLE);
+    // lv_obj_add_flag(month, LV_OBJ_FLAG_CLICKABLE);
+    // lv_obj_add_flag(day, LV_OBJ_FLAG_CLICKABLE);
+    // lv_obj_add_flag(date, LV_OBJ_FLAG_CLICKABLE);
 
-    lv_obj_add_flag(date, LV_OBJ_FLAG_HIDDEN);
+    // lv_obj_add_flag(date, LV_OBJ_FLAG_HIDDEN);
 
-    auto change_date_visibility = [](lv_event_t *e)
-    {
-        printf("Date clicked\n");
-        lv_obj_set_flag(wday, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(wday, LV_OBJ_FLAG_HIDDEN));
-        lv_obj_set_flag(month, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(month, LV_OBJ_FLAG_HIDDEN));
-        lv_obj_set_flag(day, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(day, LV_OBJ_FLAG_HIDDEN));
-        lv_obj_set_flag(date, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(date, LV_OBJ_FLAG_HIDDEN));
-    };
+    // auto change_date_visibility = [](lv_event_t *e)
+    // {
+    //     printf("Date clicked\n");
+    //     lv_obj_set_flag(wday, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(wday, LV_OBJ_FLAG_HIDDEN));
+    //     lv_obj_set_flag(month, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(month, LV_OBJ_FLAG_HIDDEN));
+    //     lv_obj_set_flag(day, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(day, LV_OBJ_FLAG_HIDDEN));
+    //     lv_obj_set_flag(date, LV_OBJ_FLAG_HIDDEN, !lv_obj_has_flag(date, LV_OBJ_FLAG_HIDDEN));
+    // };
 
-    lv_obj_add_event_cb(wday, change_date_visibility, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(month, change_date_visibility, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(day, change_date_visibility, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(date, change_date_visibility, LV_EVENT_CLICKED, NULL);
+    // lv_obj_add_event_cb(wday, change_date_visibility, LV_EVENT_CLICKED, NULL);
+    // lv_obj_add_event_cb(month, change_date_visibility, LV_EVENT_CLICKED, NULL);
+    // lv_obj_add_event_cb(day, change_date_visibility, LV_EVENT_CLICKED, NULL);
+    // lv_obj_add_event_cb(date, change_date_visibility, LV_EVENT_CLICKED, NULL);
 
     /* Battery */
     battery = create_valuearc(scr, accent, FA_BATTERY);
     lv_obj_align(battery, LV_ALIGN_RIGHT_MID, -40, 68);
-    lv_arc_set_range(battery, 2800, 4200);
-    lv_arc_set_value(battery, 3700);
+    lv_arc_set_range(battery, 2200, 3600);
+    lv_arc_set_value(battery, 3200);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%d", 3700);
 
     wifiicon = lv_label_create(scr);
@@ -255,9 +248,8 @@ void watchscr_update()
     if (t.tm_mday != last_day)
     {
         last_day = t.tm_mday;
-        char buf[4];
-        snprintf(buf, sizeof(buf), "%02d", last_day);
-        lv_label_set_text(day, buf);
+
+        lv_label_set_text_fmt(mday, "%s %02d", months[t.tm_mon], t.tm_mday);
 
         lv_label_set_text(wday, wdays[t.tm_wday]);
 
@@ -267,7 +259,6 @@ void watchscr_update()
     if ((t.tm_mon + 1) != last_month)
     {
         last_month = t.tm_mon + 1;
-        lv_label_set_text(month, months[last_month - 1]);
     }
 
     /* Battery (assume sysinfo.bat is still valid) */
