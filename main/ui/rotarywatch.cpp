@@ -32,7 +32,7 @@ static uint8_t last_day = 255, last_month = 255;
 static uint32_t last_battery_check = 0;
 static uint32_t last_battery_mv = 0;
 
-lv_obj_t *watchscr_create()
+lv_obj_t *rotarywatch_create()
 {
     lv_color_t accent = lv_color_hex(0xffaa22);
     lv_color_t gray = lv_color_hex(0x888888);
@@ -198,12 +198,10 @@ lv_obj_t *watchscr_create()
 
     lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
-    lv_screen_load(scr);
-
     return scr;
 }
 
-void watchscr_update()
+void rotarywatch_update()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL); // tv_sec (seconds), tv_usec (microseconds)

@@ -38,6 +38,8 @@ private:
 
     bool goingtosleep = false;
 
+    // bool wakeup_touch = false;
+
 public:
     void init(i2c_master_bus_handle_t bus);
 
@@ -54,6 +56,8 @@ public:
     void set_backlight_gradual(int16_t val, uint32_t ms);
     void set_backlight(int16_t val, bool stopgrad = true);
     uint16_t get_brightness();
+
+    void set_wakeup_touch(bool enable);
 
     void lvgl_done();
 };

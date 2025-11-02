@@ -126,6 +126,8 @@ void lvgl_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
     lv_display_flush_ready(disp);
 }
 
+bool wakeup_touch = false;
+
 /** Touch read callback for LVGL */
 void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch)
 {
@@ -161,10 +163,19 @@ void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch)
 
         last_x = data.x;
         last_y = data.y;
-        touch->state = LV_INDEV_STATE_PR;
+
+        if (!wakeup_touch)
+        {
+            touch->state = LV_INDEV_STATE_PR;
+        }
     }
     else
     {
+        if (touching)
+        {
+            wakeup_touch = false;
+        }
+
         touching = false;
         touch_start_ms = 0;
         reboot_scheduled = false;
@@ -279,4 +290,10 @@ void Display::wake()
     gc9a01_setRotation(3);
 
     vTaskResume(lv_task_handle);
+}
+
+/** Set to ignore the first touch to avoid accidental clicks */
+void Display::set_wakeup_touch(bool enable)
+{
+    wakeup_touch = enable;
 }

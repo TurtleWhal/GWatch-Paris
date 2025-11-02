@@ -25,6 +25,8 @@ I am starting slow with basic functionaliy and adding features as I go, being ca
 * Timer
 * Stopwatch
 * Alarms
+* Other watch faces
+* Brightness control
 
 
 # Hardware

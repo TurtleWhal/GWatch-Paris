@@ -17,6 +17,7 @@
 #include "pins.h"
 
 #include "battery.hpp"
+#include "motor.hpp"
 #include "imu.hpp"
 #include "wifi.hpp"
 #include "display.hpp"
@@ -68,6 +69,8 @@ public:
 
     void sleep();
     void wakeup();
+
+    void vibrate(uint16_t duration_ms, ...);
 };
 
 extern Watch watch;

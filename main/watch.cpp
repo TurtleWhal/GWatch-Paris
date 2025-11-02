@@ -39,6 +39,8 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
 
         goingtosleep = true;
 
+        display.set_wakeup_touch(true);
+
         display.set_backlight_gradual(0, BACKLIGHT_FADE_MS);
         vTaskDelay(pdMS_TO_TICKS(BACKLIGHT_FADE_MS));
 
@@ -156,6 +158,8 @@ void Watch::init()
     pm_init();
     iic_init();
 
+    motor_init();
+
     battery_init();
 
     imu_init(i2c_bus);
@@ -167,6 +171,8 @@ void Watch::init()
     display.set_backlight(100);
 
     wifi.init();
+
+    vibrate(100, 100, 100, 100, 100);
 
     // i2c_scan();
 }

@@ -14,7 +14,7 @@
 #define IMU_INT2 (gpio_num_t)3
 #define BAT_ADC = 1;
 // Two motor pins because ESP32 - S3 gpios can only do 40mA, and vibration motor is 100mA, so motor is connected to both
-#define MOTOR_PIN1 21
-#define MOTOR_PIN2 33
+#define MOTOR_PIN1 (gpio_num_t)21
+#define MOTOR_PIN2 (gpio_num_t)33
 
 #endif // ENV_WAVESHARE

@@ -70,7 +70,8 @@ void Display::ui_init()
     lv_obj_set_style_pad_all(main_screen, 0, 0);
 
     appsscreen = apps_screen_create();
-    watchscr = watchscr_create();
+    // watchscr = analogwatch_create();
+    watchscr = rotarywatch_create();
 
     lv_timer_create([](lv_timer_t *timer)
                     {
@@ -86,7 +87,8 @@ void Display::ui_init()
 void Display::ui_update()
 {
     if (lv_obj_get_scroll_y(main_screen) == lv_obj_get_y(watchscr))
-        watchscr_update();
+        rotarywatch_update();
+    // analogwatch_update();
 
     // if (lv_scr_act() == watchscr)
     //     watchscr_update();

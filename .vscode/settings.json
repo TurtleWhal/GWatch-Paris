@@ -5,7 +5,7 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "idf.port": "/dev/tty.wchusbserial57350173211",
+  "idf.port": "/dev/tty.wchusbserial578E0235041",
   "idf.toolsPath": "/Users/garrett/.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
