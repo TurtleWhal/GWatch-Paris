@@ -11,6 +11,7 @@ LV_FONT_DECLARE(ProductSansBold_24);
 LV_FONT_DECLARE(ProductSansBold_42);
 
 LV_FONT_DECLARE(FontAwesome_14);
+LV_FONT_DECLARE(FontAwesome_22);
 LV_FONT_DECLARE(FontAwesome_28);
 LV_FONT_DECLARE(ProductSansBold_16);
 LV_FONT_DECLARE(ProductSansBold_20);
@@ -23,6 +24,7 @@ LV_FONT_DECLARE(ProductSansRegular_20);
 LV_FONT_DECLARE(ProductSansRegular_24);
 
 #define SET_SYMBOL_14(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_14, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_22(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_22, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_28(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_28, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_old_16(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_16, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_old_20(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_20, LV_PART_MAIN); lv_label_set_text(obj, sym);
@@ -34,16 +36,18 @@ LV_FONT_DECLARE(ProductSansRegular_24);
 #define SET_SYMBOL_egular_20(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansRegular_20, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_egular_24(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansRegular_24, LV_PART_MAIN); lv_label_set_text(obj, sym);
 
-#define FA_STEPS        "" // '', Sizes: [14, 28]
-#define FA_BATTERY      "" // '', Sizes: [14, 28]
-#define FA_CALENDAR     "" // '', Sizes: [14]
-#define FA_LIGHTNING    "" // '', Sizes: [14]
-#define FA_WIFI         "" // '', Sizes: [14, 28]
-#define FA_CONNECTING   "" // '', Sizes: [14]
-#define FA_SETTINGS     "" // '', Sizes: [28]
-#define FA_FLASHLIGHT   "" // '', Sizes: [28]
-#define FA_BLUETOOTH    "" // '', Sizes: [28]
-#define FA_POWEROFF     "" // '', Sizes: [28]
-#define FA_DONOTDISTURB "" // '', Sizes: [28]
-#define FA_ROTATE       "" // '', Sizes: [28]
-#define FA_METRONOME    "" // '', Sizes: [28]
+#define FA_STEPS          "" // '', Sizes: [14, 28, 22]
+#define FA_BATTERY        "" // '', Sizes: [14, 28]
+#define FA_CALENDAR       "" // '', Sizes: [14]
+#define FA_LIGHTNING      "" // '', Sizes: [14]
+#define FA_WIFI           "" // '', Sizes: [14, 28]
+#define FA_CONNECTING     "" // '', Sizes: [14]
+#define FA_SETTINGS       "" // '', Sizes: [28, 22]
+#define FA_FLASHLIGHT     "" // '', Sizes: [28, 22]
+#define FA_BLUETOOTH      "" // '', Sizes: [28]
+#define FA_POWEROFF       "" // '', Sizes: [28]
+#define FA_DONOTDISTURB   "" // '', Sizes: [28]
+#define FA_ROTATE         "" // '', Sizes: [28]
+#define FA_METRONOME      "" // '', Sizes: [28, 22]
+#define FA_BRIGHTNESS     "" // '', Sizes: [28]
+#define FA_BRIGHTNESS_LOW "" // '', Sizes: [28]

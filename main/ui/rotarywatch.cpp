@@ -32,19 +32,20 @@ static uint8_t last_day = 255, last_month = 255;
 static uint32_t last_battery_check = 0;
 static uint32_t last_battery_mv = 0;
 
-lv_obj_t *rotarywatch_create()
+lv_obj_t *rotarywatch_create(lv_obj_t *parent)
 {
     lv_color_t accent = lv_color_hex(0xffaa22);
     lv_color_t gray = lv_color_hex(0x888888);
 
-    lv_obj_t *scr = create_screen();
+    lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
 
     /* Minute scale */
     minutescale = lv_scale_create(scr);
     lv_obj_set_size(minutescale, 164, 164);
     lv_scale_set_mode(minutescale, LV_SCALE_MODE_ROUND_INNER);
-    lv_obj_set_style_bg_opa(minutescale, LV_OPA_0, 0);
+    // lv_obj_set_style_bg_opa(minutescale, LV_OPA_0, 0);
+    lv_obj_set_style_bg_color(minutescale, lv_color_black(), 0);
     lv_obj_set_style_radius(minutescale, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_clip_corner(minutescale, true, 0);
     lv_obj_align(minutescale, LV_ALIGN_LEFT_MID, 30 - (164 / 2), 0);

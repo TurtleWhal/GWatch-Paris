@@ -6,6 +6,8 @@
 
 Watch watch;
 
+uint16_t prevBrightness = 100;
+
 /** Update power management and sleep logic */
 void Watch::pm_update()
 {
@@ -13,7 +15,7 @@ void Watch::pm_update()
     {
         if (!this->sleeping) // if awake
         {
-            if (esp_timer_get_time() / 1000 - this->sleep_time > SLEEP_DELAY)
+            if (esp_timer_get_time() / 1000 - this->sleep_time > SLEEP_DELAY && !this->goingtosleep)
             {
                 sleep();
             }
@@ -40,6 +42,8 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
         goingtosleep = true;
 
         display.set_wakeup_touch(true);
+
+        prevBrightness = display.get_brightness();
 
         display.set_backlight_gradual(0, BACKLIGHT_FADE_MS);
         vTaskDelay(pdMS_TO_TICKS(BACKLIGHT_FADE_MS));
@@ -84,12 +88,17 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         // update display before turning on backlight
         // display.refresh();
 
+        display.set_backlight(prevBrightness);
+
         wakeup_in_progress = false; // Clear guard
+    }
+    else if (goingtosleep)
+    {
+        display.set_backlight(prevBrightness);
     }
 
     this->sleeping = false;
 
-    display.set_backlight(100);
     this->sleep_time = esp_timer_get_time() / 1000;
 }
 

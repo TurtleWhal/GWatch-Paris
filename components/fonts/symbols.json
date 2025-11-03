@@ -1,19 +1,21 @@
 {
     "symbol-bpp": 4,
     "symbols": [
-        {"name": "steps",      "char": "",  "sizes": [14, 28] },
+        {"name": "steps",      "char": "",  "sizes": [14, 28, 22] },
         {"name": "battery",    "char": "",  "sizes": [14, 28] },
         {"name": "calendar",   "char": "",  "sizes": [14] },
         {"name": "lightning",  "char": "",  "sizes": [14] },
         {"name": "wifi",       "char": "",  "sizes": [14, 28] },
         {"name": "connecting", "char": "",  "sizes": [14] },
-        {"name": "settings", "char": "",  "sizes": [28] },
-        {"name": "flashlight", "char": "",  "sizes": [28] },
+        {"name": "settings", "char": "",  "sizes": [28, 22] },
+        {"name": "flashlight", "char": "",  "sizes": [28, 22] },
         {"name": "bluetooth", "char": "",  "sizes": [28] },
         {"name": "poweroff", "char": "",  "sizes": [28] },
         {"name": "donotdisturb", "char": "",  "sizes": [28] },
         {"name": "rotate", "char": "",  "sizes": [28] },
-        {"name": "metronome", "char": "",  "sizes": [28] }
+        {"name": "metronome", "char": "",  "sizes": [28, 22] },
+        {"name": "brightness", "char": "",  "sizes": [28] },
+        {"name": "brightness_low", "char": "",  "sizes": [28] }
     ], 
     "fonts": [
         {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"", "bpp":4},

@@ -53,13 +53,13 @@ void motor_init()
     gpio_set_level(MOTOR_PIN1, 0);
     gpio_set_level(MOTOR_PIN2, 0);
 
-    xTaskCreate(
-        motor_task_handler,
-        "motor_task",
-        2048,
-        nullptr,
-        5,
-        &motor_task);
+    // xTaskCreate(
+    //     motor_task_handler,
+    //     "motor_task",
+    //     2048,
+    //     nullptr,
+    //     5,
+    //     &motor_task);
 }
 
 /** Start a vibration pattern.
@@ -70,6 +70,7 @@ void motor_init()
  */
 void Watch::vibrate(uint16_t duration_ms, ...)
 {
+    return;
     for (int i = 0; i < MAX_CONTROLS; i++)
     {
         control[i] = 0;

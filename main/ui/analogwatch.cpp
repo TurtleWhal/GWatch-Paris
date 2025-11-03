@@ -22,12 +22,12 @@ static lv_point_precise_t hour_hand_points[] = {
     {120, 120},
     {190, 120}};
 
-lv_obj_t *analogwatch_create()
+lv_obj_t *analogwatch_create(lv_obj_t *parent)
 {
     lv_color_t accent = lv_color_hex(0xffaa22);
     lv_color_t gray = lv_color_hex(0x888888);
 
-    lv_obj_t *scr = create_screen();
+    lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
 
     hourhand = lv_line_create(scr);
