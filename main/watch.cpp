@@ -1,4 +1,6 @@
 #include "watch.hpp"
+#include "ui.hpp"
+
 #include "driver/gpio.h"
 
 #define SLEEP_DELAY 15000
@@ -70,6 +72,11 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 {
     static bool wakeup_in_progress = false; // Add this guard
 
+    if (goingtosleep && !this->sleeping)
+    {
+        display.set_backlight(prevBrightness);
+    }
+
     goingtosleep = false;
 
     if (this->sleeping && !wakeup_in_progress)
@@ -83,6 +90,8 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
+        lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
+
         display.wake();
 
         // update display before turning on backlight
@@ -91,10 +100,6 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         display.set_backlight(prevBrightness);
 
         wakeup_in_progress = false; // Clear guard
-    }
-    else if (goingtosleep)
-    {
-        display.set_backlight(prevBrightness);
     }
 
     this->sleeping = false;

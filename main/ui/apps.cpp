@@ -38,9 +38,9 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
 uint16_t flashlight_prev;
 lv_obj_t *flashlight_screen;
 
-lv_obj_t *apps_screen_create()
+lv_obj_t *apps_screen_create(lv_obj_t *parent)
 {
-    lv_obj_t *scr = create_screen();
+    lv_obj_t *scr = create_screen(parent);
     // lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
 
     lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
@@ -73,12 +73,6 @@ lv_obj_t *apps_screen_create()
                                                             watch.display.set_backlight(*(uint16_t *)lv_event_get_user_data(e));
                                                             lv_screen_load(main_screen); }, LV_EVENT_CLICKED, &flashlight_prev); });
 
-    create_app(scr, FA_SETTINGS, "Settings");
-    create_app(scr, FA_METRONOME, "Metronome");
-    create_app(scr, FA_SETTINGS, "Settings");
-    create_app(scr, FA_METRONOME, "Metronome");
-    create_app(scr, FA_SETTINGS, "Settings");
-    create_app(scr, FA_METRONOME, "Metronome");
     create_app(scr, FA_SETTINGS, "Settings");
     create_app(scr, FA_METRONOME, "Metronome");
 

@@ -30,9 +30,9 @@ lv_obj_t *create_setting(lv_obj_t *parent, const char *icon, lv_event_cb_t event
     return app;
 }
 
-lv_obj_t *quicksettings_create()
+lv_obj_t *quicksettings_create(lv_obj_t *parent)
 {
-    lv_obj_t *scr = create_screen();
+    lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
 
     // lv_obj_t *settings = create_setting(scr, FA_SETTINGS);
@@ -43,11 +43,11 @@ lv_obj_t *quicksettings_create()
     lv_obj_t *rotate = create_setting(scr, FA_ROTATE, [](lv_event_t *)
                                       {
                                       watch.display.set_rotation((lv_display_rotation_t)((lv_display_get_rotation(NULL) + 2) % 4));
-                                      lv_obj_scroll_to_view(watchscr, LV_ANIM_ON); });
+                                      lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_ON); });
 
     lv_obj_t *wifi = create_setting(scr, FA_WIFI, [](lv_event_t *)
                                     { watch.wifi.connect();
-                                lv_obj_scroll_to_view(watchscr, LV_ANIM_ON); });
+        lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_ON); });
 
 #define ARC_RADIUS 77
 #define KNOB_THICKNESS 65
