@@ -90,7 +90,7 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
-        lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
+        lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
 
         display.wake();
 

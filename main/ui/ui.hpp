@@ -12,11 +12,14 @@
 #define POLAR(r, t) cosf(DEG2RAD *t) * r, sinf(DEG2RAD *t) * r
 
 extern lv_obj_t *main_screen;
+extern lv_obj_t *hor_layer;
 
 extern lv_obj_t *watchscr;
 
 lv_obj_t *create_screen(lv_obj_t *parent);
 lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol);
+lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_event_cb_t event_cb = nullptr);
+lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_obj_t *screen);
 
 lv_obj_t *rotarywatch_create(lv_obj_t *parent);
 void rotarywatch_update();
@@ -25,5 +28,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent);
 void analogwatch_update();
 
 lv_obj_t *quicksettings_create(lv_obj_t *parent);
-
 lv_obj_t *apps_screen_create(lv_obj_t *parent);
+
+lv_obj_t *stopwatch_create(lv_obj_t *parent);
+lv_obj_t *imu_screen_create(lv_obj_t *parent);

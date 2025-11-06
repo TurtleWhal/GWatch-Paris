@@ -1,7 +1,10 @@
 set(GENERATED_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/BadeenDisplay_84.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_14.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_22.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_28.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_32.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_46.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_24.c
@@ -11,4 +14,5 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_24.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/SirinStencil_64.c
 )

@@ -12,13 +12,20 @@
         {"name": "bluetooth", "char": "",  "sizes": [28] },
         {"name": "poweroff", "char": "",  "sizes": [28] },
         {"name": "donotdisturb", "char": "",  "sizes": [28] },
-        {"name": "rotate", "char": "",  "sizes": [28] },
-        {"name": "metronome", "char": "",  "sizes": [28, 22] },
+        {"name": "rotate", "char": "",  "sizes": [28, 32] },
+        {"name": "metronome", "char": "",  "sizes": [22] },
+        {"name": "stopwatch", "char": "",  "sizes": [22] },
+        {"name": "imu", "char": "",  "sizes": [22] },
         {"name": "brightness", "char": "",  "sizes": [28] },
-        {"name": "brightness_low", "char": "",  "sizes": [28] }
+        {"name": "brightness_low", "char": "",  "sizes": [28] },
+        {"name": "play", "char": "",  "sizes": [32] },
+        {"name": "pause", "char": "",  "sizes": [32] }
     ], 
     "fonts": [
-        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"", "bpp":4},
-        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 42],     "range":"default", "symbols":"", "bpp":4}
+        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"",             "bpp":8},
+        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 42],     "range":"default", "symbols":"",             "bpp":8},
+        {"font":"GoogleSansCode.ttf",      "size": [46],                 "range":"",        "symbols":"1234567890:.", "bpp":8},
+        {"font":"SirinStencil.ttf",        "size": [64],                 "range":"",        "symbols":"1234567890:.", "bpp":8},
+        {"font":"BadeenDisplay.ttf",       "size": [84],                 "range":"",        "symbols":"1234567890:.", "bpp":8}
     ]
 }

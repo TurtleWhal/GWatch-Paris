@@ -52,8 +52,8 @@ void imu_init(i2c_master_bus_handle_t bus)
     ESP_LOGI(TAG, "Device ID: %x", qmi.getChipID());
 
     // Equipped with acceleration sensor, 2G, ORR62.5HZ
-    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_62_5Hz);
-    // qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_125Hz);
+    // qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_62_5Hz);
+    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_125Hz);
 
     // Enable the accelerometer
     qmi.enableAccelerometer();
@@ -104,4 +104,13 @@ void imu_init(i2c_master_bus_handle_t bus)
     gpio_isr_handler_add(IMU_INT1, set_flag, NULL);
 
     xTaskCreate(imu_task, "imu_task", 1024 * 4, NULL, 4, NULL);
+}
+
+Acceleration imu_read()
+{
+    Acceleration a;
+
+    qmi.getAccelerometer(a.x, a.y, a.z);
+
+    return a;
 }

@@ -167,6 +167,16 @@ lv_obj_t *watchface; // actual watch face
 
 void Display::ui_init()
 {
+    lv_theme_t *th = lv_theme_default_init(lv_display_get_default(), /* Use DPI, size, etc. from this display */
+                                                                     //    lv_color_hex(0xffaa22),   /* Primary and secondary palette */
+                                                                     //    lv_color_hex(0x03A9F4), // Blue
+                                           lv_color_hex(0xFF9800),   // Orange
+                                           lv_color_hex(0x888888),
+                                           true, /* Dark theme?  False = light theme. */
+                                           &ProductSansRegular_14);
+
+    lv_display_set_theme(lv_display_get_default(), th); /* Assign theme to display */
+
     main_screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(main_screen, lv_color_black(), 0);
 
@@ -215,15 +225,6 @@ void Display::ui_init()
 
     lv_obj_add_event_cb(hor_layer, scroll_loop_event_cb, LV_EVENT_SCROLL, NULL);
 
-    // lv_obj_add_event_cb(ver_layer, [](lv_event_t *e)
-    //                     {
-    //                         lv_obj_t *scr = (lv_obj_t *)lv_event_get_user_data(e);            // apps screen
-    //                         int32_t scroll = lv_obj_get_scroll_y(lv_event_get_target_obj(e)); // scroll of screens layer
-    //                         int32_t height = lv_obj_get_height(scr);
-
-    //                         // Map scroll to 0-50 for v of hsv (even though value is actually 0-100, we want it to be grayish not white)
-    //                         lv_obj_set_style_bg_color(scr, lv_color_hsv_to_rgb(180, 0, scroll * 20 / height), 0); }, LV_EVENT_SCROLL, quicksettings);
-
     static ScrollEventData scroll_dataT = {quicksettings, LV_DIR_TOP};
     lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataT);
 
@@ -236,28 +237,18 @@ void Display::ui_init()
     lv_obj_set_style_margin_all(watchscr, 0, 0);
     lv_obj_set_style_pad_all(watchscr, 0, 0);
 
-    lv_obj_t *a = apps_screen_create(hor_layer);
-    lv_obj_t *q = quicksettings_create(hor_layer);
+    lv_obj_t *stopwatch = stopwatch_create(hor_layer);
+    lv_obj_t *imuscreen = imu_screen_create(hor_layer);
 
-    static ScrollEventData scroll_dataL = {q, LV_DIR_LEFT};
-    lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataL);
-
-    static ScrollEventData scroll_dataR = {a, LV_DIR_RIGHT};
+    static ScrollEventData scroll_dataR = {stopwatch, LV_DIR_RIGHT};
     lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataR);
+
+    static ScrollEventData scroll_dataL = {imuscreen, LV_DIR_LEFT};
+    lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataL);
 
     lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
 
     lv_obj_t *appsscreen = apps_screen_create(ver_layer);
-
-    // lv_obj_add_event_cb(ver_layer, [](lv_event_t *e)
-    //                     {
-    //     lv_obj_t *scr = (lv_obj_t *)lv_event_get_user_data(e);            // apps screen
-    //     int32_t scroll = lv_obj_get_scroll_y(lv_event_get_target_obj(e)); // scroll of screens layer
-    //     int32_t height = lv_obj_get_height(scr);
-    //     int32_t pos = lv_obj_get_y(scr);
-
-    //     // Map scroll to 0-50 for v of hsv (even though value is actually 0-100, we want it to be grayish not white)
-    //     lv_obj_set_style_bg_color(scr, lv_color_hsv_to_rgb(180, 0, (pos - scroll) * 20 / height), 0); }, LV_EVENT_SCROLL, appsscreen);
 
     static ScrollEventData scroll_dataB = {appsscreen, LV_DIR_BOTTOM};
     lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataB);
@@ -284,6 +275,33 @@ void Display::ui_init()
             lv_obj_set_style_bg_opa(lv_event_get_target_obj(e), LV_OPA_COVER, 0);
             lv_obj_set_scroll_dir(ver_layer, LV_DIR_NONE);
         } }, LV_EVENT_SCROLL, watchscr);
+
+    create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
+
+    create_app(appsscreen, FA_FLASHLIGHT, "Flashlight", [](lv_event_t *)
+               {
+                   static uint16_t flashlight_prev;
+
+                   static lv_obj_t *flashlight_screen = lv_obj_create(NULL);
+                   lv_obj_set_style_bg_color(flashlight_screen, lv_color_white(), 0);
+
+                   flashlight_prev = watch.display.get_brightness();
+
+                   lv_screen_load(flashlight_screen);
+
+                   watch.display.set_backlight(100);
+
+                   lv_obj_add_event_cb(flashlight_screen, [](lv_event_t *e)
+                                       {
+                                           watch.display.set_backlight(*(uint16_t *)lv_event_get_user_data(e));
+                                           lv_screen_load(main_screen);
+                                       },
+                                       LV_EVENT_CLICKED, &flashlight_prev); });
+
+    // create_app(appsscreen, FA_IMU, "Accelerometer", imuscreen); // Accelerometer is too long
+    create_app(appsscreen, FA_IMU, "IMU", imuscreen);
+    create_app(appsscreen, FA_SETTINGS, "Settings");
+    create_app(appsscreen, FA_METRONOME, "Metronome");
 
     lv_timer_create([](lv_timer_t *timer)
                     {

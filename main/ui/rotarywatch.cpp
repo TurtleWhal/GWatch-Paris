@@ -34,8 +34,8 @@ static uint32_t last_battery_mv = 0;
 
 lv_obj_t *rotarywatch_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_color_hex(0xffaa22);
-    lv_color_t gray = lv_color_hex(0x888888);
+    lv_color_t accent = lv_theme_get_color_primary(parent);
+    lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
