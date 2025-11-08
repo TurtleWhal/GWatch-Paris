@@ -8,7 +8,7 @@ void app_press(lv_event_t *e)
 lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_event_cb_t event_cb)
 {
     lv_obj_t *app = lv_button_create(parent);
-    lv_obj_set_size(app, 160, 44);
+    lv_obj_set_size(app, 180, 44);
     lv_obj_set_style_bg_color(app, lv_color_hex(0x222222), 0);
     lv_obj_set_style_radius(app, LV_RADIUS_CIRCLE, 0);
 
@@ -37,10 +37,10 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
     return app;
 }
 
-lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_obj_t *obj)
+lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_obj_t *obj, bool appsonly)
 {
     lv_obj_t *app = lv_button_create(parent);
-    lv_obj_set_size(app, 160, 44);
+    lv_obj_set_size(app, 180, 44);
     lv_obj_set_style_bg_color(app, lv_color_hex(0x222222), 0);
     lv_obj_set_style_radius(app, LV_RADIUS_CIRCLE, 0);
 
@@ -55,8 +55,23 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ob
     lv_label_set_text(label, name);
     lv_obj_set_style_text_font(label, &ProductSansRegular_20, 0);
 
-    lv_obj_add_event_cb(app, [](lv_event_t *e)
-                        { lv_obj_scroll_to_view_recursive((lv_obj_t *)lv_event_get_user_data(e), LV_ANIM_ON); }, LV_EVENT_CLICKED, obj);
+    if (!appsonly)
+    {
+        lv_obj_add_event_cb(app, [](lv_event_t *e)
+                            { lv_obj_scroll_to_view_recursive((lv_obj_t *)lv_event_get_user_data(e), LV_ANIM_ON); }, LV_EVENT_CLICKED, obj);
+    }
+    else
+    {
+        lv_obj_add_event_cb(app, [](lv_event_t *e)
+                            { lv_screen_load_anim((lv_obj_t *)lv_event_get_user_data(e), LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false); }, LV_EVENT_CLICKED, obj);
+
+        lv_obj_add_event_cb(obj, [](lv_event_t *e)
+                            {
+                                if (lv_indev_get_gesture_dir(lv_indev_active()) == LV_DIR_RIGHT)
+                                {
+                                    lv_screen_load_anim(main_screen, LV_SCREEN_LOAD_ANIM_FADE_OUT, 100, 0, false);
+                                } }, LV_EVENT_GESTURE, obj);
+    }
 
     lv_obj_add_event_cb(app, app_press, LV_EVENT_PRESSED, NULL);
 

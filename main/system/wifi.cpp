@@ -175,9 +175,6 @@ void WiFi::init()
                                                         NULL,
                                                         NULL));
 
-    setenv("TZ", "PST8PDT,M3.2.0/2,M11.1.0/2", 1);
-    tzset();
-
     xTaskCreatePinnedToCore(
         [](void *pvParameters)
         {

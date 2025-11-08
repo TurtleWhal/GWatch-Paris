@@ -33,6 +33,14 @@ struct TimeInfo
     int ms;    // 0..999
 };
 
+#define DEFAULT_SLEEP_TIME 15000
+
+struct SystemInfo
+{
+    uint16_t sleeptime;
+    bool dosleep;
+};
+
 #ifdef __cplusplus
 
 /** Main watch class to link and provide access to all subsystems */
@@ -56,7 +64,8 @@ private:
     void pm_update();
 
 public:
-    struct TimeInfo time;
+    // struct TimeInfo time;
+    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
     struct BatteryInfo battery;
     struct WiFi wifi;
     struct IMUInfo imu;

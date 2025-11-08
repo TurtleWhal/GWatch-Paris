@@ -12,5 +12,13 @@ typedef struct
     float z;
 } Acceleration;
 
+typedef struct
+{
+    float x;
+    float y;
+    float z;
+} GyroData;
+
 void imu_init(i2c_master_bus_handle_t bus);
-Acceleration imu_read();
+Acceleration accel_read();
+GyroData gyro_read();

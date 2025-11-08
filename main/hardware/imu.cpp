@@ -9,6 +9,7 @@ const char *TAG = "QMI8658";
 SensorQMI8658 qmi;
 
 volatile bool step_interrupt;
+volatile bool motion_interrupt;
 
 void set_flag(void *arg)
 {
@@ -16,10 +17,16 @@ void set_flag(void *arg)
     ESP_LOGI(TAG, "flag");
 }
 
+void wrist_wake(void *arg)
+{
+    // ESP_LOGI(TAG, "Wrist Wake");
+    motion_interrupt = true;
+}
+
 void pedometer_event()
 {
     uint32_t val = qmi.getPedometerCounter();
-    ESP_LOGI(TAG, "Pedometer: %d", val);
+    // ESP_LOGI(TAG, "Pedometer: %d", val);
 
     watch.imu.steps = val;
 }
@@ -35,7 +42,17 @@ void imu_task(void *pvParamaters)
         // }
         qmi.update();
 
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        // float x, y, z;
+        // qmi.getGyroscope(x, y, z);
+
+        // printf("x: %f, y: %f, z: %f\n", x, y, z);
+
+        // if (abs(x) > 450)
+        // {
+        //     watch.wakeup();
+        // }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -56,7 +73,10 @@ void imu_init(i2c_master_bus_handle_t bus)
     qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_125Hz);
 
     // Enable the accelerometer
+    qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS, SensorQMI8658::GYR_ODR_224_2Hz);
+
     qmi.enableAccelerometer();
+    qmi.enableGyroscope();
 
 #define PED_SENSITIVITY 2
 
@@ -101,16 +121,26 @@ void imu_init(i2c_master_bus_handle_t bus)
     // Set the step counter callback function
     qmi.setPedometerEventCallBack(pedometer_event);
 
-    gpio_isr_handler_add(IMU_INT1, set_flag, NULL);
+    // gpio_isr_handler_add(IMU_INT1, set_flag, NULL);
+    // gpio_isr_handler_add(IMU_INT2, wrist_wake, NULL);
 
     xTaskCreate(imu_task, "imu_task", 1024 * 4, NULL, 4, NULL);
 }
 
-Acceleration imu_read()
+Acceleration accel_read()
 {
     Acceleration a;
 
     qmi.getAccelerometer(a.x, a.y, a.z);
+
+    return a;
+}
+
+GyroData gyro_read()
+{
+    GyroData a;
+
+    qmi.getGyroscope(a.x, a.y, a.z);
 
     return a;
 }

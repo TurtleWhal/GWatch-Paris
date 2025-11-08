@@ -106,7 +106,7 @@ void Display::backlight_update()
  */
 void Display::set_rotation(lv_display_rotation_t rotation)
 {
-    lv_display_set_rotation(disp, rotation); // lvgl rotation is counter-clockwise
+    lv_display_set_rotation(NULL, rotation); // lvgl rotation is counter-clockwise
     gc9a01_setRotation((4 - lv_display_get_rotation(disp)) % 4);
 }
 
@@ -287,7 +287,7 @@ void Display::wake()
     /** Reinitalize the display */
     gc9a01_begin();
     gc9a01_setSwapBytes(true);
-    gc9a01_setRotation(3);
+    // gc9a01_setRotation(3);
 
     vTaskResume(lv_task_handle);
 }

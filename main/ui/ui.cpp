@@ -15,6 +15,8 @@ lv_obj_t *create_screen(lv_obj_t *parent)
     lv_obj_set_style_margin_all(scr, 0, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
 
+    // lv_obj_set_style_clip_corner(scr, true, 0); // breaks everything somehow?
+
     return scr;
 }
 
@@ -168,9 +170,8 @@ lv_obj_t *watchface; // actual watch face
 void Display::ui_init()
 {
     lv_theme_t *th = lv_theme_default_init(lv_display_get_default(), /* Use DPI, size, etc. from this display */
-                                                                     //    lv_color_hex(0xffaa22),   /* Primary and secondary palette */
-                                                                     //    lv_color_hex(0x03A9F4), // Blue
-                                           lv_color_hex(0xFF9800),   // Orange
+                                           lv_color_hex(0x03A9F4),   // Blue
+                                                                     //    lv_color_hex(0xFF9800),   // Orange
                                            lv_color_hex(0x888888),
                                            true, /* Dark theme?  False = light theme. */
                                            &ProductSansRegular_14);
@@ -185,8 +186,9 @@ void Display::ui_init()
 
     lv_obj_set_style_border_width(main_screen, 0, 0);
 
-    watchface = rotarywatch_create(main_screen);
+    // watchface = rotarywatch_create(main_screen);
     // watchface = analogwatch_create(main_screen);
+    watchface = timescreen_create(main_screen);
 
     ver_layer = lv_obj_create(main_screen);
     lv_obj_set_size(ver_layer, 240, 240);
@@ -287,20 +289,23 @@ void Display::ui_init()
 
                    flashlight_prev = watch.display.get_brightness();
 
-                   lv_screen_load(flashlight_screen);
+                   lv_screen_load_anim(flashlight_screen, LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
 
                    watch.display.set_backlight(100);
 
                    lv_obj_add_event_cb(flashlight_screen, [](lv_event_t *e)
                                        {
                                            watch.display.set_backlight(*(uint16_t *)lv_event_get_user_data(e));
-                                           lv_screen_load(main_screen);
+                                           lv_screen_load_anim(main_screen, LV_SCREEN_LOAD_ANIM_FADE_OUT, 100, 0, false);
                                        },
                                        LV_EVENT_CLICKED, &flashlight_prev); });
 
     // create_app(appsscreen, FA_IMU, "Accelerometer", imuscreen); // Accelerometer is too long
     create_app(appsscreen, FA_IMU, "IMU", imuscreen);
     create_app(appsscreen, FA_SETTINGS, "Settings");
+
+    lv_obj_t *debug = debugscreen_create();
+    create_app(appsscreen, FA_BUG, "Debug", debug, true);
     create_app(appsscreen, FA_METRONOME, "Metronome");
 
     lv_timer_create([](lv_timer_t *timer)
@@ -319,8 +324,9 @@ void Display::ui_update()
     if (lv_obj_get_scroll_y(ver_layer) > lv_obj_get_y(hor_layer) - 240 && lv_obj_get_scroll_y(ver_layer) < lv_obj_get_y(hor_layer) + 240)   // if screen is displayed at all
         if (lv_obj_get_scroll_x(hor_layer) > lv_obj_get_x(watchscr) - 240 && lv_obj_get_scroll_x(hor_layer) < lv_obj_get_x(watchscr) + 240) // if screen is displayed at all
         {
-            rotarywatch_update();
+            // rotarywatch_update();
             // analogwatch_update();
+            timescreen_update();
             // printf("update\n");
         }
 }

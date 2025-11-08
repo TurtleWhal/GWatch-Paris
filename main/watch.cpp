@@ -1,9 +1,9 @@
 #include "watch.hpp"
 #include "ui.hpp"
 
+#include <sys/time.h>
 #include "driver/gpio.h"
 
-#define SLEEP_DELAY 15000
 #define BACKLIGHT_FADE_MS 2000
 
 Watch watch;
@@ -17,14 +17,14 @@ void Watch::pm_update()
     {
         if (!this->sleeping) // if awake
         {
-            if (esp_timer_get_time() / 1000 - this->sleep_time > SLEEP_DELAY && !this->goingtosleep)
+            if (this->system.dosleep && esp_timer_get_time() / 1000 - this->sleep_time > watch.system.sleeptime && !this->goingtosleep)
             {
                 sleep();
             }
         }
         else
         {
-            if (display.is_touching())
+            if (display.is_touching() || abs(gyro_read().x) > 450)
             {
                 wakeup();
             }
@@ -93,6 +93,8 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
 
         display.wake();
+
+        display.set_rotation(lv_display_get_rotation(NULL));
 
         // update display before turning on backlight
         // display.refresh();
@@ -168,6 +170,9 @@ void Watch::i2c_scan()
 void Watch::init()
 {
     gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
+
+    setenv("TZ", "PST8PDT,M3.2.0/2,M11.1.0/2", 1);
+    tzset();
 
     pm_init();
     iic_init();
