@@ -187,8 +187,8 @@ void Display::ui_init()
     lv_obj_set_style_border_width(main_screen, 0, 0);
 
     // watchface = rotarywatch_create(main_screen);
-    // watchface = analogwatch_create(main_screen);
-    watchface = timescreen_create(main_screen);
+    watchface = analogwatch_create(main_screen);
+    // watchface = timescreen_create(main_screen);
 
     ver_layer = lv_obj_create(main_screen);
     lv_obj_set_size(ver_layer, 240, 240);
@@ -325,8 +325,7 @@ void Display::ui_update()
         if (lv_obj_get_scroll_x(hor_layer) > lv_obj_get_x(watchscr) - 240 && lv_obj_get_scroll_x(hor_layer) < lv_obj_get_x(watchscr) + 240) // if screen is displayed at all
         {
             // rotarywatch_update();
-            // analogwatch_update();
-            timescreen_update();
-            // printf("update\n");
+            analogwatch_update();
+            // timescreen_update();
         }
 }
