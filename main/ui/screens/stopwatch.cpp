@@ -35,7 +35,7 @@ void stopwatch_update(lv_timer_t *timer)
     lv_obj_t *scr = (lv_obj_t *)lv_timer_get_user_data(timer);
     lv_obj_t *parent = lv_obj_get_parent(scr);
 
-    if (lv_obj_get_scroll_x(parent) == lv_obj_get_x(scr))
+    if (lv_obj_get_scroll_x(parent) > lv_obj_get_x(scr) - 240 && lv_obj_get_scroll_x(parent) < lv_obj_get_x(scr) + 240)
     {
         if (stopwatchrunning)
         {

@@ -22,7 +22,6 @@ private:
     void init_graphics();
 
     void ui_init();
-    void ui_update();
 
     uint16_t bgval;
     TaskHandle_t backlight_handle = NULL;
@@ -42,6 +41,7 @@ private:
 
 public:
     void init(i2c_master_bus_handle_t bus);
+    void init_memory();
 
     void sleep();
     void wake();

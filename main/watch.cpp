@@ -24,9 +24,14 @@ void Watch::pm_update()
         }
         else
         {
-            if (display.is_touching() || abs(gyro_read().x) > 450)
+            if (display.is_touching())
             {
                 wakeup();
+            }
+            else if (abs(gyro_read().x) > 450)
+            {
+                wakeup();
+                this->sleep_time = (esp_timer_get_time() / 1000) - 10000;
             }
         }
 
@@ -90,7 +95,8 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
-        lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
+        if (lv_screen_active() == main_screen)
+            lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
 
         display.wake();
 
@@ -169,6 +175,8 @@ void Watch::i2c_scan()
 /** Initialise all watch subsystems */
 void Watch::init()
 {
+    display.init_memory();
+
     gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
 
     setenv("TZ", "PST8PDT,M3.2.0/2,M11.1.0/2", 1);
@@ -185,7 +193,7 @@ void Watch::init()
 
     display.init(i2c_bus);
 
-    display.refresh();
+    // display.refresh();
 
     display.set_backlight(100);
 

@@ -119,7 +119,8 @@ void lvgl_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 
 #ifdef ENV_WAVESHARE
     gc9a01_startWrite();
-    gc9a01_pushImageDMA(area->x1, area->y1, w, h, (uint16_t *)px_map);
+    // gc9a01_pushImageDMA(area->x1, area->y1, w, h, (uint16_t *)px_map);
+    gc9a01_pushImageDMA_fullscreen((uint16_t *)px_map);
     gc9a01_endWrite();
 #endif // ENV_WAVESHARE
 

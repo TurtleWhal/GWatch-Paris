@@ -13,6 +13,7 @@
 
 extern lv_obj_t *main_screen;
 extern lv_obj_t *hor_layer;
+extern lv_obj_t *ver_layer;
 
 extern lv_obj_t *watchscr;
 
@@ -22,14 +23,16 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
 lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_obj_t *screen, bool appsonly = false);
 lv_obj_t *create_setting(lv_obj_t *parent, const char *name, bool state, lv_event_cb_t event_cb);
 
-lv_obj_t *rotarywatch_create(lv_obj_t *parent);
-void rotarywatch_update();
+// lv_obj_t *rotarywatch_create(lv_obj_t *parent);
+// void rotarywatch_update();
 
 lv_obj_t *analogwatch_create(lv_obj_t *parent);
 void analogwatch_update();
 
-lv_obj_t *timescreen_create(lv_obj_t *parent);
-void timescreen_update();
+// lv_obj_t *timescreen_create(lv_obj_t *parent);
+// void timescreen_update();
+
+lv_obj_t *watchface_create(lv_obj_t *parent);
 
 lv_obj_t *quicksettings_create(lv_obj_t *parent);
 lv_obj_t *apps_screen_create(lv_obj_t *parent);

@@ -30,6 +30,18 @@ void lv_task(void *args)
     }
 }
 
+size_t buf_size = LCD_WIDTH * LCD_HEIGHT * sizeof(lv_color16_t); // 240 * 240 * 2 = 115,200 Bytes
+void *buf1;
+void *buf2;
+
+void Display::init_memory()
+{
+    // printf("Total DMA Memoory: %d\n", heap_caps_get_free_size(MALLOC_CAP_DMA));
+    // printf("Largest Continuous Chunk: %d\n", heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
+    buf1 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    buf2 = NULL;
+}
+
 /** Initialise LVGL */
 void Display::init_graphics()
 {
@@ -54,20 +66,21 @@ void Display::init_graphics()
 
     // ESP_LOGI("graphics", "Available DMA Memory Before: %dkB", heap_caps_get_largest_free_block(MALLOC_CAP_DMA) / 1000);
 
-    // Allocate draw buffers
-    size_t buf_size = LCD_WIDTH * (240 / 1.5) * sizeof(lv_color_t); // 240 * 240 * 2 = 115,200 Bytes
-    // size_t buf_size = LCD_WIDTH * (240) * sizeof(lv_color_t); // 240 * 240 * 2 = 115,200 Bytes
-    // void *buf1 = heap_caps_aligned_alloc(8, buf_size, MALLOC_CAP_DMA);
-    void *buf1 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
-    void *buf2 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
-    // void *buf2 = NULL;
+    // // Allocate draw buffers
+    // size_t buf_size = LCD_WIDTH * (240 / 1.5) * sizeof(lv_color_t); // 240 * 240 * 2 = 115,200 Bytes
+    // // size_t buf_size = LCD_WIDTH * (240) * sizeof(lv_color_t); // 240 * 240 * 2 = 115,200 Bytes
+    // // void *buf1 = heap_caps_aligned_alloc(8, buf_size, MALLOC_CAP_DMA);
+    // void *buf1 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
+    // void *buf2 = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
+    // // void *buf2 = NULL;
 
     // ESP_LOGI("graphics", "Available DMA Memory After: %dkB", heap_caps_get_largest_free_block(MALLOC_CAP_DMA) / 1000);
 
     if (buf1)
     {
         // lv_display_set_buffers(disp, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_DIRECT);
-        lv_display_set_buffers(disp, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+        // lv_display_set_buffers(disp, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+        lv_display_set_buffers(disp, buf1, buf2, buf_size, LV_DISPLAY_RENDER_MODE_DIRECT);
     }
     else
     {
@@ -89,8 +102,6 @@ void Display::init_graphics()
 /** Force update and redraw graphics */
 void Display::refresh()
 {
-    ui_update();
-
     // for now no need to redraw entire screen
     // lv_obj_invalidate(lv_screen_active()); // Mark screen dirty
     lv_task_handler(); // Process drawing immediately

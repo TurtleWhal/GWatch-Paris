@@ -5,6 +5,11 @@ void app_press(lv_event_t *e)
     watch.vibrate(80);
 }
 
+void scroll_reset(lv_event_t *e)
+{
+    lv_obj_scroll_to_y(lv_obj_get_parent(lv_event_get_target_obj(e)), 0, LV_ANIM_OFF);
+}
+
 lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_event_cb_t event_cb)
 {
     lv_obj_t *app = lv_button_create(parent);
@@ -26,6 +31,7 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
     if (event_cb != nullptr)
     {
         lv_obj_add_event_cb(app, event_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(app, scroll_reset, LV_EVENT_CLICKED, NULL);
         lv_obj_add_event_cb(app, app_press, LV_EVENT_PRESSED, NULL);
     }
     else

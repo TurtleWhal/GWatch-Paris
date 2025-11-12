@@ -154,6 +154,9 @@ void WiFi::timesync_task()
 /** Initialize WiFi */
 void WiFi::init()
 {
+    ESP_LOGI("MEM", "Free heap before WiFi: %d", esp_get_free_heap_size());
+    ESP_LOGI("MEM", "Free PSRAM before WiFi: %d", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -174,6 +177,9 @@ void WiFi::init()
                                                         &wifi_event_handler,
                                                         NULL,
                                                         NULL));
+
+    ESP_LOGI("MEM", "Free heap after WiFi: %d", esp_get_free_heap_size());
+    ESP_LOGI("MEM", "Free PSRAM after WiFi: %d", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
     xTaskCreatePinnedToCore(
         [](void *pvParameters)

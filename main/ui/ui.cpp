@@ -186,9 +186,7 @@ void Display::ui_init()
 
     lv_obj_set_style_border_width(main_screen, 0, 0);
 
-    // watchface = rotarywatch_create(main_screen);
-    watchface = analogwatch_create(main_screen);
-    // watchface = timescreen_create(main_screen);
+    watchface = watchface_create(main_screen);
 
     ver_layer = lv_obj_create(main_screen);
     lv_obj_set_size(ver_layer, 240, 240);
@@ -308,24 +306,7 @@ void Display::ui_init()
     create_app(appsscreen, FA_BUG, "Debug", debug, true);
     create_app(appsscreen, FA_METRONOME, "Metronome");
 
-    lv_timer_create([](lv_timer_t *timer)
-                    {
-        auto *obj = static_cast<Display *>(lv_timer_get_user_data(timer));
-        obj->ui_update(); },
-                    33, this);
-
     lv_screen_load(main_screen);
 
     lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
-}
-
-void Display::ui_update()
-{
-    if (lv_obj_get_scroll_y(ver_layer) > lv_obj_get_y(hor_layer) - 240 && lv_obj_get_scroll_y(ver_layer) < lv_obj_get_y(hor_layer) + 240)   // if screen is displayed at all
-        if (lv_obj_get_scroll_x(hor_layer) > lv_obj_get_x(watchscr) - 240 && lv_obj_get_scroll_x(hor_layer) < lv_obj_get_x(watchscr) + 240) // if screen is displayed at all
-        {
-            // rotarywatch_update();
-            analogwatch_update();
-            // timescreen_update();
-        }
 }

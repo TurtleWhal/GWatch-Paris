@@ -34,10 +34,6 @@ static lv_point_precise_t minute_hand_points[] = {
     {120, 120},
     {220, 120}};
 
-// Outline points for hollow hour hand (forms a thick line outline with rounded ends)
-#define HOUR_HAND_SEGMENTS 7 // Number of segments for each rounded end
-static lv_point_precise_t hour_hand_outline[HOUR_HAND_SEGMENTS * 2 + 3];
-
 lv_obj_t *analogwatch_create(lv_obj_t *parent)
 {
     lv_color_t accent = lv_theme_get_color_primary(parent);
@@ -83,6 +79,8 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(battery, &ProductSansRegular_16, 0);
     lv_label_set_text_fmt(battery, "%1.3fV", 1.234);
 
+    // lv_obj_set_style_transform_rotation(battery, 150, 0); // 15˚
+
     lv_obj_t *stepicon = lv_label_create(infobox);
     SET_SYMBOL_16(stepicon, FA_STEPS);
 
@@ -90,41 +88,18 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(steps, &ProductSansRegular_16, 0);
     lv_label_set_text_fmt(steps, "%d", 5678);
 
-    // lv_obj_t *scale = lv_scale_create(scr);
-    // lv_obj_set_size(scale, 240, 240);
-    // lv_scale_set_mode(scale, LV_SCALE_MODE_ROUND_INNER);
-    // lv_obj_set_style_bg_opa(scale, LV_OPA_0, 0);
-    // lv_obj_set_style_radius(scale, LV_RADIUS_CIRCLE, 0);
-    // lv_obj_set_style_clip_corner(scale, true, 0);
-    // lv_obj_align(scale, LV_ALIGN_CENTER, 0, 0);
-    // lv_obj_set_style_arc_width(scale, 0, 0);
+    hourhand = lv_obj_create(scr);
+    lv_obj_set_size(hourhand, 65 + 18, 18);
+    lv_obj_align(hourhand, LV_ALIGN_CENTER, 65 / 2, 0);
+    lv_obj_set_style_transform_pivot_x(hourhand, 9, 0);
+    lv_obj_set_style_transform_pivot_y(hourhand, 9, 0);
 
-    // lv_scale_set_angle_range(scale, 360);
-    // lv_scale_set_rotation(scale, 0);
-    // lv_scale_set_range(scale, 0, 60);
-    // lv_scale_set_label_show(scale, false);
-    // lv_scale_set_total_tick_count(scale, 60);
-    // lv_scale_set_major_tick_every(scale, 5);
-    // // lv_scale_set_text_src(scale, minute_ticks);
+    lv_obj_set_style_radius(hourhand, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(hourhand, 0, 0);
+    lv_obj_set_style_border_width(hourhand, 2, 0);
+    lv_obj_set_style_border_color(hourhand, accent, 0);
 
-    // lv_obj_set_style_text_font(scale, &ProductSansRegular_14, 0);
-    // lv_obj_set_style_text_color(scale, gray, 0);
-
-    // lv_obj_set_style_line_color(scale, gray, LV_PART_INDICATOR);
-    // lv_obj_set_style_length(scale, 8, LV_PART_INDICATOR);
-    // lv_obj_set_style_line_width(scale, 2, LV_PART_INDICATOR);
-
-    // lv_obj_set_style_line_color(scale, gray, LV_PART_ITEMS);
-    // lv_obj_set_style_length(scale, 4, LV_PART_ITEMS);
-    // lv_obj_set_style_line_width(scale, 2, LV_PART_ITEMS);
-
-    // Hour hand as hollow outline
-    hourhand = lv_line_create(scr);
-    lv_line_set_points(hourhand, hour_hand_outline, HOUR_HAND_SEGMENTS * 2 + 3);
-    lv_obj_set_size(hourhand, 240, 240);
-    lv_obj_set_style_line_color(hourhand, accent, 0);
-    lv_obj_set_style_line_width(hourhand, 2, 0);
-    lv_obj_set_style_line_rounded(hourhand, true, 0);
+    lv_obj_set_scroll_dir(hourhand, LV_DIR_NONE);
 
     // Minute hand
     minutehand = lv_line_create(scr);
@@ -186,68 +161,16 @@ void analogwatch_update()
         minute_hand_points[1].y = 120.5f + sinf(mrad) * 95.0;
         lv_line_set_points(minutehand, minute_hand_points, 2);
 
-        // Calculate hour hand outline (thick line outline with rounded ends)
-        float thickness = 9.0f; // Half of 18px width
-        float length = 65.0f;
-
-        // Perpendicular angle for thickness
-        float perp_angle = hrad + M_PI / 2.0f;
-        float perp_x = cosf(perp_angle) * thickness;
-        float perp_y = sinf(perp_angle) * thickness;
-
-        // End point of the line
-        float end_x = 120.5f + cosf(hrad) * length;
-        float end_y = 120.5f + sinf(hrad) * length;
-
-        int idx = 0;
-
-        // Start with bottom edge going toward the end
-        hour_hand_outline[idx].x = 120.5f - perp_x;
-        hour_hand_outline[idx].y = 120.5f - perp_y;
-        idx++;
-
-        hour_hand_outline[idx].x = end_x - perp_x;
-        hour_hand_outline[idx].y = end_y - perp_y;
-        idx++;
-
-        // Rounded end cap at the tip (semicircle from bottom to top around the end)
-        for (int i = 1; i < HOUR_HAND_SEGMENTS; i++)
-        {
-            float cap_angle = perp_angle + M_PI + (M_PI * i / HOUR_HAND_SEGMENTS);
-            hour_hand_outline[idx].x = end_x + cosf(cap_angle) * thickness;
-            hour_hand_outline[idx].y = end_y + sinf(cap_angle) * thickness;
-            idx++;
-        }
-
-        // Top edge going back to start
-        hour_hand_outline[idx].x = end_x + perp_x;
-        hour_hand_outline[idx].y = end_y + perp_y;
-        idx++;
-
-        hour_hand_outline[idx].x = 120.5f + perp_x;
-        hour_hand_outline[idx].y = 120.5f + perp_y;
-        idx++;
-
-        // Rounded end cap at the center (semicircle from top to bottom around the center)
-        for (int i = 1; i < HOUR_HAND_SEGMENTS; i++)
-        {
-            float cap_angle = perp_angle + (M_PI * i / HOUR_HAND_SEGMENTS);
-            hour_hand_outline[idx].x = 120.5f + cosf(cap_angle) * thickness;
-            hour_hand_outline[idx].y = 120.5f + sinf(cap_angle) * thickness;
-            idx++;
-        }
-
-        // Close the loop by returning to the starting point
-        hour_hand_outline[idx].x = 120.5f - perp_x;
-        hour_hand_outline[idx].y = 120.5f - perp_y;
-        idx++;
-
-        lv_line_set_points(hourhand, hour_hand_outline, idx);
-
         // Update label (digital time)
         char buf[16];
         snprintf(buf, sizeof(buf), "%d:%02d", t.tm_hour > 12 ? t.tm_hour - 12 : t.tm_hour, t.tm_min);
         lv_label_set_text(time_label, buf);
+
+        if (t.tm_hour != last_hour)
+        {
+            last_hour = t.tm_hour;
+            lv_obj_set_style_transform_rotation(hourhand, (270 + hangle) * 10, 0);
+        }
     }
 
     // Update once per day
