@@ -20,6 +20,7 @@
 #include "motor.hpp"
 #include "imu.hpp"
 #include "wifi.hpp"
+#include "bluetooth.hpp"
 #include "display.hpp"
 
 struct TimeInfo
@@ -65,7 +66,8 @@ private:
 
 public:
     // struct TimeInfo time;
-    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
+    // struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
+    struct SystemInfo system = {DEFAULT_SLEEP_TIME, false};
     struct BatteryInfo battery;
     struct WiFi wifi;
     struct IMUInfo imu;

@@ -60,4 +60,5 @@ idf_component_register(
         esp_adc
         esp_http_client
         json
+        bt
 )

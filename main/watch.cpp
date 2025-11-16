@@ -197,7 +197,9 @@ void Watch::init()
 
     display.set_backlight(100);
 
-    wifi.init();
+    // wifi.init();
+
+    ble_init();
 
     haptic_play(false, 80, 80, 80, 80, 80, 0); // vibrate 3 times
 
