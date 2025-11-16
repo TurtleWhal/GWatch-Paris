@@ -66,8 +66,7 @@ private:
 
 public:
     // struct TimeInfo time;
-    // struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
-    struct SystemInfo system = {DEFAULT_SLEEP_TIME, false};
+    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
     struct BatteryInfo battery;
     struct WiFi wifi;
     struct IMUInfo imu;
