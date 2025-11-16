@@ -38,6 +38,9 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent);
 lv_obj_t *apps_screen_create(lv_obj_t *parent);
 
 lv_obj_t *stopwatch_create(lv_obj_t *parent);
+lv_obj_t *timerscr_create(lv_obj_t *parent);
 lv_obj_t *imu_screen_create(lv_obj_t *parent);
+lv_obj_t *calculator_create(lv_obj_t *parent);
+lv_obj_t *dice_create(lv_obj_t *parent);
 
 lv_obj_t *debugscreen_create();

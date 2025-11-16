@@ -17,16 +17,18 @@
         {"name": "stopwatch", "char": "",  "sizes": [22] },
         {"name": "imu", "char": "",  "sizes": [22] },
         {"name": "bug", "char": "",  "sizes": [22] },
+        {"name": "calculator", "char": "",  "sizes": [22] },
+        {"name": "dice", "char": "",  "sizes": [22] },
         {"name": "brightness", "char": "",  "sizes": [28] },
         {"name": "brightness_low", "char": "",  "sizes": [28] },
         {"name": "play", "char": "",  "sizes": [32] },
         {"name": "pause", "char": "",  "sizes": [32] }
     ], 
     "fonts": [
-        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"",                "bpp":8},
-        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 42],     "range":"default", "symbols":"",                "bpp":8},
-        {"font":"GoogleSansCode.ttf",      "size": [46],                 "range":"",        "symbols":"1234567890:.",    "bpp":8},
-        {"font":"SirinStencil.ttf",        "size": [92, 32],             "range":"",        "symbols":"1234567890:.APM",    "bpp":8},
-        {"font":"BadeenDisplay.ttf",       "size": [84],                 "range":"",        "symbols":"1234567890:.",    "bpp":8}
+        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"×÷",                        "bpp":8},
+        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 42],     "range":"default", "symbols":"",                          "bpp":8},
+        {"font":"GoogleSansCode.ttf",      "size": [46, 28],             "range":"",        "symbols":"1234567890:.+-×÷eErNanIif", "bpp":8},
+        {"font":"SirinStencil.ttf",        "size": [92, 32],             "range":"",        "symbols":"1234567890:.APM",           "bpp":8},
+        {"font":"BadeenDisplay.ttf",       "size": [84],                 "range":"",        "symbols":"1234567890:.",              "bpp":8}
     ]
 }

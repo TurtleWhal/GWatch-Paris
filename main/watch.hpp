@@ -74,12 +74,12 @@ public:
 
     bool sleeping;
 
+    bool donotdisturb = false;
+
     void init();
 
     void sleep();
     void wakeup();
-
-    void vibrate(uint16_t duration_ms, ...);
 };
 
 extern Watch watch;

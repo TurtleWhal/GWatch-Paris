@@ -185,7 +185,7 @@ void Watch::init()
     pm_init();
     iic_init();
 
-    motor_init();
+    haptic_init();
 
     battery_init();
 
@@ -199,7 +199,7 @@ void Watch::init()
 
     wifi.init();
 
-    vibrate(100, 100, 100, 100, 100);
+    haptic_play(false, 80, 80, 80, 80, 80, 0); // vibrate 3 times
 
     // i2c_scan();
 }

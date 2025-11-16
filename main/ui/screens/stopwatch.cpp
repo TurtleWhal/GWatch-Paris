@@ -111,6 +111,12 @@ lv_obj_t *stopwatch_create(lv_obj_t *parent)
                                 update_stopwatch_label(); 
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, playicon);
 
+    lv_obj_add_event_cb(btn, [](lv_event_t *e)
+                        { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);
+
+    lv_obj_add_event_cb(reset, [](lv_event_t *e)
+                        { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);
+
     lv_timer_create(stopwatch_update, 33, scr); // 30 times per second (not an even number so that milliseconds do not alternate)
 
     return scr;

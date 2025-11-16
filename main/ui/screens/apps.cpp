@@ -2,7 +2,7 @@
 
 void app_press(lv_event_t *e)
 {
-    watch.vibrate(80);
+    haptic_play(false, 80, 0);
 }
 
 void scroll_reset(lv_event_t *e)
@@ -32,7 +32,7 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
     {
         lv_obj_add_event_cb(app, event_cb, LV_EVENT_CLICKED, NULL);
         lv_obj_add_event_cb(app, scroll_reset, LV_EVENT_CLICKED, NULL);
-        lv_obj_add_event_cb(app, app_press, LV_EVENT_PRESSED, NULL);
+        // lv_obj_add_event_cb(app, app_press, LV_EVENT_PRESSED, NULL);
     }
     else
     {
@@ -65,6 +65,7 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ob
     {
         lv_obj_add_event_cb(app, [](lv_event_t *e)
                             { lv_obj_scroll_to_view_recursive((lv_obj_t *)lv_event_get_user_data(e), LV_ANIM_ON); }, LV_EVENT_CLICKED, obj);
+        lv_obj_add_event_cb(app, scroll_reset, LV_EVENT_CLICKED, NULL);
     }
     else
     {
@@ -79,7 +80,7 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ob
                                 } }, LV_EVENT_GESTURE, obj);
     }
 
-    lv_obj_add_event_cb(app, app_press, LV_EVENT_PRESSED, NULL);
+    // lv_obj_add_event_cb(app, app_press, LV_EVENT_PRESSED, NULL);
 
     return app;
 }
@@ -110,9 +111,4 @@ lv_obj_t *apps_screen_create(lv_obj_t *parent)
     // lv_obj_set_size(spacer, 0, 20);
 
     return scr;
-}
-
-void apps_screen_update()
-{
-    // Update logic for apps screen goes here
 }

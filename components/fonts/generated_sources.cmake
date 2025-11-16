@@ -5,6 +5,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_22.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_32.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_46.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_20.c

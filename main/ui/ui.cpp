@@ -238,12 +238,14 @@ void Display::ui_init()
     lv_obj_set_style_pad_all(watchscr, 0, 0);
 
     lv_obj_t *stopwatch = stopwatch_create(hor_layer);
+    lv_obj_t *timer = timerscr_create(hor_layer);
     lv_obj_t *imuscreen = imu_screen_create(hor_layer);
+    lv_obj_t *calcscreen = calculator_create(hor_layer);
 
     static ScrollEventData scroll_dataR = {stopwatch, LV_DIR_RIGHT};
     lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataR);
 
-    static ScrollEventData scroll_dataL = {imuscreen, LV_DIR_LEFT};
+    static ScrollEventData scroll_dataL = {calcscreen, LV_DIR_LEFT};
     lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataL);
 
     lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
@@ -277,6 +279,7 @@ void Display::ui_init()
         } }, LV_EVENT_SCROLL, watchscr);
 
     create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
+    create_app(appsscreen, FA_CALCULATOR, "Calculator", calcscreen);
 
     create_app(appsscreen, FA_FLASHLIGHT, "Flashlight", [](lv_event_t *)
                {
@@ -300,10 +303,14 @@ void Display::ui_init()
 
     // create_app(appsscreen, FA_IMU, "Accelerometer", imuscreen); // Accelerometer is too long
     create_app(appsscreen, FA_IMU, "IMU", imuscreen);
-    create_app(appsscreen, FA_SETTINGS, "Settings");
+
+    create_app(appsscreen, FA_DICE, "Dice", dice_create(NULL), true);
 
     lv_obj_t *debug = debugscreen_create();
     create_app(appsscreen, FA_BUG, "Debug", debug, true);
+
+    create_app(appsscreen, FA_SETTINGS, "Settings");
+
     create_app(appsscreen, FA_METRONOME, "Metronome");
 
     lv_screen_load(main_screen);

@@ -79,8 +79,6 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(battery, &ProductSansRegular_16, 0);
     lv_label_set_text_fmt(battery, "%1.3fV", 1.234);
 
-    // lv_obj_set_style_transform_rotation(battery, 150, 0); // 15˚
-
     lv_obj_t *stepicon = lv_label_create(infobox);
     SET_SYMBOL_16(stepicon, FA_STEPS);
 
@@ -166,10 +164,11 @@ void analogwatch_update()
         snprintf(buf, sizeof(buf), "%d:%02d", t.tm_hour > 12 ? t.tm_hour - 12 : t.tm_hour, t.tm_min);
         lv_label_set_text(time_label, buf);
 
+        lv_obj_set_style_transform_rotation(hourhand, (270 + hangle) * 10, 0);
+
         if (t.tm_hour != last_hour)
         {
             last_hour = t.tm_hour;
-            lv_obj_set_style_transform_rotation(hourhand, (270 + hangle) * 10, 0);
         }
     }
 

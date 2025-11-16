@@ -2,7 +2,7 @@
 
 void press(lv_event_t *e)
 {
-    watch.vibrate(80);
+    haptic_play(false, 80, 0);
 }
 
 lv_obj_t *create_setting(lv_obj_t *parent, const char *icon, lv_event_cb_t event_cb = nullptr)
@@ -39,7 +39,11 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
     lv_obj_t *restart = create_setting(scr, FA_POWEROFF, [](lv_event_t *)
                                        { esp_restart(); });
 
-    lv_obj_t *donotdisturb = create_setting(scr, FA_DONOTDISTURB);
+    lv_obj_t *donotdisturb = create_setting(scr, FA_DONOTDISTURB, [](lv_event_t *e)
+                                            {
+                                                watch.donotdisturb = !watch.donotdisturb;
+                                                lv_obj_set_state(lv_event_get_target_obj(e), LV_STATE_CHECKED, watch.donotdisturb); });
+
     lv_obj_t *rotate = create_setting(scr, FA_ROTATE, [](lv_event_t *)
                                       {
                                       watch.display.set_rotation((lv_display_rotation_t)((lv_display_get_rotation(NULL) + 2) % 4));
@@ -52,7 +56,8 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
 #define ARC_RADIUS 77
 #define KNOB_THICKNESS 65
 #define ARC_THICKNESS 12
-#define INDICATOR_THICKNESS 20
+// #define INDICATOR_THICKNESS 20
+#define INDICATOR_THICKNESS 65
 
     lv_obj_t *brightness = lv_arc_create(scr);
     lv_obj_set_size(brightness, ARC_RADIUS * 2 + KNOB_THICKNESS + 4, ARC_RADIUS * 2 + KNOB_THICKNESS + 4);
@@ -89,10 +94,13 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
     lv_obj_align(brightnessicon, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_text_color(brightnessicon, lv_color_white(), 0);
 
-    lv_arc_align_obj_to_angle(brightness, knob, ARC_THICKNESS / 2 - 2);
+    // lv_arc_align_obj_to_angle(brightness, knob, ARC_THICKNESS / 2 - 2);
+    lv_arc_align_obj_to_angle(brightness, knob, INDICATOR_THICKNESS / 2 - 8);
 
     lv_obj_add_event_cb(brightness, [](lv_event_t *e)
                         {
+                            haptic_play(false, 10, 0);
+
                             lv_obj_t *arc = lv_event_get_target_obj(e);
                             int32_t value = lv_arc_get_value(arc);
                             watch.display.set_backlight(value);
@@ -106,7 +114,10 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
                                 SET_SYMBOL_28(lv_obj_get_child((lv_obj_t *)lv_event_get_user_data(e), 0), FA_BRIGHTNESS_LOW);
                             }
 
-                            lv_arc_align_obj_to_angle(arc, (lv_obj_t *)lv_event_get_user_data(e), ARC_THICKNESS / 2 - 2); }, LV_EVENT_VALUE_CHANGED, knob);
+                            lv_arc_align_obj_to_angle(arc, (lv_obj_t *)lv_event_get_user_data(e), INDICATOR_THICKNESS / 2 - 8);
+                            // lv_arc_align_obj_to_angle(arc, (lv_obj_t *)lv_event_get_user_data(e), ARC_THICKNESS / 2 - 2);
+                        },
+                        LV_EVENT_VALUE_CHANGED, knob);
 
     // lv_obj_align(metronome, LV_ALIGN_CENTER, POLAR(77, -30));    // Top Right
     // lv_obj_align(flashlight, LV_ALIGN_CENTER, POLAR(77, -90));   // Top
