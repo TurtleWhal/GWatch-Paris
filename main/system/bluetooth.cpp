@@ -22,6 +22,9 @@
 
 #define BLE_GAP_LE_ROLE_PERIPHERAL 0x00
 
+// THIS STUPID FUNCTION DOES NOT EXIST ANYWHERE YET WITHOUT IT BONDING IS COMPLETELY BROKEN
+extern "C" void ble_store_config_init(void);
+
 static const ble_uuid128_t gadgetbridge_service_uuid =
     BLE_UUID128_INIT(
         0x6E, 0x40, 0x00, 0x01,
@@ -426,6 +429,8 @@ void ble_init(void)
     assert(rc == 0);
     rc = ble_gatts_add_svcs(gadgetbridge_rx_gatt_svcs);
     assert(rc == 0);
+
+    ble_store_config_init();
 
     xTaskCreate(nimble_host_task, "NimBLE Host", 4 * 1024, NULL, 5, NULL);
 }
