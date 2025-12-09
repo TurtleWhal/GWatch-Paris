@@ -17,6 +17,15 @@ void Watch::pm_update()
     {
         if (!this->sleeping) // if awake
         {
+            // if (this->goingtosleep)
+            // {
+            //     if (abs(gyro_read().x) > 450)
+            //     {
+            //         wakeup();
+            //         this->sleep_time = (esp_timer_get_time() / 1000) - 10000;
+            //     }
+            // }
+
             if (this->system.dosleep && esp_timer_get_time() / 1000 - this->sleep_time > watch.system.sleeptime && !this->goingtosleep)
             {
                 sleep();
@@ -95,8 +104,10 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
-        if (lv_screen_active() == main_screen)
-            lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
+        // if (lv_screen_active() == main_screen)
+        //     lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
+
+        lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
 
         display.wake();
 
@@ -196,6 +207,8 @@ void Watch::init()
     // display.refresh();
 
     display.set_backlight(100);
+
+    // schedule.init();
 
     wifi.init();
 

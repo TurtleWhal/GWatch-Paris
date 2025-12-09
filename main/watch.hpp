@@ -21,6 +21,7 @@
 #include "imu.hpp"
 #include "wifi.hpp"
 #include "display.hpp"
+#include "schedule.hpp"
 
 struct TimeInfo
 {
@@ -69,6 +70,7 @@ public:
     struct BatteryInfo battery;
     struct WiFi wifi;
     struct IMUInfo imu;
+    struct Schedule schedule;
 
     Display display;
 

@@ -32,6 +32,8 @@ static void time_sync_notification_cb(struct timeval *tv)
 /** Function to fetch the time from pool.ntp.org and update the system time */
 static void obtain_time(void)
 {
+    esp_sntp_stop(); // stop SNTP in case it is still running
+
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_setservername(0, "pool.ntp.org");
@@ -134,15 +136,15 @@ void WiFi::timesync_task()
     {
         static uint8_t lastday = -1;
 
-        time_t now;
-        time(&now);
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
 
-        struct tm timeinfo;
-        localtime_r(&now, &timeinfo);
+        struct tm t;
+        localtime_r(&tv.tv_sec, &t);
 
-        if (timeinfo.tm_wday != lastday) // if day changed
+        if (t.tm_wday != lastday) // if day changed
         {
-            lastday = timeinfo.tm_wday;
+            lastday = t.tm_wday;
 
             connect();
         }

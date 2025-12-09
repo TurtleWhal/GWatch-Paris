@@ -18,6 +18,7 @@ lv_obj_t *minutehand;
 lv_obj_t *hourhand;
 lv_obj_t *time_label;
 
+lv_obj_t *schedulelabel;
 lv_obj_t *datelabel;
 
 lv_obj_t *baticon;
@@ -41,6 +42,11 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+
+    schedulelabel = lv_label_create(scr);
+    lv_obj_set_style_text_font(schedulelabel, &ProductSansRegular_16, 0);
+    lv_obj_align(schedulelabel, LV_ALIGN_CENTER, 0, -70);
+    lv_obj_set_style_text_color(schedulelabel, gray, 0);
 
     datelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(datelabel, &ProductSansBold_20, 0);
@@ -137,13 +143,9 @@ void analogwatch_update()
 
     // Calculate angles (0° = 12 o'clock, increasing clockwise)
     float sangle = (t.tm_sec + ms / 1000.0f) * 6.0f;
-    float mangle = (t.tm_min + t.tm_sec / 60.0f) * 6.0f;
-    float hangle = ((t.tm_hour % 12) + t.tm_min / 60.0f) * 30.0f;
 
     // Convert angles so 0° is at 12 o'clock (subtract 90°)
     float srad = (sangle - 90.0f) * DEG2RAD;
-    float mrad = (mangle - 90.0f) * DEG2RAD;
-    float hrad = (hangle - 90.0f) * DEG2RAD;
 
     // Update second hand continuously
     second_hand_points[1].x = 120.5f + cosf(srad) * 100.0f;
@@ -155,8 +157,11 @@ void analogwatch_update()
     {
         last_sec = t.tm_sec;
 
-        minute_hand_points[1].x = 120.5f + cosf(mrad) * 95.0;
-        minute_hand_points[1].y = 120.5f + sinf(mrad) * 95.0;
+        float mangle = (t.tm_min + t.tm_sec / 60.0f) * 6.0f;
+        float mrad = (mangle - 90.0f) * DEG2RAD;
+
+        minute_hand_points[1].x = 120.5f + cosf(mrad) * 95.0f;
+        minute_hand_points[1].y = 120.5f + sinf(mrad) * 95.0f;
         lv_line_set_points(minutehand, minute_hand_points, 2);
 
         // Update label (digital time)
@@ -164,24 +169,32 @@ void analogwatch_update()
         snprintf(buf, sizeof(buf), "%d:%02d", t.tm_hour > 12 ? t.tm_hour - 12 : t.tm_hour, t.tm_min);
         lv_label_set_text(time_label, buf);
 
-        lv_obj_set_style_transform_rotation(hourhand, (270 + hangle) * 10, 0);
-
-        if (t.tm_hour != last_hour)
+        if (t.tm_min != last_min)
         {
-            last_hour = t.tm_hour;
+            last_min = t.tm_min;
+
+            float hangle = ((t.tm_hour % 12) + t.tm_min / 60.0f) * 30.0f;
+
+            lv_obj_set_style_transform_rotation(hourhand, (270 + hangle) * 10, 0);
+
+            lv_label_set_text(schedulelabel, watch.schedule.getText());
+
+            if (t.tm_hour != last_hour)
+            {
+                last_hour = t.tm_hour;
+
+                if (t.tm_mday != last_day)
+                {
+                    last_day = t.tm_mday;
+
+                    lv_label_set_text_fmt(datelabel, "%s %s %02d", wdays[t.tm_wday], months[t.tm_mon], t.tm_mday);
+
+                    if ((t.tm_mon + 1) != last_month)
+                        last_month = t.tm_mon + 1;
+                }
+            }
         }
     }
-
-    // Update once per day
-    if (t.tm_mday != last_day)
-    {
-        last_day = t.tm_mday;
-
-        lv_label_set_text_fmt(datelabel, "%s %s %02d", wdays[t.tm_wday], months[t.tm_mon], t.tm_mday);
-    }
-
-    if ((t.tm_mon + 1) != last_month)
-        last_month = t.tm_mon + 1;
 
     lv_label_set_text_fmt(battery, "%1.3fV", watch.battery.voltage / 1000.0);
 
