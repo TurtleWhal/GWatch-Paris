@@ -77,6 +77,8 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
             esp_pm_lock_release(pm_sleep_lock);
 
             this->sleeping = true;
+
+            sleep_time = esp_timer_get_time() / 1000;
         }
     }
 }
@@ -99,15 +101,19 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 
         wakeup_in_progress = true; // Set guard
 
-        this->sleeping = false;
-
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
-        // if (lv_screen_active() == main_screen)
-        //     lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF);
+        auto diff = esp_timer_get_time() / 1000 - sleep_time;
 
-        lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
+        if (diff > 15000)
+        {
+            lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF); // unconditionally go to watch face
+        }
+        else if (lv_screen_active() == main_screen)
+        {
+            lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF); // only scroll vertical layer back
+        }
 
         display.wake();
 
@@ -117,6 +123,8 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         // display.refresh();
 
         display.set_backlight(prevBrightness);
+
+        this->sleeping = false;
 
         wakeup_in_progress = false; // Clear guard
     }
@@ -194,6 +202,7 @@ void Watch::init()
     tzset();
 
     pm_init();
+    watch.settings.init();
     iic_init();
 
     haptic_init();
@@ -207,8 +216,6 @@ void Watch::init()
     // display.refresh();
 
     display.set_backlight(100);
-
-    // schedule.init();
 
     wifi.init();
 

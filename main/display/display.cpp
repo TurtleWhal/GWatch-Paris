@@ -151,16 +151,16 @@ void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch)
             touch_start_ms = esp_timer_get_time() / 1000;
             reboot_scheduled = false;
         }
-        else
-        {
-            int64_t now_ms = esp_timer_get_time() / 1000;
-            if (!reboot_scheduled && (now_ms - touch_start_ms) >= 30000)
-            {
-                ESP_LOGW("cst816s", "Screen held >30s, rebooting");
-                reboot_scheduled = true;
-                esp_restart();
-            }
-        }
+        // else
+        // {
+        //     int64_t now_ms = esp_timer_get_time() / 1000;
+        //     if (!reboot_scheduled && (now_ms - touch_start_ms) >= 30000)
+        //     {
+        //         ESP_LOGW("cst816s", "Screen held >30s, rebooting");
+        //         reboot_scheduled = true;
+        //         esp_restart();
+        //     }
+        // }
 
         last_x = data.x;
         last_y = data.y;

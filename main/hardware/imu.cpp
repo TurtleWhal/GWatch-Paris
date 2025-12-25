@@ -70,7 +70,7 @@ void imu_init(i2c_master_bus_handle_t bus)
 
     // Equipped with acceleration sensor, 2G, ORR62.5HZ
     // qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_62_5Hz);
-    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_125Hz);
+    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_16G, SensorQMI8658::ACC_ODR_125Hz);
 
     // Enable the accelerometer
     qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS, SensorQMI8658::GYR_ODR_224_2Hz);

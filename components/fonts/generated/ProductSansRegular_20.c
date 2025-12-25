@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Size: 20 px
  * Bpp: 8
- * Opts: --size 20 --bpp 8 --format lvgl --font /Users/garrett/Documents/GWatch-Paris/components/fonts/files/ProductSans-Regular.ttf --output /Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_20.c --no-compress --range 0x20-0x7F --symbols ×÷
+ * Opts: --size 20 --bpp 8 --format lvgl --font /Users/garrett/Documents/GWatch-Paris/components/fonts/files/ProductSans-Regular.ttf --output /Users/garrett/Documents/GWatch-Paris/components/fonts/generated/ProductSansRegular_20.c --no-compress --range 0x20-0x7F --symbols ×÷→
  ******************************************************************************/
 
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE

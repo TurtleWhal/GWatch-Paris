@@ -169,10 +169,14 @@ lv_obj_t *watchface; // actual watch face
 
 void Display::ui_init()
 {
-    lv_theme_t *th = lv_theme_default_init(lv_display_get_default(), /* Use DPI, size, etc. from this display */
-                                           lv_color_hex(0x03A9F4),   // Blue
-                                                                     //    lv_color_hex(0xFF9800),   // Orange
-                                           lv_color_hex(0x888888),
+    // https://vuetifyjs.com/en/styles/colors/#material-colors
+    lv_theme_t *th = lv_theme_default_init(lv_display_get_default(),
+                                           //    lv_color_hex(0x03A9F4), // Blue
+                                           //    lv_color_hex(0xFF9800), // Orange
+                                           //    lv_color_hex(0xE040FB), // Purple
+                                           //    lv_color_hex(0x009688), // Turquoise
+                                           lv_color_hex(0xF44336), // Red
+                                           lv_color_hex(0x607D8B),
                                            true, /* Dark theme?  False = light theme. */
                                            &ProductSansRegular_14);
 
@@ -241,19 +245,20 @@ void Display::ui_init()
     lv_obj_t *timer = timerscr_create(hor_layer);
     lv_obj_t *imuscreen = imu_screen_create(hor_layer);
     lv_obj_t *calcscreen = calculator_create(hor_layer);
+    lv_obj_t *appsscreen = apps_screen_create(hor_layer);
 
     static ScrollEventData scroll_dataR = {stopwatch, LV_DIR_RIGHT};
     lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataR);
 
-    static ScrollEventData scroll_dataL = {calcscreen, LV_DIR_LEFT};
+    static ScrollEventData scroll_dataL = {appsscreen, LV_DIR_LEFT};
     lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataL);
 
     lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
 
-    lv_obj_t *appsscreen = apps_screen_create(ver_layer);
+    // lv_obj_t *appsscreen = apps_screen_create(ver_layer);
 
-    static ScrollEventData scroll_dataB = {appsscreen, LV_DIR_BOTTOM};
-    lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataB);
+    // static ScrollEventData scroll_dataB = {appsscreen, LV_DIR_BOTTOM};
+    // lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataB);
 
     lv_obj_add_event_cb(hor_layer, [](lv_event_t *e)
                         {
@@ -279,6 +284,8 @@ void Display::ui_init()
         } }, LV_EVENT_SCROLL, watchscr);
 
     create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
+    create_app(appsscreen, FA_TIMER, "Timer", timer);
+    create_app(appsscreen, FA_ALARM, "Alarm");
     create_app(appsscreen, FA_CALCULATOR, "Calculator", calcscreen);
 
     create_app(appsscreen, FA_FLASHLIGHT, "Flashlight", [](lv_event_t *)
@@ -303,6 +310,8 @@ void Display::ui_init()
 
     // create_app(appsscreen, FA_IMU, "Accelerometer", imuscreen); // Accelerometer is too long
     create_app(appsscreen, FA_IMU, "IMU", imuscreen);
+
+    create_app(appsscreen, FA_CALENDAR, "Schedule", schedule_screen_create(NULL), true);
 
     create_app(appsscreen, FA_DICE, "Dice", dice_create(NULL), true);
 

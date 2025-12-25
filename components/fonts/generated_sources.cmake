@@ -2,6 +2,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/BadeenDisplay_84.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_14.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_16.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_18.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_22.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_32.c
@@ -10,6 +11,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_24.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_36.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_42.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_10.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_14.c

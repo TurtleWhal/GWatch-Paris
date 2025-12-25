@@ -3,7 +3,7 @@
     "symbols": [
         {"name": "steps",      "char": "",  "sizes": [14, 16, 28, 22] },
         {"name": "battery",    "char": "",  "sizes": [14, 16, 28] },
-        {"name": "calendar",   "char": "",  "sizes": [14] },
+        {"name": "calendar",   "char": "",  "sizes": [14, 22] },
         {"name": "lightning",  "char": "",  "sizes": [14, 16] },
         {"name": "wifi",       "char": "",  "sizes": [14, 28] },
         {"name": "connecting", "char": "",  "sizes": [14] },
@@ -15,6 +15,8 @@
         {"name": "rotate", "char": "",  "sizes": [28, 32] },
         {"name": "metronome", "char": "",  "sizes": [22] },
         {"name": "stopwatch", "char": "",  "sizes": [22] },
+        {"name": "timer", "char": "",  "sizes": [22] },
+        {"name": "alarm", "char": "",  "sizes": [22] },
         {"name": "imu", "char": "",  "sizes": [22] },
         {"name": "bug", "char": "",  "sizes": [22] },
         {"name": "calculator", "char": "",  "sizes": [22] },
@@ -22,11 +24,12 @@
         {"name": "brightness", "char": "",  "sizes": [28] },
         {"name": "brightness_low", "char": "",  "sizes": [28] },
         {"name": "play", "char": "",  "sizes": [32] },
-        {"name": "pause", "char": "",  "sizes": [32] }
+        {"name": "pause", "char": "",  "sizes": [32] },
+        {"name": "down", "char": "", "hex": "f078",  "sizes": [18] }
     ], 
     "fonts": [
-        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"×÷",                        "bpp":8},
-        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 42],     "range":"default", "symbols":"",                          "bpp":8},
+        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24], "range":"default", "symbols":"×÷→",                       "bpp":8},
+        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 36, 42], "range":"default", "symbols":"",                          "bpp":8},
         {"font":"GoogleSansCode.ttf",      "size": [46, 28],             "range":"",        "symbols":"1234567890:.+-×÷eErNanIif", "bpp":8},
         {"font":"SirinStencil.ttf",        "size": [92, 32],             "range":"",        "symbols":"1234567890:.APM",           "bpp":8},
         {"font":"BadeenDisplay.ttf",       "size": [84],                 "range":"",        "symbols":"1234567890:.",              "bpp":8}

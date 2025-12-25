@@ -272,6 +272,7 @@ esp_err_t haptic_play_now(bool repeat, ...)
 // Stop current pattern immediately
 void haptic_stop(void)
 {
+    // xQueueReset(haptic_queue);
     stop_pattern = true;
     haptic_set_motor(false);
 }

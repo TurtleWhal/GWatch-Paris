@@ -95,6 +95,8 @@ lv_obj_t *apps_screen_create(lv_obj_t *parent)
     lv_obj_set_style_flex_cross_place(scr, LV_FLEX_ALIGN_CENTER, 0);
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
+    // lv_obj_set_style_clip_corner(scr, true, 0);
+
     lv_obj_set_style_pad_bottom(scr, 40, 0);
 
     lv_obj_t *appslabel = lv_label_create(scr);

@@ -13,7 +13,10 @@ lv_obj_t *create_setting(lv_obj_t *parent, const char *name, bool state, lv_even
     lv_obj_set_style_text_font(label, &ProductSansRegular_16, 0);
 
     lv_obj_t *sw = lv_switch_create(setting);
-    lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -4, 0);
+    // lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -4, 0);
+    lv_obj_align(sw, LV_ALIGN_RIGHT_MID, 6, 0);
+
+    lv_obj_set_state(sw, LV_STATE_CHECKED, state);
 
     if (event_cb != nullptr)
     {
@@ -32,6 +35,26 @@ lv_obj_t *create_setting(lv_obj_t *parent, const char *name, bool state, lv_even
     }
 
     return setting;
+}
+
+lv_obj_t *uptime;
+
+void debug_update(lv_timer_t *timer)
+{
+    if (lv_screen_active() == lv_timer_get_user_data(timer))
+    {
+        uint64_t t = esp_timer_get_time();
+        uint64_t ms = t / 1000;
+        uint64_t s = ms / 1000;
+        uint64_t m = s / 60;
+        uint64_t h = m / 60;
+        uint64_t d = h / 24;
+
+        if (d > 0)
+            lv_label_set_text_fmt(uptime, "Uptime: %lld Days %02lld:%02lld:%02lld", d, h % 24, m % 60, s % 60);
+        else
+            lv_label_set_text_fmt(uptime, "Uptime: %02lld:%02lld:%02lld", h % 24, m % 60, s % 60);
+    }
 }
 
 lv_obj_t *debugscreen_create()
@@ -56,6 +79,15 @@ lv_obj_t *debugscreen_create()
 
     lv_obj_t *startbutton = create_setting(scr, "Disable Sleep", !watch.system.dosleep, [](lv_event_t *e)
                                            { watch.system.dosleep = !lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED); });
+
+    lv_obj_set_style_text_align(scr, LV_TEXT_ALIGN_CENTER, 0);
+
+    uptime = lv_label_create(scr);
+
+    lv_obj_t *build = lv_label_create(scr);
+    lv_label_set_text_fmt(build, "Firmware Compiled on\n%s at %s", __DATE__, __TIME__);
+
+    lv_timer_create(debug_update, 1000, scr);
 
     return scr;
 }

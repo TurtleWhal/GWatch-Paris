@@ -16,6 +16,7 @@
 
 #include "pins.h"
 
+#include "settings.hpp"
 #include "battery.hpp"
 #include "motor.hpp"
 #include "imu.hpp"
@@ -23,23 +24,21 @@
 #include "display.hpp"
 #include "schedule.hpp"
 
-struct TimeInfo
-{
-    int year;  // full year, e.g., 2025
-    int month; // 1..12
-    int day;   // 1..31
-    int hour;  // 0..23
-    int min;   // 0..59
-    int sec;   // 0..59
-    int ms;    // 0..999
-};
-
 #define DEFAULT_SLEEP_TIME 15000
 
 struct SystemInfo
 {
     uint16_t sleeptime;
     bool dosleep;
+};
+
+struct Chronology
+{
+    bool timerrunning;
+    int64_t timertime;
+
+    bool stopwatchrunning;
+    int64_t stopwatchstarttime;
 };
 
 #ifdef __cplusplus
@@ -71,6 +70,9 @@ public:
     struct WiFi wifi;
     struct IMUInfo imu;
     struct Schedule schedule;
+    struct Chronology chrono;
+
+    Settings settings;
 
     Display display;
 

@@ -149,7 +149,7 @@ void WiFi::timesync_task()
             connect();
         }
 
-        vTaskDelay(pdMS_TO_TICKS(60 * 60 * 1000)); // delay 60 minutes
+        vTaskDelay(pdMS_TO_TICKS(60 * 1000)); // check once a minute (checking once an hour never seemed to work)
     }
 }
 

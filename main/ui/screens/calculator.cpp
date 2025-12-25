@@ -42,7 +42,15 @@ lv_obj_t *calculator_create(lv_obj_t *parent)
     lv_buttonmatrix_set_button_ctrl(matrix, 15, LV_BUTTONMATRIX_CTRL_HIDDEN);
     lv_buttonmatrix_set_button_ctrl(matrix, 19, LV_BUTTONMATRIX_CTRL_HIDDEN);
 
+    for (uint8_t i = 0; i < 19; i++)
+        lv_buttonmatrix_set_button_ctrl(matrix, i, LV_BUTTONMATRIX_CTRL_CLICK_TRIG);
+
+    lv_buttonmatrix_clear_button_ctrl(matrix, 4, LV_BUTTONMATRIX_CTRL_CLICK_TRIG);
+
     lv_obj_add_event_cb(matrix, btn_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_add_event_cb(matrix, [](lv_event_t *e)
+                        { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);
 
     /* Create output text area */
     output = lv_textarea_create(scr);
@@ -53,6 +61,7 @@ lv_obj_t *calculator_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(output, &GoogleSansCode_28, 0);
     lv_textarea_set_text(output, "");
     lv_obj_set_flag(output, LV_OBJ_FLAG_SCROLL_CHAIN, false);
+    lv_obj_set_style_clip_corner(output, true, 0);
 
     return scr;
 }
@@ -62,8 +71,6 @@ static void btn_event_cb(lv_event_t *e)
 {
     lv_obj_t *btnm = lv_event_get_target_obj(e);
     const char *txt = lv_buttonmatrix_get_button_text(btnm, lv_buttonmatrix_get_selected_button(btnm));
-
-    haptic_play(false, 80, 0);
 
     if (txt == NULL)
         return;

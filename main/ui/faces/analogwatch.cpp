@@ -21,9 +21,12 @@ lv_obj_t *time_label;
 lv_obj_t *schedulelabel;
 lv_obj_t *datelabel;
 
+lv_obj_t *timerarc;
+
 lv_obj_t *baticon;
 lv_obj_t *battery;
 lv_obj_t *steps;
+lv_obj_t *glance;
 
 lv_obj_t *wifiicon;
 
@@ -42,6 +45,23 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+
+    timerarc = lv_arc_create(parent);
+    lv_obj_set_size(timerarc, 234, 234);
+    lv_obj_center(timerarc);
+
+    lv_arc_set_mode(timerarc, LV_ARC_MODE_NORMAL);
+    lv_arc_set_bg_start_angle(timerarc, 0);
+    lv_arc_set_bg_end_angle(timerarc, 0);
+    lv_arc_set_rotation(timerarc, -90);
+
+    lv_obj_set_style_arc_width(timerarc, 4, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(timerarc, 0, LV_PART_INDICATOR);
+
+    lv_obj_set_style_arc_color(timerarc, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(timerarc, false, LV_PART_MAIN);
+    lv_obj_remove_style(timerarc, NULL, LV_PART_KNOB);
+    lv_obj_add_flag(timerarc, LV_OBJ_FLAG_ADV_HITTEST);
 
     schedulelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(schedulelabel, &ProductSansRegular_16, 0);
@@ -76,7 +96,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     wifiicon = lv_label_create(infobox);
     SET_SYMBOL_14(wifiicon, FA_WIFI);
 
-    lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
+    // lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
     baticon = lv_label_create(infobox);
     SET_SYMBOL_16(baticon, FA_BATTERY);
@@ -91,6 +111,12 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     steps = lv_label_create(infobox);
     lv_obj_set_style_text_font(steps, &ProductSansRegular_16, 0);
     lv_label_set_text_fmt(steps, "%d", 5678);
+
+    glance = lv_label_create(scr);
+    lv_obj_align(glance, LV_ALIGN_CENTER, 0, 68);
+    lv_obj_set_style_text_color(glance, gray, 0);
+    lv_obj_set_style_text_font(glance, &ProductSansRegular_16, 0);
+    lv_label_set_text(glance, "");
 
     hourhand = lv_obj_create(scr);
     lv_obj_set_size(hourhand, 65 + 18, 18);
@@ -117,7 +143,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     secondhand = lv_line_create(scr);
     lv_line_set_points(secondhand, second_hand_points, 2);
     lv_obj_set_size(secondhand, 240, 240);
-    lv_obj_set_style_line_color(secondhand, gray, 0);
+    lv_obj_set_style_line_color(secondhand, lv_color_hex(0x888888), 0);
     lv_obj_set_style_line_width(secondhand, 2, 0);
     lv_obj_set_style_line_rounded(secondhand, true, 0);
 
@@ -126,7 +152,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_obj_set_size(c, 5, 5);
     lv_obj_set_style_border_width(c, 0, 0);
     lv_obj_set_style_radius(c, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(c, gray, 0);
+    lv_obj_set_style_bg_color(c, lv_color_hex(0x888888), 0);
     lv_obj_center(c);
 
     return scr;
@@ -204,17 +230,62 @@ void analogwatch_update()
     {
     case WIFI_CONNECTED:
         SET_SYMBOL_14(wifiicon, FA_WIFI);
-        lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
+        // lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
         break;
     case WIFI_CONNECTING:
         SET_SYMBOL_14(wifiicon, FA_CONNECTING);
-        lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
+        // lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
         break;
     case WIFI_DISCONNECTED:
-        lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
+        SET_SYMBOL_14(wifiicon, "");
+        // lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
         break;
     }
 
     SET_SYMBOL_16(baticon,
                   watch.battery.charging ? FA_LIGHTNING : FA_BATTERY);
+
+    if (watch.chrono.stopwatchrunning)
+    {
+        int64_t diff = esp_timer_get_time() - watch.chrono.stopwatchstarttime;
+
+        int64_t h = diff / 1000 / 1000 / 60 / 60;
+        int64_t m = diff / 1000 / 1000 / 60;
+        int64_t s = diff / 1000 / 1000;
+
+        if (h > 0)
+            lv_label_set_text_fmt(glance, "%lld:%02lld:%02lld", h, m % 60, s % 60);
+        else
+            lv_label_set_text_fmt(glance, "%lld:%02lld", m, s % 60);
+    }
+    else
+    {
+        lv_label_set_text(glance, "");
+    }
+
+    if (watch.chrono.timerrunning)
+    {
+        int64_t t = watch.chrono.timertime;
+
+        int64_t h = t / 1000 / 1000 / 60 / 60;
+        int64_t m = t / 1000 / 1000 / 60;
+        int64_t s = t / 1000 / 1000;
+
+        if (h > 0)
+        {
+            lv_arc_set_bg_end_angle(timerarc, h * 6);
+        }
+        else if (m > 0)
+        {
+            lv_arc_set_bg_end_angle(timerarc, m * 6);
+        }
+        else
+        {
+            lv_arc_set_bg_end_angle(timerarc, s * 6);
+        }
+    }
+    else
+    {
+        lv_arc_set_bg_end_angle(timerarc, 0);
+    }
 }

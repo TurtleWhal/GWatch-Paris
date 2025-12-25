@@ -1,22 +1,20 @@
 #include "ui.hpp"
 
 lv_obj_t *stopwatchlbl;
-int64_t stopwatchstarttime = 0;
-bool stopwatchrunning = false;
 
 void update_stopwatch_label()
 {
     // all in microseconds
     int64_t current = esp_timer_get_time();
-    int64_t diff = current - stopwatchstarttime;
+    int64_t diff = current - watch.chrono.stopwatchstarttime;
 
-    if (stopwatchstarttime == 0)
+    if (watch.chrono.stopwatchstarttime == 0)
     {
         diff = 0;
     }
-    else if (!stopwatchrunning)
+    else if (!watch.chrono.stopwatchrunning)
     {
-        diff = stopwatchstarttime;
+        diff = watch.chrono.stopwatchstarttime;
     }
 
     int64_t h = diff / 1000 / 1000 / 60 / 60;
@@ -37,7 +35,7 @@ void stopwatch_update(lv_timer_t *timer)
 
     if (lv_obj_get_scroll_x(parent) > lv_obj_get_x(scr) - 240 && lv_obj_get_scroll_x(parent) < lv_obj_get_x(scr) + 240)
     {
-        if (stopwatchrunning)
+        if (watch.chrono.stopwatchrunning)
         {
             update_stopwatch_label();
         }
@@ -82,32 +80,32 @@ lv_obj_t *stopwatch_create(lv_obj_t *parent)
 
     lv_obj_add_event_cb(btn, [](lv_event_t *e)
                         {
-                            if (stopwatchrunning)
+                            if (watch.chrono.stopwatchrunning)
                             {
                                 int64_t current = esp_timer_get_time();
-                                int64_t diff = current - stopwatchstarttime;
-                                stopwatchstarttime = diff;
+                                int64_t diff = current - watch.chrono.stopwatchstarttime;
+                                watch.chrono.stopwatchstarttime = diff;
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY);
                             }
                             else
                             {
-                                if (stopwatchstarttime == 0)
+                                if (watch.chrono.stopwatchstarttime == 0)
                                 {
-                                    stopwatchstarttime = esp_timer_get_time();
+                                    watch.chrono.stopwatchstarttime = esp_timer_get_time();
                                 }
                                 else
                                 {
-                                    stopwatchstarttime = esp_timer_get_time() - stopwatchstarttime;
+                                    watch.chrono.stopwatchstarttime = esp_timer_get_time() - watch.chrono.stopwatchstarttime;
                                 }
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PAUSE);
                             }
-                            stopwatchrunning = !stopwatchrunning;
+                            watch.chrono.stopwatchrunning = !watch.chrono.stopwatchrunning;
                             update_stopwatch_label(); }, LV_EVENT_CLICKED, playicon);
 
     lv_obj_add_event_cb(reset, [](lv_event_t *e)
                         {
-                                stopwatchrunning = false;
-                                stopwatchstarttime = 0;
+                                watch.chrono.stopwatchrunning = false;
+                                watch.chrono.stopwatchstarttime = 0;
                                 update_stopwatch_label(); 
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, playicon);
 
