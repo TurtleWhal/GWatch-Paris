@@ -54,5 +54,5 @@
   },
   "C_Cpp.errorSquiggles": "enabled",
   "idf.portWin": "COM4",
-  "idf.currentSetup": "/Users/garrett/esp/v5.5/esp-idf"
+  "idf.currentSetup": "/Users/garrett/esp/v6.0/esp-idf"
 }
