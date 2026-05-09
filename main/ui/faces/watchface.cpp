@@ -27,7 +27,8 @@ void watchface_update()
 
             // /* Draw the line to the canvas */
             // lv_draw_line(&layer, &line_dsc);
-            analogwatch_update();
+            // analogwatch_update();
+            rotarywatch_update();
         }
 }
 
@@ -46,7 +47,8 @@ lv_obj_t *watchface_create(lv_obj_t *parent)
     // lv_obj_set_size(canvas, 240, 240);
     // lv_obj_align(canvas, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t *scr = analogwatch_create(parent);
+    // lv_obj_t *scr = analogwatch_create(parent);
+    lv_obj_t *scr = rotarywatch_create(parent);
 
     lv_timer_create([](lv_timer_t *timer)
                     { watchface_update(); }, 33, NULL);

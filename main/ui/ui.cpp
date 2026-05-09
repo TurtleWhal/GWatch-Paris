@@ -171,11 +171,11 @@ void Display::ui_init()
 {
     // https://vuetifyjs.com/en/styles/colors/#material-colors
     lv_theme_t *th = lv_theme_default_init(lv_display_get_default(),
-                                           //    lv_color_hex(0x03A9F4), // Blue
+                                              lv_color_hex(0x03A9F4), // Blue
                                            //    lv_color_hex(0xFF9800), // Orange
-                                           //    lv_color_hex(0xE040FB), // Purple
+                                            //   lv_color_hex(0xE040FB), // Purple
                                            //    lv_color_hex(0x009688), // Turquoise
-                                           lv_color_hex(0xF44336), // Red
+                                        //    lv_color_hex(0xF44336), // Red
                                            lv_color_hex(0x607D8B),
                                            true, /* Dark theme?  False = light theme. */
                                            &ProductSansRegular_14);

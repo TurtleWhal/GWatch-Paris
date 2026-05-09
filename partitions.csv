@@ -1,0 +1,12 @@
+# 16 MB flash layout for GWatch-Paris (ESP32-S3, 16 MB SPI flash).
+# Bootloader lives at 0x0; partition table at 0x8000 (default).
+# Factory app gets the lion's share; the tail is a SPIFFS data partition.
+#
+# Offsets / sizes packed so the last byte sits exactly at 0x1000000 (16 MB).
+# App partitions must be 64 KB-aligned; data partitions are 4 KB-aligned.
+#
+# Name,     Type, SubType, Offset,    Size,       Flags
+nvs,        data, nvs,     0x9000,    0x10000,
+phy_init,   data, phy,     0x19000,   0x1000,
+factory,    app,  factory, 0x20000,   0xD00000,
+storage,    data, spiffs,  0xD20000,  0x2E0000,

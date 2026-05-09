@@ -46,11 +46,11 @@ idf_component_register(
         "./system"
         "./ui"
     REQUIRES
-        lvgl 
-        fonts 
-        # watchui 
-        driver 
-        esp_timer 
+        lvgl
+        fonts
+        # watchui
+        driver
+        esp_timer
         freertos
         esp_wifi
         esp_netif
@@ -60,4 +60,5 @@ idf_component_register(
         esp_adc
         esp_http_client
         json
+        esp_lcd
 )

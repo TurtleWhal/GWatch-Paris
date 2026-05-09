@@ -1,0 +1,30 @@
+# --- Target ---
+CONFIG_IDF_TARGET="esp32s3"
+
+# --- Flash / partitions ---
+# Board has 16 MB SPI flash; default IDF partition tables only use 1.5-2 MB.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- Performance ---
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# Larger data cache + 64-byte lines: ~10-20% faster LVGL render on RGB565 buffers.
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+
+# --- USB Serial/JTAG ---
+# Hold ESP_PM_NO_LIGHT_SLEEP while host is connected so flashing/monitor stays
+# alive — without this, light sleep tears down the USB peripheral and the host
+# loses the device a few seconds after plug-in.
+CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
+
+# --- LVGL ---
+# FreeRTOS-aware OS layer so esp_lvgl_port can drive LVGL from its own task,
+# and lvgl_port_lock/unlock works (required for cross-task LVGL mutation).
+CONFIG_LV_OS_FREERTOS=y
+# To enable the on-screen FPS overlay, also set CONFIG_LV_USE_SYSMON=y and
+# CONFIG_LV_USE_PERF_MONITOR=y via menuconfig (depends on SYSMON).

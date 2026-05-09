@@ -53,5 +53,6 @@
     "bitset": "cpp"
   },
   "C_Cpp.errorSquiggles": "enabled",
-  "idf.portWin": "COM4"
+  "idf.portWin": "COM4",
+  "idf.currentSetup": "/Users/garrett/esp/v5.5/esp-idf"
 }

@@ -3,6 +3,7 @@
 
 #include <sys/time.h>
 #include "driver/gpio.h"
+#include "esp_lvgl_port.h"
 
 #define BACKLIGHT_FADE_MS 2000
 
@@ -106,13 +107,19 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 
         auto diff = esp_timer_get_time() / 1000 - sleep_time;
 
-        if (diff > 15000)
+        // pm_update task runs on core 0, LVGL task on core 1 — wrap any LVGL
+        // mutation in lvgl_port_lock so we don't race with the renderer.
+        if (lvgl_port_lock(0))
         {
-            lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF); // unconditionally go to watch face
-        }
-        else if (lv_screen_active() == main_screen)
-        {
-            lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF); // only scroll vertical layer back
+            if (diff > 15000)
+            {
+                lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF); // unconditionally go to watch face
+            }
+            else if (lv_screen_active() == main_screen)
+            {
+                lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF); // only scroll vertical layer back
+            }
+            lvgl_port_unlock();
         }
 
         display.wake();
