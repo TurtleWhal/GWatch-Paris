@@ -6,3 +6,5 @@ dependencies:
   espressif/esp_lvgl_port: ^2.5.0
   espressif/esp_lcd_gc9a01: ^2.0.0
   espressif/esp_lcd_touch_cst816s: ^1.0.5
+  # cJSON moved out of esp-idf in 6.0 → pull from the component registry.
+  espressif/cjson: ^1.7.18

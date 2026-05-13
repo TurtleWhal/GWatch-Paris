@@ -66,6 +66,13 @@ public:
 
     void set_wakeup_touch(bool enable);
 
+    // Toggle the CST816S between active polling (DisAutoSleep=1, used while
+    // the watch is awake — needed to keep is_touching() polls from NACKing)
+    // and its auto-sleep mode (DisAutoSleep=0, used during light sleep so
+    // the INT line stops pulsing periodically and GPIO5 becomes a clean
+    // wake source).
+    void set_touch_active(bool active);
+
     void lvgl_done();
 };
 

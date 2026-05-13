@@ -4,12 +4,42 @@
 #include <math.h>
 #include <driver/gpio.h>
 
-const char *TAG = "QMI8658";
+static const char *TAG = "QMI8658";
 
 SensorQMI8658 qmi;
 
+static TaskHandle_t imu_task_handle = NULL;
+
 volatile bool step_interrupt;
-volatile bool motion_interrupt;
+
+static void pedometer_event();
+
+// Set up accel + gyro + pedometer at full rates. Called from imu_init and
+// from imu_wake().
+static void imu_configure_normal()
+{
+    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_16G,
+                            SensorQMI8658::ACC_ODR_125Hz);
+    qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS,
+                        SensorQMI8658::GYR_ODR_224_2Hz);
+    qmi.enableAccelerometer();
+    qmi.enableGyroscope();
+
+#define PED_SENSITIVITY 2
+    uint16_t ped_sample_cnt = 50;
+    uint16_t ped_fix_peak2peak = 200 / PED_SENSITIVITY;
+    uint16_t ped_fix_peak = 100 / PED_SENSITIVITY;
+    uint16_t ped_time_up = 200;
+    uint8_t ped_time_low = 20;
+    uint8_t ped_time_cnt_entry = 10;
+    uint8_t ped_fix_precision = 0;
+    uint8_t ped_sig_count = 4;
+    qmi.configPedometer(ped_sample_cnt, ped_fix_peak2peak, ped_fix_peak,
+                        ped_time_up, ped_time_low, ped_time_cnt_entry,
+                        ped_fix_precision, ped_sig_count);
+    qmi.enablePedometer(SensorQMI8658::INTERRUPT_PIN_1);
+    qmi.setPedometerEventCallBack(pedometer_event);
+}
 
 void set_flag(void *arg)
 {
@@ -17,17 +47,9 @@ void set_flag(void *arg)
     ESP_LOGI(TAG, "flag");
 }
 
-void wrist_wake(void *arg)
-{
-    // ESP_LOGI(TAG, "Wrist Wake");
-    motion_interrupt = true;
-}
-
-void pedometer_event()
+static void pedometer_event()
 {
     uint32_t val = qmi.getPedometerCounter();
-    // ESP_LOGI(TAG, "Pedometer: %d", val);
-
     watch.imu.steps = val;
 }
 
@@ -35,23 +57,7 @@ void imu_task(void *pvParamaters)
 {
     while (true)
     {
-        // if (step_interrupt)
-        // {
-        //     step_interrupt = false;
-        //     qmi.update();
-        // }
         qmi.update();
-
-        // float x, y, z;
-        // qmi.getGyroscope(x, y, z);
-
-        // printf("x: %f, y: %f, z: %f\n", x, y, z);
-
-        // if (abs(x) > 450)
-        // {
-        //     watch.wakeup();
-        // }
-
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -65,82 +71,44 @@ void imu_init(i2c_master_bus_handle_t bus)
         ESP_LOGW(TAG, "Failed to find QMI8658");
     }
 
-    /* Get chip id*/
     ESP_LOGI(TAG, "Device ID: %x", qmi.getChipID());
 
-    // Equipped with acceleration sensor, 2G, ORR62.5HZ
-    // qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G, SensorQMI8658::ACC_ODR_62_5Hz);
-    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_16G, SensorQMI8658::ACC_ODR_125Hz);
+    imu_configure_normal();
 
-    // Enable the accelerometer
-    qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS, SensorQMI8658::GYR_ODR_224_2Hz);
-
-    qmi.enableAccelerometer();
-    qmi.enableGyroscope();
-
-#define PED_SENSITIVITY 2
-
-    //* Indicates the count of sample batch/window for calculation
-    uint16_t ped_sample_cnt = 50; // 50 samples
-    //* Indicates the threshold of the valid peak-to-peak detection
-    uint16_t ped_fix_peak2peak = 200 / PED_SENSITIVITY; // 200mg
-    //* Indicates the threshold of the peak detection comparing to average
-    uint16_t ped_fix_peak = 100 / PED_SENSITIVITY; // 100mg
-    //* Indicates the maximum duration (timeout window) for a step.
-    //* Reset counting calculation if no peaks detected within this duration.
-    uint16_t ped_time_up = 200; // 200 samples 4s
-    //* Indicates the minimum duration for a step.
-    //* The peaks detected within this duration (quiet time) is ignored.
-    uint8_t ped_time_low = 20; // 20 samples
-    //*   Indicates the minimum continuous steps to start the valid step counting.
-    //*   If the continuously detected steps is lower than this count and timeout,the steps will not be take into account;
-    //*   if yes, the detected steps will all be taken into account and counting is started to count every following step before timeout.
-    //*   This is useful to screen out the fake steps detected by non-step vibrations
-    //*   The timeout duration is defined by ped_time_up.
-    uint8_t ped_time_cnt_entry = 10; // 10 steps entry count
-    //*   Recommended 0
-    uint8_t ped_fix_precision = 0;
-    //*   The amount of steps when to update the pedometer output registers.
-    uint8_t ped_sig_count = 4; // Every 4 valid steps is detected, update the registers once (added by 4).
-
-    qmi.configPedometer(ped_sample_cnt,
-                        ped_fix_peak2peak,
-                        ped_fix_peak,
-                        ped_time_up,
-                        ped_time_low,
-                        ped_time_cnt_entry,
-                        ped_fix_precision,
-                        ped_sig_count);
-
-    // Enable the step counter and enable the interrupt
-    if (!qmi.enablePedometer(SensorQMI8658::INTERRUPT_PIN_1))
-    {
-        ESP_LOGW(TAG, "Enable pedometer failed!");
-    }
-
-    // Set the step counter callback function
-    qmi.setPedometerEventCallBack(pedometer_event);
-
-    // gpio_isr_handler_add(IMU_INT1, set_flag, NULL);
-    // gpio_isr_handler_add(IMU_INT2, wrist_wake, NULL);
-
-    xTaskCreate(imu_task, "imu_task", 1024 * 4, NULL, 4, NULL);
+    xTaskCreate(imu_task, "imu_task", 1024 * 4, NULL, 4, &imu_task_handle);
 }
 
 Acceleration accel_read()
 {
     Acceleration a;
-
     qmi.getAccelerometer(a.x, a.y, a.z);
-
     return a;
 }
 
 GyroData gyro_read()
 {
     GyroData a;
-
     qmi.getGyroscope(a.x, a.y, a.z);
-
     return a;
+}
+
+void imu_sleep()
+{
+    // Drop accel + gyro to slow ODRs while the watch is asleep. Suspend the
+    // polling task so its 100 ms I²C burst doesn't keep the chip from
+    // light-sleeping. Pedometer counter freezes while asleep.
+    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_16G,
+                            SensorQMI8658::ACC_ODR_31_25Hz);
+    qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS,
+                        SensorQMI8658::GYR_ODR_56_05Hz);
+    if (imu_task_handle) vTaskSuspend(imu_task_handle);
+}
+
+void imu_wake()
+{
+    if (imu_task_handle) vTaskResume(imu_task_handle);
+    qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_16G,
+                            SensorQMI8658::ACC_ODR_125Hz);
+    qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS,
+                        SensorQMI8658::GYR_ODR_224_2Hz);
 }

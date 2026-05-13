@@ -170,6 +170,16 @@ void Display::reset_touch()
     if (touch) esp_lcd_touch_read_data(touch);
 }
 
+void Display::set_touch_active(bool active)
+{
+    if (!tp_io) return;
+    // CST816S register 0xFE: DisAutoSleep. 1 = chip stays in active scan
+    // (continuous reporting, INT pulses periodically); 0 = chip auto-sleeps
+    // when no touch and INT only fires on real touch.
+    const uint8_t v = active ? 0x01 : 0x00;
+    esp_lcd_panel_io_tx_param(tp_io, 0xFE, &v, 1);
+}
+
 void Display::set_wakeup_touch(bool enable)
 {
     wakeup_touch = enable;
@@ -338,6 +348,18 @@ void Display::init(i2c_master_bus_handle_t bus)
     panel_init(&panel_io, &panel);
     touch_init(bus, &tp_io, &touch);
 
+    // CONFIG_PM_SLP_DISABLE_GPIO is auto-selected on ESP32-S3 (via
+    // CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND) and isolates GPIOs during
+    // light sleep. That's fine for the touch / IMU INT pins, but it
+    // glitches the LCD's SPI lines hard enough that after wake the panel
+    // stops accepting pixel writes (LVGL renders, but the screen stays
+    // black). Exempt the LCD pins so they keep their runtime config
+    // through sleep.
+    gpio_sleep_sel_dis((gpio_num_t)LCD_MOSI);
+    gpio_sleep_sel_dis((gpio_num_t)LCD_CLK);
+    gpio_sleep_sel_dis(LCD_CS);
+    gpio_sleep_sel_dis(LCD_DC);
+
     init_graphics();
 
     // Backlight PWM
@@ -383,6 +405,14 @@ void Display::sleep()
         esp_lcd_panel_disp_on_off(panel, false);
         lvgl_port_unlock();
     }
+    // lvgl_port_stop() only stops the tick timer; the underlying task still
+    // wakes every ~501 ms with a vTaskDelay(1) at the bottom of its loop,
+    // which pins core 1 just often enough that the tickless-idle decision
+    // never sees a long enough idle window to enter light sleep. Suspend
+    // the task outright so core 1 can stay idle.
+    TaskHandle_t lvgl_task = xTaskGetHandle("taskLVGL");
+    if (lvgl_task) vTaskSuspend(lvgl_task);
+
     suspended = true;
 }
 
@@ -390,7 +420,18 @@ void Display::wake()
 {
     if (!suspended) return;
 
+    TaskHandle_t lvgl_task = xTaskGetHandle("taskLVGL");
+    if (lvgl_task) vTaskResume(lvgl_task);
+
     if (lvgl_port_lock(portMAX_DELAY)) {
+        // Full panel re-init: light sleep cycles between calls to draw()
+        // leave the GC9A01 in a state where it acks commands but ignores
+        // RAMWR pixel writes. Re-running the init sequence (reset, gamma,
+        // color order, MADCTL, etc.) gets it accepting writes again.
+        // panel_init() resets INVON/INVOFF to the default, so re-apply our
+        // colour-invert override to keep colours matching the boot config.
+        esp_lcd_panel_init(panel);
+        esp_lcd_panel_invert_color(panel, true);
         esp_lcd_panel_disp_on_off(panel, true);
         lvgl_port_unlock();
     }

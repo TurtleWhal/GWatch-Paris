@@ -7,7 +7,7 @@ lv_obj_t *h1, *h2, *m1, *m2, *s1, *s2;
 
 TaskHandle_t taskhandle;
 
-lv_obj_t *playicon;
+lv_obj_t *starticon;
 
 lv_obj_t *alarmscr;
 
@@ -55,7 +55,7 @@ void timer_update(lv_timer_t *timer)
     if (watch.chrono.timerrunning && watch.chrono.timertime == 0)
     {
         watch.chrono.timerrunning = false;
-        SET_SYMBOL_32(playicon, FA_PLAY);
+        SET_SYMBOL_32(starticon, FA_PLAY);
 
         lv_screen_load_anim(alarmscr, LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
 
@@ -189,9 +189,9 @@ lv_obj_t *timerscr_create(lv_obj_t *parent)
     lv_obj_align(btn, LV_ALIGN_CENTER, -34, 50);
     lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
 
-    playicon = lv_label_create(btn);
-    SET_SYMBOL_32(playicon, FA_PLAY);
-    lv_obj_center(playicon);
+    starticon = lv_label_create(btn);
+    SET_SYMBOL_32(starticon, FA_PLAY);
+    lv_obj_center(starticon);
 
     lv_obj_t *reset = lv_button_create(scr);
     lv_obj_set_size(reset, 60, 60);
@@ -214,14 +214,14 @@ lv_obj_t *timerscr_create(lv_obj_t *parent)
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PAUSE);
                             }
                             watch.chrono.timerrunning = !watch.chrono.timerrunning;
-                            update_timer_label(); }, LV_EVENT_CLICKED, playicon);
+                            update_timer_label(); }, LV_EVENT_CLICKED, starticon);
 
     lv_obj_add_event_cb(reset, [](lv_event_t *e)
                         {
                                 watch.chrono.timerrunning = false;
                                 watch.chrono.timertime = 0;
                                 update_timer_label();
-                                SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, playicon);
+                                SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, starticon);
 
     lv_obj_add_event_cb(btn, [](lv_event_t *e)
                         { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);

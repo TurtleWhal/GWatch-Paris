@@ -6,11 +6,13 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_22.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_32.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_48.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_46.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_24.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_30.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_36.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_42.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_10.c

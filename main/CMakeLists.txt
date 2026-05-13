@@ -52,13 +52,14 @@ idf_component_register(
         driver
         esp_timer
         freertos
-        esp_wifi
-        esp_netif
-        esp_event
         nvs_flash
-        lwip
         esp_adc
-        esp_http_client
-        json
         esp_lcd
+        bt
+        mbedtls    # for mbedtls_base64_decode in notification image transfer
+        # v6.0: driver/* headers split out per-peripheral.
+        esp_driver_ledc
+        esp_driver_i2c
+        esp_driver_spi
+        esp_driver_gpio
 )

@@ -28,3 +28,46 @@ CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
 CONFIG_LV_OS_FREERTOS=y
 # To enable the on-screen FPS overlay, also set CONFIG_LV_USE_SYSMON=y and
 # CONFIG_LV_USE_PERF_MONITOR=y via menuconfig (depends on SYSMON).
+
+# --- Bluetooth (NimBLE host for Gadgetbridge BLE) ---
+# ESP32-S3 is BLE-only; NimBLE is lighter than Bluedroid and the right pick.
+# Peripheral + broadcaster only; we never act as central/observer.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
+# CONFIG_BT_NIMBLE_ROLE_CENTRAL is not set
+# CONFIG_BT_NIMBLE_ROLE_OBSERVER is not set
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+# Bigger ATT MTU so notifications don't fragment heavily over NUS.
+CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=247
+# Pin host task to core 0 (LVGL owns core 1).
+CONFIG_BT_NIMBLE_PINNED_TO_CORE_0=y
+# BT controller modem sleep: keep BLE link alive across light sleep so the
+# watch can pull notifications/time from the phone while the display is off.
+#
+# Use the main XTAL as the BT sleep clock (BLE spec requires <500 ppm; the
+# 136 kHz internal RC blew through that and the link dropped within seconds
+# even while the chip was awake). MAIN_XTAL_PU_DURING_LIGHT_SLEEP keeps the
+# main crystal powered through light sleep so the BT controller still has
+# its clock — small extra current vs. RC, but the link stays alive.
+CONFIG_BT_CTRL_MODEM_SLEEP=y
+CONFIG_BT_CTRL_MODEM_SLEEP_MODE_1=y
+CONFIG_BT_CTRL_LPCLK_SEL_MAIN_XTAL=y
+CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP=y
+
+# Don't power down the CPU domain during light sleep. Saves ~650 µA but
+# the SPI master / esp_lcd state doesn't survive the powerdown — after
+# wake the LCD pipeline silently drops every pixel write and the screen
+# stays black despite LVGL still running.
+# CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP is not set
+# Push NimBLE host buffers/queues to PSRAM. Internal SRAM is tight once the
+# BT controller (~80 KB, fixed) and WiFi statics also take their share —
+# without this, esp_wifi_init returns ESP_ERR_NO_MEM at boot.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+
+# WiFi disabled — Gadgetbridge handles time sync over BLE, so we don't need
+# IP networking, and dropping the WiFi stack frees the internal SRAM that
+# the BT controller wanted.
+# CONFIG_ESP_WIFI_ENABLED is not set
+

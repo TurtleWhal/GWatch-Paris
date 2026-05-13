@@ -28,3 +28,22 @@ uint8_t Settings::readUint8(const char *key, uint8_t defaultValue)
     nvs_close(handle);
     return value;
 }
+
+void Settings::writeUint16(const char *key, uint16_t value)
+{
+    nvs_handle_t handle;
+    nvs_open("settings", NVS_READWRITE, &handle);
+    nvs_set_u16(handle, key, value);
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+uint16_t Settings::readUint16(const char *key, uint16_t defaultValue)
+{
+    nvs_handle_t handle;
+    nvs_open("settings", NVS_READONLY, &handle);
+    uint16_t value = defaultValue;
+    nvs_get_u16(handle, key, &value);
+    nvs_close(handle);
+    return value;
+}

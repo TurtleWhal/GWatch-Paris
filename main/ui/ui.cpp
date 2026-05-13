@@ -3,6 +3,7 @@
 lv_obj_t *main_screen;
 lv_obj_t *ver_layer;
 lv_obj_t *hor_layer;
+lv_obj_t *lower_layer;
 
 lv_obj_t *create_screen(lv_obj_t *parent)
 {
@@ -210,6 +211,9 @@ void Display::ui_init()
 
     lv_obj_t *quicksettings = quicksettings_create(ver_layer);
 
+    static ScrollEventData scroll_dataT = {quicksettings, LV_DIR_TOP};
+    lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataT);
+
     hor_layer = lv_obj_create(ver_layer);
     lv_obj_set_size(hor_layer, 240, 240);
     lv_obj_set_style_bg_color(hor_layer, lv_color_black(), 0);
@@ -229,8 +233,36 @@ void Display::ui_init()
 
     lv_obj_add_event_cb(hor_layer, scroll_loop_event_cb, LV_EVENT_SCROLL, NULL);
 
-    static ScrollEventData scroll_dataT = {quicksettings, LV_DIR_TOP};
-    lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataT);
+    // lv_obj_t *notifications = notifications_screen_create(ver_layer);
+
+    lower_layer = lv_obj_create(ver_layer);
+    lv_obj_set_size(lower_layer, 240, 240);
+    lv_obj_set_style_bg_color(lower_layer, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(lower_layer, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(lower_layer, 0, 0);
+    lv_obj_set_style_radius(lower_layer, LV_RADIUS_CIRCLE, 0);
+
+    lv_obj_set_flex_flow(lower_layer, LV_FLEX_FLOW_ROW);
+    lv_obj_set_scroll_snap_x(lower_layer, LV_SCROLL_SNAP_CENTER);
+    lv_obj_set_flag(lower_layer, LV_OBJ_FLAG_SCROLL_ELASTIC, false);
+    lv_obj_set_scrollbar_mode(lower_layer, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_pad_row(lower_layer, 0, 0);
+    lv_obj_set_style_pad_column(lower_layer, 0, 0);
+    lv_obj_set_flag(lower_layer, LV_OBJ_FLAG_SCROLL_ONE, true);
+
+    lv_obj_set_style_margin_all(lower_layer, 0, 0);
+    lv_obj_set_style_pad_all(lower_layer, 0, 0);
+
+    // lv_obj_add_event_cb(lower_layer, scroll_loop_event_cb, LV_EVENT_SCROLL, NULL);
+
+    lv_obj_t *notifications = notifications_screen_create(lower_layer);
+    lv_obj_set_style_bg_opa(notifications, 0, 0);
+
+    // lv_obj_t *music = music_create(lower_layer);
+    // lv_obj_set_style_bg_opa(music, 0, 0);
+
+    static ScrollEventData scroll_dataB = {lower_layer, LV_DIR_BOTTOM};
+    lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataB);
 
     watchscr = lv_obj_create(hor_layer);
     lv_obj_set_size(watchscr, 240, 240);
@@ -243,6 +275,7 @@ void Display::ui_init()
 
     lv_obj_t *stopwatch = stopwatch_create(hor_layer);
     lv_obj_t *timer = timerscr_create(hor_layer);
+    lv_obj_t *alarm = alarmscr_create(hor_layer);
     lv_obj_t *imuscreen = imu_screen_create(hor_layer);
     lv_obj_t *calcscreen = calculator_create(hor_layer);
     lv_obj_t *appsscreen = apps_screen_create(hor_layer);
@@ -285,7 +318,7 @@ void Display::ui_init()
 
     create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
     create_app(appsscreen, FA_TIMER, "Timer", timer);
-    create_app(appsscreen, FA_ALARM, "Alarm");
+    create_app(appsscreen, FA_ALARM, "Alarm", alarm);
     create_app(appsscreen, FA_CALCULATOR, "Calculator", calcscreen);
 
     create_app(appsscreen, FA_FLASHLIGHT, "Flashlight", [](lv_event_t *)

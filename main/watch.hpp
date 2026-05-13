@@ -20,7 +20,7 @@
 #include "battery.hpp"
 #include "motor.hpp"
 #include "imu.hpp"
-#include "wifi.hpp"
+#include "ble.hpp"
 #include "display.hpp"
 #include "schedule.hpp"
 
@@ -55,8 +55,6 @@ private:
 
     uint32_t sleep_time;
 
-    bool goingtosleep;
-
     void pm_init();
     void iic_init();
     void i2c_scan();
@@ -67,7 +65,6 @@ public:
     // struct TimeInfo time;
     struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
     struct BatteryInfo battery;
-    struct WiFi wifi;
     struct IMUInfo imu;
     struct Schedule schedule;
     struct Chronology chrono;
@@ -77,6 +74,7 @@ public:
     Display display;
 
     bool sleeping;
+    bool goingtosleep;
 
     bool donotdisturb = false;
 

@@ -10,6 +10,7 @@ lv_obj_t *create_setting(lv_obj_t *parent, const char *icon, lv_event_cb_t event
     lv_obj_t *app = lv_button_create(parent);
     lv_obj_set_size(app, 65, 65);
     lv_obj_set_style_bg_color(app, lv_color_hex(0x222222), 0);
+    lv_obj_set_style_bg_color(app, lv_theme_get_color_primary(parent), LV_STATE_CHECKED);
     lv_obj_set_style_radius(app, LV_RADIUS_CIRCLE, 0);
 
     lv_obj_t *label = lv_label_create(app);
@@ -49,9 +50,15 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
                                       watch.display.set_rotation((lv_display_rotation_t)((lv_display_get_rotation(NULL) + 2) % 4));
                                       lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_ON); });
 
-    lv_obj_t *wifi = create_setting(scr, FA_WIFI, [](lv_event_t *)
-                                    { watch.wifi.connect();
-        lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_ON); });
+    // Toggle BLE advertising. Disabling drops any active connection and
+    // hides us from scanners; re-enabling resumes the same advertisement.
+    lv_obj_t *bluetooth = create_setting(scr, FA_BLUETOOTH, [](lv_event_t *e)
+                                         {
+        bool on = lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED);
+        on = !on;
+        lv_obj_set_state(lv_event_get_target_obj(e), LV_STATE_CHECKED, on);
+        ble.set_enabled(on); });
+    lv_obj_set_state(bluetooth, LV_STATE_CHECKED, ble.is_enabled());
 
 #define ARC_RADIUS 77
 #define KNOB_THICKNESS 65
@@ -124,7 +131,7 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
     // lv_obj_align(settings, LV_ALIGN_CENTER, POLAR(77, -150));    // Top Left
 
     lv_obj_align(donotdisturb, LV_ALIGN_CENTER, POLAR(77, 150)); // Bottom Left
-    lv_obj_align(wifi, LV_ALIGN_CENTER, POLAR(77, 90));          // Bottom
+    lv_obj_align(bluetooth, LV_ALIGN_CENTER, POLAR(77, 90));     // Bottom
     lv_obj_align(rotate, LV_ALIGN_CENTER, POLAR(77, 30));        // Bottom Right
     lv_obj_align(restart, LV_ALIGN_CENTER, 0, 0);                // Center
 

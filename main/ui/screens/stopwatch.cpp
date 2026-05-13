@@ -64,9 +64,9 @@ lv_obj_t *stopwatch_create(lv_obj_t *parent)
     lv_obj_align(btn, LV_ALIGN_CENTER, -34, 50);
     lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
 
-    lv_obj_t *playicon = lv_label_create(btn);
-    SET_SYMBOL_32(playicon, FA_PLAY);
-    lv_obj_center(playicon);
+    lv_obj_t *resumeicon = lv_label_create(btn);
+    SET_SYMBOL_32(resumeicon, FA_PLAY);
+    lv_obj_center(resumeicon);
 
     lv_obj_t *reset = lv_button_create(scr);
     lv_obj_set_size(reset, 60, 60);
@@ -100,14 +100,14 @@ lv_obj_t *stopwatch_create(lv_obj_t *parent)
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PAUSE);
                             }
                             watch.chrono.stopwatchrunning = !watch.chrono.stopwatchrunning;
-                            update_stopwatch_label(); }, LV_EVENT_CLICKED, playicon);
+                            update_stopwatch_label(); }, LV_EVENT_CLICKED, resumeicon);
 
     lv_obj_add_event_cb(reset, [](lv_event_t *e)
                         {
                                 watch.chrono.stopwatchrunning = false;
                                 watch.chrono.stopwatchstarttime = 0;
                                 update_stopwatch_label(); 
-                                SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, playicon);
+                                SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, resumeicon);
 
     lv_obj_add_event_cb(btn, [](lv_event_t *e)
                         { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);

@@ -11,6 +11,20 @@ Watch watch;
 
 uint16_t prevBrightness = 100;
 
+// Touch INT (GPIO5) edge ISR: set by the kernel when the CST816S pulls
+// INT low for a touch event. Cleared by pm_update once consumed.
+static volatile bool touch_interrupt = false;
+
+static void IRAM_ATTR touch_isr(void *arg)
+{
+    touch_interrupt = true;
+    // Mask further IRQs on this pin until pm_update has read the touch
+    // data (which clears INT on the CST816S). With the level-low wake
+    // source still armed alongside, an un-cleared INT would otherwise
+    // re-fire constantly.
+    gpio_intr_disable(GPIO_NUM_5);
+}
+
 /** Update power management and sleep logic */
 void Watch::pm_update()
 {
@@ -34,18 +48,23 @@ void Watch::pm_update()
         }
         else
         {
-            if (display.is_touching())
+            // The GPIO5 ISR latches touch_interrupt on the falling edge of
+            // touch INT, even for taps shorter than the poll period. Trust
+            // it as the source of truth — by the time we get here the
+            // finger may already be lifted (so display.is_touching() would
+            // return false), but we still want to wake because a touch
+            // happened.
+            if (touch_interrupt)
             {
+                touch_interrupt = false;
                 wakeup();
-            }
-            else if (abs(gyro_read().x) > 450)
-            {
-                wakeup();
-                this->sleep_time = (esp_timer_get_time() / 1000) - 10000;
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // 200 ms while sleeping is a compromise: long enough that I²C wakes
+        // don't dominate average current, short enough that touch/tilt wake
+        // feels reasonably responsive.
+        vTaskDelay(pdMS_TO_TICKS(this->sleeping ? 100 : 50));
     }
 }
 
@@ -68,9 +87,45 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
         // make sure the display hasn't been touched while the display was fading off
         if (goingtosleep)
         {
-            display.sleep();
+            // Backlight is now fully off — dismiss any notification popup
+            // with no animation so the screen swap is invisible. Doing
+            // this before display.sleep() means lv_screen_active() is the
+            // pre-popup screen when LVGL gets suspended.
+            notification_popup_dismiss_now();
 
-            // enable touchscreen to wake the device
+            // Drop any side screen (alarm editor, alarm ring, etc.) and
+            // park on main_screen with no animation before LVGL is
+            // suspended. Leaving e.g. setalarmscr active meant the user
+            // would wake to a half-faded screen because the fade-in
+            // anim that loaded it was paused mid-flight by sleep —
+            // resuming it on wake also tripped a draw-buffer alloc.
+            if (lvgl_port_lock(0))
+            {
+                if (lv_screen_active() != main_screen)
+                    lv_screen_load_anim(main_screen,
+                                        LV_SCREEN_LOAD_ANIM_NONE, 0, 0, false);
+                // Clear any animations still in flight on the just-loaded
+                // screen (e.g. a half-completed fade-in) so nothing
+                // continues drawing once LVGL resumes on wake.
+                lv_anim_delete_all();
+                lvgl_port_unlock();
+            }
+
+            display.sleep();
+            imu_sleep();
+
+            // Drain any latched CST816S INT before arming wake sources, so
+            // GPIO5 starts in its idle (high) state — otherwise a leftover
+            // low level rejects sleep entry immediately.
+            display.reset_touch();
+
+            // Arm GPIO5 both as a level-low light-sleep wake source (so a
+            // touch wakes the chip from deep light sleep within μs) and as
+            // a regular neg-edge ISR (so even a sub-poll-period blip is
+            // latched into touch_interrupt and serviced by the next
+            // pm_update iteration).
+            touch_interrupt = false;
+            gpio_intr_enable(GPIO_NUM_5);
             esp_sleep_enable_gpio_wakeup();
             gpio_wakeup_enable(GPIO_NUM_5, GPIO_INTR_LOW_LEVEL);
 
@@ -102,8 +157,22 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 
         wakeup_in_progress = true; // Set guard
 
+        // Disarm the touch wake source and ISR — pm_update polling will
+        // service touches normally during awake state via lvgl_touch_read.
+        gpio_wakeup_disable(GPIO_NUM_5);
+        gpio_intr_disable(GPIO_NUM_5);
+        touch_interrupt = false;
+
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
+
+        imu_wake();
+
+        // Resume the LVGL task before any lvgl_port_lock attempt below —
+        // if the task got suspended in display.sleep() while it happened
+        // to hold the mutex, lvgl_port_lock would otherwise deadlock.
+        TaskHandle_t lvgl_task = xTaskGetHandle("taskLVGL");
+        if (lvgl_task) vTaskResume(lvgl_task);
 
         auto diff = esp_timer_get_time() / 1000 - sleep_time;
 
@@ -126,8 +195,30 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
 
         display.set_rotation(lv_display_get_rotation(NULL));
 
-        // update display before turning on backlight
-        // display.refresh();
+        // If a notification arrived while we were asleep (which is what
+        // triggered this wake in the common case), present it as the
+        // active screen *before* anything renders — that way the first
+        // frame painted with the backlight off is the popup itself, and
+        // when the backlight comes on the user sees it directly without
+        // a flash of the watch face underneath.
+        if (lvgl_port_lock(0))
+        {
+            notification_popup_present_now();
+            lvgl_port_unlock();
+        }
+
+        // The panel's VRAM is undefined coming back from disp_off — and
+        // even if it were preserved, LVGL won't issue any draw operations
+        // unless something is dirty. Invalidate the active screen and
+        // force an immediate render so we don't wait up to 500 ms for the
+        // LVGL task's next loop iteration to pick it up.
+        if (lvgl_port_lock(0))
+        {
+            lv_obj_t *active = lv_screen_active();
+            if (active) lv_obj_invalidate(active);
+            lv_refr_now(NULL);
+            lvgl_port_unlock();
+        }
 
         display.set_backlight(prevBrightness);
 
@@ -157,11 +248,16 @@ void Watch::pm_init()
     esp_pm_lock_acquire(pm_freq_lock);
     esp_pm_lock_acquire(pm_sleep_lock);
 
+    // pm task runs Watch::sleep()/Watch::wakeup() inline — both touch
+    // LVGL (lvgl_port_stop/lock, screen-active checks, lv_refr_now on
+    // wake) which can use a fair chunk of stack on screens with deep
+    // widget trees (the alarms screen with its arc + scale + several
+    // labels was overflowing the previous 6 KB on a sleep transition).
     xTaskCreatePinnedToCore([](void *pvParameters)
                             {
                                 auto *obj = static_cast<Watch *>(pvParameters);
                                 obj->pm_update(); },
-                            "pm", 1024 * 6, this, 0, &pm_task, 0);
+                            "pm", 1024 * 12, this, 0, &pm_task, 0);
 }
 
 #define I2C_MASTER_NUM I2C_NUM_0
@@ -220,11 +316,25 @@ void Watch::init()
 
     display.init(i2c_bus);
 
+    // Touch INT GPIO ISR — latches touch_interrupt=true on every neg-edge.
+    // Configured here (not in display.init) because the GPIO pin is also
+    // used as a light-sleep wake source by Watch::sleep(). gpio_intr_enable
+    // is left off until sleep entry.
+    gpio_config_t touch_int_cfg = {};
+    touch_int_cfg.pin_bit_mask = 1ULL << GPIO_NUM_5;
+    touch_int_cfg.mode = GPIO_MODE_INPUT;
+    touch_int_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+    touch_int_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    touch_int_cfg.intr_type = GPIO_INTR_NEGEDGE;
+    gpio_config(&touch_int_cfg);
+    gpio_isr_handler_add(GPIO_NUM_5, touch_isr, NULL);
+    gpio_intr_disable(GPIO_NUM_5);
+
     // display.refresh();
 
     display.set_backlight(100);
 
-    wifi.init();
+    ble.init();
 
     haptic_play(false, 80, 80, 80, 80, 80, 0); // vibrate 3 times
 

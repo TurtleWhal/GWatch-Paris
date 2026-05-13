@@ -39,9 +39,23 @@ lv_obj_t *apps_screen_create(lv_obj_t *parent);
 
 lv_obj_t *stopwatch_create(lv_obj_t *parent);
 lv_obj_t *timerscr_create(lv_obj_t *parent);
+lv_obj_t *alarmscr_create(lv_obj_t *parent);
 lv_obj_t *imu_screen_create(lv_obj_t *parent);
 lv_obj_t *calculator_create(lv_obj_t *parent);
 lv_obj_t *dice_create(lv_obj_t *parent);
 lv_obj_t *schedule_screen_create(lv_obj_t *parent);
+lv_obj_t *notifications_screen_create(lv_obj_t *parent);
+lv_obj_t *music_create(lv_obj_t *parent);
+
+// Show the latest pending notification (if any) as the active screen with
+// no animation. Call from Watch::wakeup() before the backlight comes on so
+// the user never sees a frame of the underlying screen when a notification
+// triggered the wake.
+void notification_popup_present_now();
+
+// Dismiss any active popup with no animation. Call from Watch::sleep()
+// after the backlight has fully faded so the popup→prev-screen transition
+// happens entirely off-screen.
+void notification_popup_dismiss_now();
 
 lv_obj_t *debugscreen_create();

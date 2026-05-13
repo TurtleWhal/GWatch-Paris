@@ -51,7 +51,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     lv_obj_align(minutescale, LV_ALIGN_LEFT_MID, 30 - (164 / 2), 0);
     lv_obj_set_style_arc_width(minutescale, 0, 0);
 
-    lv_scale_set_angle_range(minutescale, 360);
+    lv_scale_set_angle_range(minutescale, 354);
     lv_scale_set_rotation(minutescale, 0);
     lv_scale_set_range(minutescale, 0, 60);
     lv_scale_set_label_show(minutescale, true);
@@ -80,7 +80,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     lv_obj_align(secondscale, LV_ALIGN_LEFT_MID, 30 - (234 / 2), 0);
     lv_obj_set_style_arc_width(secondscale, 0, 0);
 
-    lv_scale_set_angle_range(secondscale, 360);
+    lv_scale_set_angle_range(secondscale, 354);
     lv_scale_set_rotation(secondscale, 0);
     lv_scale_set_range(secondscale, 0, 60);
     lv_scale_set_label_show(secondscale, true);
@@ -186,9 +186,9 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     /* Battery */
     battery = create_valuearc(scr, accent, FA_BATTERY);
     lv_obj_align(battery, LV_ALIGN_RIGHT_MID, -40, 68);
-    lv_arc_set_range(battery, 2200, 3600);
-    lv_arc_set_value(battery, 3200);
-    lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%d", 3700);
+    lv_arc_set_range(battery, 0, 100);
+    lv_arc_set_value(battery, 100);
+    lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"), "%d%%", 100);
 
     wifiicon = lv_label_create(scr);
     // lv_obj_set_pos(wifiicon, POLAR(120, 90));
@@ -260,28 +260,23 @@ void rotarywatch_update()
         last_month = t.tm_mon + 1;
     }
 
-    /* Battery (assume sysinfo.bat is still valid) */
-    lv_arc_set_value(battery, watch.battery.voltage);
+    /* Battery */
+    lv_arc_set_value(battery, watch.battery.percent);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(battery, "text"),
-                          "%d", watch.battery.voltage);
+                          "%d%%", watch.battery.percent);
 
     lv_arc_set_value(steps, watch.imu.steps);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(steps, "text"),
                           "%ld", watch.imu.steps);
 
-    switch (watch.wifi.status)
+    if (ble.connected())
     {
-    case WIFI_CONNECTED:
-        SET_SYMBOL_14(wifiicon, FA_WIFI);
+        SET_SYMBOL_14(wifiicon, FA_BLUETOOTH);
         lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
-    case WIFI_CONNECTING:
-        SET_SYMBOL_14(wifiicon, FA_CONNECTING);
-        lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
-    case WIFI_DISCONNECTED:
+    }
+    else
+    {
         lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
     }
 
     SET_SYMBOL_14(lv_obj_get_child_by_name(battery, "icon"),

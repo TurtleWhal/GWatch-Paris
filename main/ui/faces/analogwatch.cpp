@@ -103,7 +103,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
 
     battery = lv_label_create(infobox);
     lv_obj_set_style_text_font(battery, &ProductSansRegular_16, 0);
-    lv_label_set_text_fmt(battery, "%1.3fV", 1.234);
+    lv_label_set_text_fmt(battery, "%d%%", 100);
 
     lv_obj_t *stepicon = lv_label_create(infobox);
     SET_SYMBOL_16(stepicon, FA_STEPS);
@@ -222,24 +222,13 @@ void analogwatch_update()
         }
     }
 
-    lv_label_set_text_fmt(battery, "%1.3fV", watch.battery.voltage / 1000.0);
+    lv_label_set_text_fmt(battery, "%d%%", watch.battery.percent);
 
     lv_label_set_text_fmt(steps, "%ld", watch.imu.steps);
 
-    switch (watch.wifi.status)
     {
-    case WIFI_CONNECTED:
-        SET_SYMBOL_14(wifiicon, FA_WIFI);
-        // lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
-    case WIFI_CONNECTING:
-        SET_SYMBOL_14(wifiicon, FA_CONNECTING);
-        // lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
-    case WIFI_DISCONNECTED:
-        SET_SYMBOL_14(wifiicon, "");
-        // lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
+        const char *icon = ble.connected() ? FA_BLUETOOTH : "";
+        SET_SYMBOL_14(wifiicon, icon);
     }
 
     SET_SYMBOL_16(baticon,
