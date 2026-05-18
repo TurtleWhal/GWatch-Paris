@@ -40,7 +40,6 @@ static lv_point_precise_t minute_hand_points[] = {
 
 lv_obj_t *analogwatch_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
@@ -63,6 +62,8 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_obj_remove_style(timerarc, NULL, LV_PART_KNOB);
     lv_obj_add_flag(timerarc, LV_OBJ_FLAG_ADV_HITTEST);
 
+    lv_obj_set_style_line_rounded(timerarc, true, 0);
+
     schedulelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(schedulelabel, &ProductSansRegular_16, 0);
     lv_obj_align(schedulelabel, LV_ALIGN_CENTER, 0, -70);
@@ -71,7 +72,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     datelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(datelabel, &ProductSansBold_20, 0);
     lv_obj_align(datelabel, LV_ALIGN_CENTER, 0, -48);
-    lv_obj_set_style_text_color(datelabel, accent, 0);
+    lv_obj_add_style(datelabel, &accent_text_style, 0);
 
     // Center digital time label
     time_label = lv_label_create(scr);
@@ -127,7 +128,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_obj_set_style_radius(hourhand, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(hourhand, 0, 0);
     lv_obj_set_style_border_width(hourhand, 2, 0);
-    lv_obj_set_style_border_color(hourhand, accent, 0);
+    lv_obj_add_style(hourhand, &accent_border_style, 0);
 
     lv_obj_set_scroll_dir(hourhand, LV_DIR_NONE);
 

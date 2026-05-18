@@ -20,7 +20,6 @@ lv_obj_t *wifiicon;
 
 lv_obj_t *timescreen_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
@@ -29,7 +28,7 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
     datelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(datelabel, &ProductSansBold_20, 0);
     lv_obj_align(datelabel, LV_ALIGN_CENTER, 0, -48);
-    lv_obj_set_style_text_color(datelabel, accent, 0);
+    lv_obj_add_style(datelabel, &accent_text_style, 0);
 
     lv_obj_t *timebox = lv_obj_create(scr);
     lv_obj_set_style_bg_opa(timebox, 0, 0);
@@ -51,7 +50,9 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
 
     secondslabel = lv_label_create(timebox);
     lv_obj_set_style_text_font(secondslabel, &SirinStencil_32, 0);
-    lv_obj_set_style_text_color(secondslabel, accent, 0);
+    // (Accent assignment lived here originally but was immediately
+    // overridden by the gray below — the secondslabel is effectively
+    // always gray. Keeping just the gray.)
     lv_obj_set_style_text_color(secondslabel, lv_color_hex(0x999999), 0);
     lv_obj_set_style_text_line_space(secondslabel, 6, 0);
 

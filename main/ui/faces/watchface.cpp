@@ -33,8 +33,6 @@ void watchface_update()
 
 lv_obj_t *watchface_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
-    lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     // lv_obj_t *scr = create_screen(parent);
     // lv_obj_set_scroll_dir(scr, LV_DIR_NONE);

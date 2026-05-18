@@ -5,6 +5,42 @@ lv_obj_t *ver_layer;
 lv_obj_t *hor_layer;
 lv_obj_t *lower_layer;
 
+// RAM wrappers around the generated `const lv_font_t` fonts in flash.
+// LVGL's fallback chain is a per-font field; the generator emits the
+// originals into .rodata so we can't write to them — instead we copy
+// the structs into RAM at boot and patch in NotoEmoji as the fallback.
+// Call sites that render user-supplied text (notifications, music
+// metadata) use these wrappers so emoji codepoints fall through to
+// NotoEmoji instead of dropping out as missing-glyph boxes.
+lv_font_t ProductSansBold_30_emoji;
+lv_font_t ProductSansBold_24_emoji;
+lv_font_t ProductSansRegular_20_emoji;
+lv_font_t ProductSansBold_16_emoji;
+lv_font_t ProductSansRegular_14_emoji;
+
+// Shared accent styles. Every widget that wants the theme primary color
+// attaches one of these via lv_obj_add_style instead of capturing the
+// color value into a local style. apply_accent_color() mutates the one
+// property each style holds and calls lv_obj_report_style_change so
+// every attached widget repaints — that's what makes the swatch picker
+// in the settings screen update the UI live.
+//
+// Each lv_style_t holds *one* value per property; widgets that need the
+// accent in a non-DEFAULT state (e.g. the quick-settings buttons whose
+// CHECKED bg is the accent) attach with the appropriate selector.
+lv_style_t accent_bg_style;
+lv_style_t accent_text_style;
+lv_style_t accent_border_style;
+lv_style_t accent_line_style;
+lv_style_t accent_arc_indicator_style;
+
+// Current accent as a raw color. Used by a handful of toggle-style call
+// sites (alarm AM/PM, hourbox vs minutebox focus border) that pick
+// between accent and a neutral gray dynamically — those can't use the
+// shared style because they need to swap colors at click time. Kept in
+// sync with the styles by apply_accent_color().
+lv_color_t g_accent_color;
+
 lv_obj_t *create_screen(lv_obj_t *parent)
 {
     lv_obj_t *scr = lv_obj_create(parent);
@@ -21,7 +57,7 @@ lv_obj_t *create_screen(lv_obj_t *parent)
     return scr;
 }
 
-lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol)
+lv_obj_t *create_valuearc(lv_obj_t *parent, const char *symbol)
 {
     lv_obj_t *arc = lv_arc_create(parent);
     lv_obj_set_size(arc, 60, 60);
@@ -30,8 +66,9 @@ lv_obj_t *create_valuearc(lv_obj_t *parent, lv_color_t color, char *symbol)
     lv_obj_set_style_arc_color(arc, lv_color_hex(0x333333), 0);
     lv_obj_set_style_arc_width(arc, 8, 0);
 
-    /* Indicator arc */
-    lv_obj_set_style_arc_color(arc, color, LV_PART_INDICATOR);
+    /* Indicator arc — accent color via the shared style so it tracks
+       the user's theme selection live. */
+    lv_obj_add_style(arc, &accent_arc_indicator_style, LV_PART_INDICATOR);
     lv_obj_set_style_arc_width(arc, 8, LV_PART_INDICATOR);
 
     /* Knob invisible */
@@ -168,18 +205,61 @@ void screen_scroll_highlight_event_cb(lv_event_t *e)
 lv_obj_t *watchscr;  // invisible layer to show watch face
 lv_obj_t *watchface; // actual watch face
 
+// Push a new accent color into all shared styles and trigger a repaint
+// of every widget that has any of them attached. Safe to call any time
+// after ui_init has run (which is what lv_style_init's the structs).
+void apply_accent_color(lv_color_t c)
+{
+    g_accent_color = c;
+    lv_style_set_bg_color(&accent_bg_style, c);
+    lv_style_set_text_color(&accent_text_style, c);
+    lv_style_set_border_color(&accent_border_style, c);
+    lv_style_set_line_color(&accent_line_style, c);
+    lv_style_set_arc_color(&accent_arc_indicator_style, c);
+
+    // NULL → refresh anything that uses any style. Cheaper than walking
+    // each style individually since changing the theme color touches
+    // every screen anyway, and report-change only marks dirty regions
+    // it can prove are stale.
+    lv_obj_report_style_change(NULL);
+}
+
 void Display::ui_init()
 {
+    ProductSansBold_30_emoji = ProductSansBold_30;
+    ProductSansBold_30_emoji.fallback = &NotoEmojiRegular_20;
+    ProductSansBold_24_emoji = ProductSansBold_24;
+    ProductSansBold_24_emoji.fallback = &NotoEmojiRegular_20;
+    ProductSansRegular_20_emoji = ProductSansRegular_20;
+    ProductSansRegular_20_emoji.fallback = &NotoEmojiRegular_20;
+    ProductSansBold_16_emoji = ProductSansBold_16;
+    ProductSansBold_16_emoji.fallback = &NotoEmojiRegular_16;
+    ProductSansRegular_14_emoji = ProductSansRegular_14;
+    ProductSansRegular_14_emoji.fallback = &NotoEmojiRegular_16;
+
+
+    // Primary color comes from the persisted "theme_color" setting; the
+    // palette table lives in screens/debug.cpp so the settings screen
+    // and the boot path agree on the index→color mapping.
     // https://vuetifyjs.com/en/styles/colors/#material-colors
+    uint8_t saved_color = watch.settings.readUint8("theme_color", 0);
+    lv_color_t accent = settings_color_at(saved_color);
     lv_theme_t *th = lv_theme_default_init(lv_display_get_default(),
-                                              lv_color_hex(0x03A9F4), // Blue
-                                           //    lv_color_hex(0xFF9800), // Orange
-                                            //   lv_color_hex(0xE040FB), // Purple
-                                           //    lv_color_hex(0x009688), // Turquoise
-                                        //    lv_color_hex(0xF44336), // Red
+                                           accent,
                                            lv_color_hex(0x607D8B),
                                            true, /* Dark theme?  False = light theme. */
                                            &ProductSansRegular_14);
+
+    // Initialise the shared accent styles up-front, before any screens
+    // get built. Widgets created during ui_init attach these styles and
+    // pick up later color changes automatically via the report-change
+    // refresh in apply_accent_color.
+    lv_style_init(&accent_bg_style);
+    lv_style_init(&accent_text_style);
+    lv_style_init(&accent_border_style);
+    lv_style_init(&accent_line_style);
+    lv_style_init(&accent_arc_indicator_style);
+    apply_accent_color(accent);
 
     lv_display_set_theme(lv_display_get_default(), th); /* Assign theme to display */
 
@@ -258,8 +338,8 @@ void Display::ui_init()
     lv_obj_t *notifications = notifications_screen_create(lower_layer);
     lv_obj_set_style_bg_opa(notifications, 0, 0);
 
-    // lv_obj_t *music = music_create(lower_layer);
-    // lv_obj_set_style_bg_opa(music, 0, 0);
+    lv_obj_t *music = music_create(lower_layer);
+    lv_obj_set_style_bg_opa(music, 0, 0);
 
     static ScrollEventData scroll_dataB = {lower_layer, LV_DIR_BOTTOM};
     lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataB);
@@ -316,6 +396,8 @@ void Display::ui_init()
             lv_obj_set_scroll_dir(ver_layer, LV_DIR_NONE);
         } }, LV_EVENT_SCROLL, watchscr);
 
+    // create_app(appsscreen, FA_KEYBOARD, "Keyboard", draw_create(NULL), true);
+
     create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
     create_app(appsscreen, FA_TIMER, "Timer", timer);
     create_app(appsscreen, FA_ALARM, "Alarm", alarm);
@@ -348,14 +430,14 @@ void Display::ui_init()
 
     create_app(appsscreen, FA_DICE, "Dice", dice_create(NULL), true);
 
-    lv_obj_t *debug = debugscreen_create();
-    create_app(appsscreen, FA_BUG, "Debug", debug, true);
-
-    create_app(appsscreen, FA_SETTINGS, "Settings");
+    lv_obj_t *settings = settingsscreen_create();
+    create_app(appsscreen, FA_SETTINGS, "Settings", settings, true);
 
     create_app(appsscreen, FA_METRONOME, "Metronome");
 
     lv_screen_load(main_screen);
 
     lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
+
+    // lv_screen_load(draw_create(NULL));
 }

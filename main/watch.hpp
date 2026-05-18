@@ -78,10 +78,29 @@ public:
 
     bool donotdisturb = false;
 
+    // While `esp_timer_get_time()/1000 < prevent_sleep_until_ms` the pm
+    // task skips its idle-sleep check. Set this as a deadline (e.g. a
+    // 60-second hold from "now") to keep the watch awake regardless of
+    // touch activity.
+    int64_t prevent_sleep_until_ms = 0;
+
+    // When true, Watch::sleep() leaves lv_screen_active() alone
+    // instead of swapping it back to main_screen. Used by the alarm /
+    // timer ring screens so that after they auto-stop the watch goes
+    // to sleep but stays *on* the ring screen — when the user wakes
+    // it they see the alarm/timer that fired.
+    bool preserve_screen_on_sleep = false;
+
     void init();
 
     void sleep();
     void wakeup();
+
+    // Trip the pm idle check on the next pm_task iteration. Used by the
+    // alarm/timer ring screens once their stay-awake hold has elapsed —
+    // calling sleep() directly from the LVGL task would block LVGL for
+    // the full backlight-fade window, so we hand off to the pm task.
+    void request_sleep();
 };
 
 extern Watch watch;

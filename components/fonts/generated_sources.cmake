@@ -9,6 +9,8 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_48.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_46.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/NotoEmojiRegular_16.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/NotoEmojiRegular_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_24.c

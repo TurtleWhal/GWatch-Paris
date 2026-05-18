@@ -2,6 +2,9 @@
 
 #include <string>
 
+lv_obj_t *musicscr;  // Music screen container (child of lower_layer).
+                     // Exposed so wake-time logic can detect when the
+                     // user was on this screen vs. notifications.
 lv_obj_t *songlbl;
 lv_obj_t *artistlbl;
 lv_obj_t *albumlbl;
@@ -15,6 +18,18 @@ lv_obj_t *prevbtn;
 lv_obj_t *nextbtn;
 
 lv_obj_t *playicon;
+lv_obj_t *albumart;      // lv_image, hidden until album art lands
+lv_obj_t *albumart_box;  // 240×240 circle-clip parent for albumart
+
+// Shadow twin labels. LVGL labels don't have a glyph-shaped shadow
+// style, so we render each visible label twice: once in semi-
+// transparent black offset 1 px down-right (created first, so behind),
+// then the real label on top. Keeps text legible over light album art.
+lv_obj_t *songlbl_sh;
+lv_obj_t *artistlbl_sh;
+lv_obj_t *albumlbl_sh;
+lv_obj_t *duration_sh;
+lv_obj_t *position_sh;
 
 // Anchor for local interpolation of the position bar between phone
 // updates. When the phone re-reports position_s (changes value), we
@@ -30,6 +45,23 @@ static std::string s_last_artist;
 static std::string s_last_album;
 static std::string s_last_state;
 
+// Track which album art is currently bound to the lv_image descriptor.
+// Comparing the underlying buffer pointer is enough — the album art
+// vector only ever gets fully replaced on a new image transfer.
+static const uint8_t *s_last_album_art_data = nullptr;
+static uint16_t s_last_album_art_w = 0;
+
+// Mirror a label's text onto its shadow twin, so the rendered shadow
+// stays in sync as the main label's content changes. No-op if either
+// pointer is null.
+static void set_label_pair(lv_obj_t *lbl, lv_obj_t *shadow, const char *text)
+{
+    if (shadow)
+        lv_label_set_text(shadow, text);
+    if (lbl)
+        lv_label_set_text(lbl, text);
+}
+
 static void format_time(char *buf, size_t n, int32_t seconds)
 {
     if (seconds < 0)
@@ -41,6 +73,12 @@ static void format_time(char *buf, size_t n, int32_t seconds)
 
 void music_update(lv_timer_t *)
 {
+    // NOTE: do NOT promote pending album art before reading the track
+    // field below. If we did, the track-change branch would run AFTER
+    // the promote and clear the freshly-installed image — exactly the
+    // "loaded then cleared on wake" bug. We promote AFTER the
+    // track-change clear instead, so the order is: read state →
+    // (track changed? clear old art) → install new art → rebind.
     const MusicState &m = ble.music();
 
     // Track/artist/album labels — only set when changed so the scroll
@@ -48,17 +86,35 @@ void music_update(lv_timer_t *)
     if (m.track != s_last_track)
     {
         s_last_track = m.track;
-        lv_label_set_text(songlbl, m.track.empty() ? "" : m.track.c_str());
+        set_label_pair(songlbl, songlbl_sh,
+                       m.track.empty() ? "" : m.track.c_str());
+
+        // Drop the previous song's album art so we don't keep
+        // showing it while waiting for the new song's image_kind=0x01
+        // transfer. PSRAM is freed by the move-assign inside
+        // set_album_art(). Must happen BEFORE promote_pending_album_art
+        // below — otherwise we'd wipe a freshly-promoted image.
+        if (!m.album_art.empty())
+            ble.set_album_art(PsramByteVec{}, 0, 0);
     }
+
+    // Now that the track-change clear has run, install any image the
+    // BLE side staged. This is what makes "image received during
+    // sleep" land on the screen on wake: the staged buffer survives
+    // the clear above because it lives in s_pending_album_art, not in
+    // music_state, until this call.
+    ble.promote_pending_album_art();
     if (m.artist != s_last_artist)
     {
         s_last_artist = m.artist;
-        lv_label_set_text(artistlbl, m.artist.empty() ? "" : m.artist.c_str());
+        set_label_pair(artistlbl, artistlbl_sh,
+                       m.artist.empty() ? "" : m.artist.c_str());
     }
     if (m.album != s_last_album)
     {
         s_last_album = m.album;
-        lv_label_set_text(albumlbl, m.album.empty() ? "" : m.album.c_str());
+        set_label_pair(albumlbl, albumlbl_sh,
+                       m.album.empty() ? "" : m.album.c_str());
     }
 
     // Duration / slider range — also only on change. lv_slider's range
@@ -70,7 +126,7 @@ void music_update(lv_timer_t *)
                             (m.duration_s > 0) ? m.duration_s : 1);
         char buf[16];
         format_time(buf, sizeof(buf), m.duration_s);
-        lv_label_set_text(duration, buf);
+        set_label_pair(duration, duration_sh, buf);
     }
 
     // Phone re-reported the position — rebase the local clock so the
@@ -94,7 +150,7 @@ void music_update(lv_timer_t *)
 
     char buf[16];
     format_time(buf, sizeof(buf), pos);
-    lv_label_set_text(position, buf);
+    set_label_pair(position, position_sh, buf);
     lv_slider_set_value(playbackbar,
                         (m.duration_s > 0) ? pos : 0, LV_ANIM_OFF);
 
@@ -113,25 +169,115 @@ void music_update(lv_timer_t *)
             SET_SYMBOL_48(playicon, FA_PLAY);
         }
     }
+
+    // Album art — show / re-bind the image descriptor when the
+    // underlying buffer changes, hide via the container when cleared.
+    if (albumart_box)
+    {
+        bool has_art = !m.album_art.empty() && m.album_art_w > 0 &&
+                       m.album_art_h > 0;
+        if (has_art && m.album_art.data() != s_last_album_art_data)
+        {
+            s_last_album_art_data = m.album_art.data();
+            s_last_album_art_w = m.album_art_w;
+            static lv_image_dsc_t art_dsc;
+            art_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+            art_dsc.header.w = m.album_art_w;
+            art_dsc.header.h = m.album_art_h;
+            art_dsc.header.stride = m.album_art_w * 2;
+            art_dsc.data_size = m.album_art.size();
+            art_dsc.data = m.album_art.data();
+            lv_image_set_src(albumart, &art_dsc);
+            // Pivot at the source's centre so the scaled output stays
+            // centered on the lv_image. With the lv_image centered in
+            // the 240×240 container (lv_obj_center below), the
+            // rendered content lands centered on the screen.
+            lv_image_set_pivot(albumart,
+                               m.album_art_w / 2, m.album_art_h / 2);
+            lv_image_set_scale(albumart, 256 * 240 / m.album_art_w);
+            lv_obj_center(albumart);
+            lv_obj_set_flag(albumart_box, LV_OBJ_FLAG_HIDDEN, false);
+        }
+        else if (!has_art && s_last_album_art_data)
+        {
+            s_last_album_art_data = nullptr;
+            s_last_album_art_w = 0;
+            lv_obj_set_flag(albumart_box, LV_OBJ_FLAG_HIDDEN, true);
+        }
+    }
 }
 
 lv_obj_t *music_create(lv_obj_t *parent)
 {
     lv_obj_t *scr = create_screen(parent);
+    musicscr = scr;
 
+    // Album-art background: a 240×240 circle-clip container with the
+    // lv_image inside. Created before everything else so it sits at
+    // the back; labels and buttons draw on top.
+    //
+    // The container does the round clip in software (panel is round
+    // too, but doing it here means the clip is correct even if the
+    // panel mask ever changes). The lv_image keeps its natural source
+    // size — lv_image_set_src would reset any explicit size anyway —
+    // and is centered inside the container via lv_obj_center plus a
+    // pivot at the source's centre so scaling expands outward from
+    // the middle and the rendered content stays centred on the screen.
+    albumart_box = lv_obj_create(scr);
+    lv_obj_set_size(albumart_box, 240, 240);
+    lv_obj_align(albumart_box, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_radius(albumart_box, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_clip_corner(albumart_box, true, 0);
+    lv_obj_set_style_border_width(albumart_box, 0, 0);
+    lv_obj_set_style_pad_all(albumart_box, 0, 0);
+    lv_obj_set_style_bg_opa(albumart_box, 0, 0);
+    lv_obj_set_scrollbar_mode(albumart_box, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_flag(albumart_box, LV_OBJ_FLAG_SCROLLABLE, false);
+    lv_obj_set_flag(albumart_box, LV_OBJ_FLAG_HIDDEN, true);
+
+    albumart = lv_image_create(albumart_box);
+
+    // Helper: every shadow label is the same shape as its real label
+    // but 1 px down-right with semi-transparent black ink. Created
+    // before the real label so it's behind in the screen's child list
+    // (which is also z-order).
+    auto shadow_for = [&](const lv_font_t *font, int x, int y,
+                          lv_align_t align,
+                          lv_label_long_mode_t mode,
+                          int w, int h,
+                          lv_text_align_t text_align = LV_TEXT_ALIGN_AUTO) {
+        lv_obj_t *l = lv_label_create(scr);
+        lv_obj_set_style_text_font(l, font, 0);
+        lv_obj_set_style_text_color(l, lv_color_black(), 0);
+        lv_obj_set_style_text_opa(l, LV_OPA_70, 0);
+        lv_obj_align(l, align, x + 1, y + 1);
+        if (mode != (lv_label_long_mode_t)-1)
+            lv_label_set_long_mode(l, mode);
+        if (w || h)
+            lv_obj_set_size(l, w, h);
+        if (text_align != LV_TEXT_ALIGN_AUTO)
+            lv_obj_set_style_text_align(l, text_align, 0);
+        lv_label_set_text(l, "");
+        return l;
+    };
+
+    artistlbl_sh = shadow_for(&ProductSansBold_16_emoji, 0, -46, LV_ALIGN_CENTER,
+                              LV_LABEL_LONG_MODE_DOTS, 210, 20);
     artistlbl = lv_label_create(scr);
-    lv_obj_set_style_text_font(artistlbl, &ProductSansBold_16, 0);
+    lv_obj_set_style_text_font(artistlbl, &ProductSansBold_16_emoji, 0);
     lv_obj_align(artistlbl, LV_ALIGN_CENTER, 0, -46);
     lv_label_set_text(artistlbl, "");
     lv_obj_set_size(artistlbl, 210, 20);
     lv_label_set_long_mode(artistlbl, LV_LABEL_LONG_MODE_DOTS);
 
+    songlbl_sh = shadow_for(&ProductSansBold_30_emoji, 0, -22, LV_ALIGN_CENTER,
+                            LV_LABEL_LONG_MODE_SCROLL_CIRCULAR, 226, 38);
     songlbl = lv_label_create(scr);
-    lv_obj_set_style_text_font(songlbl, &ProductSansBold_30, 0);
+    lv_obj_set_style_text_font(songlbl, &ProductSansBold_30_emoji, 0);
     lv_obj_align(songlbl, LV_ALIGN_CENTER, 0, -22);
     lv_obj_set_size(songlbl, 226, 38);
     lv_label_set_long_mode(songlbl, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-    lv_label_set_text(songlbl, "—");
+    lv_label_set_text(songlbl, "");
 
     playbackbar = lv_slider_create(scr);
     lv_obj_set_size(playbackbar, 220, 5);
@@ -142,19 +288,29 @@ lv_obj_t *music_create(lv_obj_t *parent)
     lv_slider_set_range(playbackbar, 0, 1);
     lv_slider_set_value(playbackbar, 0, LV_ANIM_OFF);
 
+    position_sh = shadow_for(&ProductSansRegular_14, 10, 18, LV_ALIGN_LEFT_MID,
+                             (lv_label_long_mode_t)-1, 0, 0);
+    lv_label_set_text(position_sh, "0:00");
     position = lv_label_create(scr);
     lv_obj_set_style_text_font(position, &ProductSansRegular_14, 0);
     lv_obj_align(position, LV_ALIGN_LEFT_MID, 10, 18);
     lv_label_set_text(position, "0:00");
 
+    duration_sh = shadow_for(&ProductSansRegular_14, -10, 18, LV_ALIGN_RIGHT_MID,
+                             (lv_label_long_mode_t)-1, 0, 0,
+                             LV_TEXT_ALIGN_RIGHT);
+    lv_label_set_text(duration_sh, "0:00");
     duration = lv_label_create(scr);
     lv_obj_set_style_text_font(duration, &ProductSansRegular_14, 0);
     lv_obj_align(duration, LV_ALIGN_RIGHT_MID, -10, 18);
     lv_obj_set_style_text_align(duration, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(duration, "0:00");
 
+    albumlbl_sh = shadow_for(&ProductSansRegular_14_emoji, 0, 18, LV_ALIGN_CENTER,
+                             LV_LABEL_LONG_MODE_DOTS, 150, 16,
+                             LV_TEXT_ALIGN_CENTER);
     albumlbl = lv_label_create(scr);
-    lv_obj_set_style_text_font(albumlbl, &ProductSansRegular_14, 0);
+    lv_obj_set_style_text_font(albumlbl, &ProductSansRegular_14_emoji, 0);
     lv_obj_align(albumlbl, LV_ALIGN_CENTER, 0, 18);
     lv_obj_set_style_text_align(albumlbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_size(albumlbl, 150, 16);

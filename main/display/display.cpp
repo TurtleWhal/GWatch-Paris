@@ -311,7 +311,12 @@ void Display::init_graphics()
     lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
     port_cfg.task_affinity   = 1;     // pin LVGL to APP_CPU; PRO_CPU stays free for IRQs/wifi
     port_cfg.task_priority   = 4;
-    port_cfg.task_stack      = 8192;
+    // 8 KB ran out on the notifications list: deep snap-container tree
+    // plus 4+ scaled RGB565A8 icons rendered in one pass blew the stack.
+    // Render recursion + the alpha-blend + scale resampler each add a
+    // chunky frame, and the per-icon frames stack up before the
+    // recursion unwinds. 16 KB gives comfortable headroom.
+    port_cfg.task_stack      = 16384;
     port_cfg.timer_period_ms = 5;
     ESP_ERROR_CHECK(lvgl_port_init(&port_cfg));
 
@@ -337,8 +342,13 @@ void Display::init_graphics()
     lv_indev_set_display(indev, disp);
 
     // ui_init() touches LVGL objects; must be inside the lock.
+    // Rotation is loaded from NVS via the settings module — 90° is just
+    // the default for first boot. Reads happen before ui_init so the
+    // first frame paints at the user's chosen orientation.
     lvgl_port_lock(0);
-    set_rotation(LV_DISPLAY_ROTATION_90);
+    uint8_t saved_rot = watch.settings.readUint8("rotation", (uint8_t)LV_DISPLAY_ROTATION_90);
+    if (saved_rot > 3) saved_rot = LV_DISPLAY_ROTATION_90;
+    set_rotation((lv_display_rotation_t)saved_rot);
     ui_init();
     lvgl_port_unlock();
 }

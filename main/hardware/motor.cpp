@@ -127,6 +127,17 @@ static void haptic_task(void *pvParameters)
                 stop_pattern = true;
                 vTaskDelay(pdMS_TO_TICKS(50)); // Give time to stop
             }
+            else
+            {
+                // haptic_stop() flips stop_pattern unconditionally —
+                // including when the motor task is idle, in which case
+                // the flag is never cleared by haptic_play_pattern's
+                // end-of-pattern reset. Without this we'd start the
+                // new pattern with stop_pattern==true and abort on the
+                // first iteration of the inner for-loop. Clearing here
+                // gives a fresh slate every time a normal play arrives.
+                stop_pattern = false;
+            }
 
             // Play the pattern
             haptic_play_pattern(&cmd.pattern);

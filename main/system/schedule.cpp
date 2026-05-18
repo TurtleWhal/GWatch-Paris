@@ -19,7 +19,13 @@ const struct ScheduleEvent *Schedule::getCurrentSchedule()
         struct tm t;
         localtime_r(&tv.tv_sec, &t);
 
-        return schedules[static_cast<int>(defaultschedules[t.tm_wday])];
+        // defaultschedules[wday] is NONE on weekends — guard against
+        // it before indexing, otherwise schedules[255] reads ~10 KB
+        // past the array and getText hands snprintf an uninitialised
+        // event.text pointer. (Crashed every Saturday before this.)
+        ClassSchedule today = defaultschedules[t.tm_wday];
+        if (today == ClassSchedule::NONE) return nullptr;
+        return schedules[static_cast<int>(today)];
     }
     else
     {
@@ -92,6 +98,7 @@ const char *Schedule::getFullSchedule()
     buffer[0] = '\0';
 
     const struct ScheduleEvent *schedule = getCurrentSchedule();
+    if (schedule == nullptr) return strdup("");
 
     for (uint8_t i = 0; i < MAX_EVENTS; i++)
     {

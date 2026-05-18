@@ -18,6 +18,7 @@
   ],
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "idf.flashType": "UART",
+  "idf.flashBaudRate": "2000000",
   "files.associations": {
     "cstdint": "c",
     "spi_master.h": "c",

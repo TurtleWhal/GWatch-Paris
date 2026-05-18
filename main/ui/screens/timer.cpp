@@ -10,6 +10,19 @@ TaskHandle_t taskhandle;
 lv_obj_t *starticon;
 
 lv_obj_t *alarmscr;
+static lv_timer_t *timer_ring_auto_stop = nullptr; // one-shot, 60s
+
+// Mirror of alarm.cpp's auto-stop: silence the haptic, drop the
+// stay-awake hold, hand off to the pm task. The ring screen stays
+// active across sleep so the user sees that the timer fired when they
+// next wake the watch.
+static void timer_auto_stop_cb(lv_timer_t *t)
+{
+    haptic_stop();
+    timer_ring_auto_stop = nullptr;
+    lv_timer_delete(t);
+    watch.request_sleep();
+}
 
 void update_timer_label()
 {
@@ -60,6 +73,16 @@ void timer_update(lv_timer_t *timer)
         lv_screen_load_anim(alarmscr, LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
 
         haptic_play(true, 800, 800, 800, 800, 800, 2160, 0);
+
+        // Stay-awake hold for 60s, then auto-stop the haptic and sleep.
+        // The ring screen is preserved across sleep so the user wakes
+        // back onto it and knows the timer fired.
+        watch.prevent_sleep_until_ms = esp_timer_get_time() / 1000 + 60000;
+        watch.preserve_screen_on_sleep = true;
+        if (timer_ring_auto_stop)
+            lv_timer_delete(timer_ring_auto_stop);
+        timer_ring_auto_stop = lv_timer_create(timer_auto_stop_cb, 60000, NULL);
+        lv_timer_set_repeat_count(timer_ring_auto_stop, 1);
     }
 
     if (lv_obj_get_scroll_x(parent) > lv_obj_get_x(scr) - 240 && lv_obj_get_scroll_x(parent) < lv_obj_get_x(scr) + 240)
@@ -249,13 +272,23 @@ lv_obj_t *timerscr_create(lv_obj_t *parent)
 
     lv_obj_add_event_cb(stopbtn, [](lv_event_t *e)
                         {
+                                if (timer_ring_auto_stop) {
+                                    lv_timer_delete(timer_ring_auto_stop);
+                                    timer_ring_auto_stop = nullptr;
+                                }
+                                watch.prevent_sleep_until_ms = 0;
+                                watch.preserve_screen_on_sleep = false;
                                 haptic_stop();
                                 update_timer_label();
                                 lv_screen_load_anim(main_screen, LV_SCREEN_LOAD_ANIM_FADE_OUT, 100, 0, false); }, LV_EVENT_PRESSED, NULL);
 
     lv_timer_create(timer_update, 33, scr);
 
-    xTaskCreate(timer_task, "timer_task", 1024 * 3, NULL, 2, &taskhandle);
+    // 8 KB so the wake-from-asleep path fits: when the timer expires
+    // mid-sleep, timer_task calls watch.wakeup() which runs lv_refr_now
+    // on the caller's stack, and the LVGL render walk's recursion eats
+    // a lot of frames. Same reason alarm_task is 8 KB.
+    xTaskCreate(timer_task, "timer_task", 1024 * 8, NULL, 2, &taskhandle);
 
     return scr;
 }

@@ -100,9 +100,11 @@ static void load_alarms()
 static lv_obj_t *alarm_row_lbls[N_ALARMS] = {};
 static lv_obj_t *alarm_row_switches[N_ALARMS] = {};
 
-static int editing_alarm = -1;       // index currently open in setalarmscr
-static lv_obj_t *prev_alarm_screen;  // screen to return to from setalarmscr
-static lv_color_t alarm_accent;      // captured from theme for label coloring
+static int editing_alarm = -1;      // index currently open in setalarmscr
+static lv_obj_t *prev_alarm_screen; // screen to return to from setalarmscr
+// AM/PM labels toggle between accent and a neutral gray at click time;
+// read the current accent from the global so it tracks live theme
+// changes (vs. snapshotting at screen-create time as we used to).
 
 // Firing screen + cross-task signal. The background alarm_task runs even
 // while the LVGL task is suspended for light sleep, so when it detects a
@@ -110,6 +112,8 @@ static lv_color_t alarm_accent;      // captured from theme for label coloring
 // `alarm_check_pending` timer then picks the signal up after LVGL
 // resumes, fades to the ring screen, and starts the haptic.
 static lv_obj_t *alarm_ring_screen = nullptr;
+static lv_obj_t *alarm_ring_time_lbl = nullptr;     // shows the fired alarm's HH:MM AM/PM
+static lv_timer_t *alarm_auto_stop_timer = nullptr; // one-shot, 60s
 static volatile int pending_alarm_idx = -1;
 static uint32_t last_fired_minute[N_ALARMS] = {};
 
@@ -162,6 +166,19 @@ static void alarm_task(void *)
     }
 }
 
+// Auto-stop timer callback. Fires once, 60s after the alarm started
+// ringing — silences the haptic and asks the pm task to sleep. The
+// ring screen stays the active LVGL screen (preserve_screen_on_sleep
+// is left set), so when the user next touches the watch they wake up
+// directly onto the ring screen showing which alarm fired.
+static void alarm_auto_stop_cb(lv_timer_t *t)
+{
+    haptic_stop();
+    alarm_auto_stop_timer = nullptr;
+    lv_timer_delete(t);
+    watch.request_sleep();
+}
+
 // LVGL timer: catches the signal set by alarm_task, fades the ring
 // screen in, and starts the haptic loop. Runs on the LVGL task so all
 // LVGL/haptic calls below stay on the right thread.
@@ -169,11 +186,33 @@ static void alarm_check_pending(lv_timer_t *)
 {
     if (pending_alarm_idx < 0)
         return;
+    int idx = pending_alarm_idx;
     pending_alarm_idx = -1;
+
+    // Surface which alarm fired on the ring screen.
+    if (alarm_ring_time_lbl && idx >= 0 && idx < N_ALARMS)
+    {
+        const Alarm &a = alarms[idx];
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d:%02d %s",
+                 a.hour, a.minute, a.am ? "AM" : "PM");
+        lv_label_set_text(alarm_ring_time_lbl, buf);
+    }
+
     if (alarm_ring_screen)
         lv_screen_load_anim(alarm_ring_screen,
                             LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
     haptic_play(true, 800, 800, 800, 800, 800, 2160, 0);
+
+    // Stay-awake hold for 60s, then auto-stop. preserve_screen_on_sleep
+    // keeps the ring screen as the active LVGL screen across sleep so
+    // the next wake puts the user back on it.
+    watch.prevent_sleep_until_ms = esp_timer_get_time() / 1000 + 60000;
+    watch.preserve_screen_on_sleep = true;
+    if (alarm_auto_stop_timer)
+        lv_timer_delete(alarm_auto_stop_timer);
+    alarm_auto_stop_timer = lv_timer_create(alarm_auto_stop_cb, 60000, NULL);
+    lv_timer_set_repeat_count(alarm_auto_stop_timer, 1);
 }
 
 static void refresh_alarm_row(int idx)
@@ -198,9 +237,9 @@ static void open_alarm_editor(int idx)
     // AM/PM state + label colors.
     am = a.am;
     lv_obj_set_style_text_color(amlbl,
-                                am ? alarm_accent : lv_color_hex(0x444444), 0);
+                                am ? g_accent_color : lv_color_hex(0x444444), 0);
     lv_obj_set_style_text_color(pmlbl,
-                                am ? lv_color_hex(0x444444) : alarm_accent, 0);
+                                am ? lv_color_hex(0x444444) : g_accent_color, 0);
 
     // Send a click on hourbox to put the arc into hour-edit mode (this also
     // resets the arc range, ticks, and styles); then override the arc value
@@ -275,9 +314,7 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
     // task starts checking the clock.
     load_alarms();
 
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
-    alarm_accent = accent;
 
     lv_obj_t *scr = create_screen(parent);
 
@@ -321,7 +358,7 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
 
     /* Style knob */
     lv_obj_set_style_bg_opa(alarmarc, LV_OPA_TRANSP, LV_PART_KNOB);
-    lv_obj_set_style_border_color(alarmarc, accent, LV_PART_KNOB);
+    lv_obj_add_style(alarmarc, &accent_border_style, LV_PART_KNOB);
     lv_obj_set_style_border_width(alarmarc, 2, LV_PART_KNOB);
     lv_obj_set_style_border_opa(alarmarc, LV_OPA_COVER, LV_PART_KNOB);
 
@@ -362,7 +399,7 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
     alarmline = lv_line_create(setalarmscr);
     lv_line_set_points(alarmline, line_points, 2);
     lv_obj_set_size(alarmline, 240, 240);
-    lv_obj_set_style_line_color(alarmline, accent, 0);
+    lv_obj_add_style(alarmline, &accent_line_style, 0);
     lv_obj_set_style_line_width(alarmline, 2, 0);
     lv_obj_set_style_line_rounded(alarmline, false, 0);
 
@@ -371,7 +408,7 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
     lv_obj_set_size(c, 8, 8);
     lv_obj_set_style_border_width(c, 0, 0);
     lv_obj_set_style_radius(c, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(c, accent, 0);
+    lv_obj_add_style(c, &accent_bg_style, 0);
     lv_obj_center(c);
 
     hourbox = lv_obj_create(setalarmscr);
@@ -393,11 +430,11 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
                         {
                             sethour = true;
 
-                            lv_obj_set_style_border_color(lv_event_get_target_obj(e), lv_theme_get_color_primary(lv_event_get_target_obj(e)), 0);
+                            lv_obj_set_style_border_color(lv_event_get_target_obj(e), g_accent_color, 0);
                             lv_obj_set_style_border_color(minutebox, lv_color_hex(0x2f3237), 0);
 
                             lv_arc_set_max_value(alarmarc, 12);
-                            lv_arc_set_value(alarmarc, 0);
+                            lv_arc_set_value(alarmarc, (uint8_t)atoi(lv_label_get_text(alarmhour)));
 
                             lv_scale_set_text_src(alarmscale, alarmhourticks);
                             lv_obj_send_event(alarmarc, LV_EVENT_VALUE_CHANGED, NULL); }, LV_EVENT_CLICKED, NULL);
@@ -406,11 +443,11 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
                         {
                             sethour = false;
 
-                            lv_obj_set_style_border_color(lv_event_get_target_obj(e), lv_theme_get_color_primary(lv_event_get_target_obj(e)), 0);
+                            lv_obj_set_style_border_color(lv_event_get_target_obj(e), g_accent_color, 0);
                             lv_obj_set_style_border_color(hourbox, lv_color_hex(0x2f3237), 0);
 
                             lv_arc_set_max_value(alarmarc, 60);
-                            lv_arc_set_value(alarmarc, 0);
+                            lv_arc_set_value(alarmarc, (uint8_t)atoi(lv_label_get_text(alarmminute)));
 
                             lv_scale_set_text_src(alarmscale, alarmminuteticks);
                             lv_obj_send_event(alarmarc, LV_EVENT_VALUE_CHANGED, NULL); }, LV_EVENT_CLICKED, NULL);
@@ -427,6 +464,8 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
                             uint16_t angle = selected * 360 / lv_arc_get_max_value(lv_event_get_target_obj(e));
                             line_points[1] = {120.0f + 77 * sinf(angle * M_PI / 180), 120.0f - 77 * cosf(angle * M_PI / 180)};
                             lv_line_set_points(alarmline, line_points, 2);
+
+                            haptic_play(false, 15, 0);
 
                             if (sethour)
                             {
@@ -478,12 +517,24 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
         },
         LV_EVENT_CLICKED, NULL);
 
+    lv_obj_t *amlblshadow = lv_label_create(setalarmscr);
+    lv_obj_align(amlblshadow, LV_ALIGN_CENTER, -19, -36);
+    lv_obj_set_style_text_font(amlblshadow, &ProductSansBold_20, 0);
+    lv_label_set_text(amlblshadow, "AM");
+    lv_obj_set_style_text_color(amlblshadow, lv_color_black(), 0);
+
     amlbl = lv_label_create(setalarmscr);
     lv_obj_align(amlbl, LV_ALIGN_CENTER, -20, -37);
     lv_obj_set_style_text_font(amlbl, &ProductSansBold_20, 0);
     lv_label_set_text(amlbl, "AM");
-    lv_obj_set_style_text_color(amlbl, accent, 0);
+    lv_obj_set_style_text_color(amlbl, g_accent_color, 0);
     lv_obj_set_flag(amlbl, LV_OBJ_FLAG_CLICKABLE, true);
+
+    lv_obj_t *pmlblshadow = lv_label_create(setalarmscr);
+    lv_obj_align(pmlblshadow, LV_ALIGN_CENTER, 21, -36);
+    lv_obj_set_style_text_font(pmlblshadow, &ProductSansBold_20, 0);
+    lv_label_set_text(pmlblshadow, "PM");
+    lv_obj_set_style_text_color(pmlblshadow, lv_color_black(), 0);
 
     pmlbl = lv_label_create(setalarmscr);
     lv_obj_align(pmlbl, LV_ALIGN_CENTER, 20, -37);
@@ -495,41 +546,56 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
     lv_obj_add_event_cb(amlbl, [](lv_event_t *e)
                         {
                             am = true;
-                            lv_obj_set_style_text_color(amlbl, lv_theme_get_color_primary(lv_event_get_target_obj(e)), 0);
+                            lv_obj_set_style_text_color(amlbl, g_accent_color, 0);
                             lv_obj_set_style_text_color(pmlbl, lv_color_hex(0x444444), 0); }, LV_EVENT_CLICKED, NULL);
 
     lv_obj_add_event_cb(pmlbl, [](lv_event_t *e)
                         {
                             am = false;
-                            lv_obj_set_style_text_color(pmlbl, lv_theme_get_color_primary(lv_event_get_target_obj(e)), 0);
+                            lv_obj_set_style_text_color(pmlbl, g_accent_color, 0);
                             lv_obj_set_style_text_color(amlbl, lv_color_hex(0x444444), 0); }, LV_EVENT_CLICKED, NULL);
 
     lv_obj_send_event(hourbox, LV_EVENT_CLICKED, NULL);
 
-    // Ring screen — shown when an alarm fires. Mirrors timer.cpp's
-    // finished-timer screen: big label, big Stop button that silences
-    // the haptic and returns to the watch face.
+    // Ring screen — shown when an alarm fires. Shows "Alarm" + the
+    // time the fired alarm was set for + a Stop button.
     alarm_ring_screen = lv_obj_create(NULL);
 
     lv_obj_t *ringlbl = lv_label_create(alarm_ring_screen);
-    lv_obj_set_style_text_font(ringlbl, &ProductSansBold_42, 0);
-    lv_obj_align(ringlbl, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_set_style_text_font(ringlbl, &ProductSansRegular_20, 0);
+    lv_obj_align(ringlbl, LV_ALIGN_CENTER, 0, -60);
+    lv_obj_set_style_text_color(ringlbl, lv_color_hex(0x6699ff), 0);
     lv_label_set_text(ringlbl, "Alarm");
 
+    alarm_ring_time_lbl = lv_label_create(alarm_ring_screen);
+    lv_obj_set_style_text_font(alarm_ring_time_lbl, &ProductSansBold_42, 0);
+    lv_obj_align(alarm_ring_time_lbl, LV_ALIGN_CENTER, 0, -15);
+    lv_label_set_text(alarm_ring_time_lbl, "");
+
     lv_obj_t *stopbtn = lv_button_create(alarm_ring_screen);
-    lv_obj_align(stopbtn, LV_ALIGN_CENTER, 0, 40);
+    lv_obj_align(stopbtn, LV_ALIGN_CENTER, 0, 50);
     lv_obj_set_style_radius(stopbtn, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_pad_ver(stopbtn, 20, 0);
-    lv_obj_set_style_pad_hor(stopbtn, 40, 0);
+    lv_obj_set_style_pad_ver(stopbtn, 16, 0);
+    lv_obj_set_style_pad_hor(stopbtn, 36, 0);
 
     lv_obj_t *stoplbl = lv_label_create(stopbtn);
-    lv_obj_set_style_text_font(stoplbl, &ProductSansBold_36, 0);
+    lv_obj_set_style_text_font(stoplbl, &ProductSansBold_30, 0);
     lv_label_set_text(stoplbl, "Stop");
 
     lv_obj_add_event_cb(
         stopbtn,
         [](lv_event_t *)
         {
+            // Cancel the 60s auto-stop, release the stay-awake hold,
+            // stop preserving the ring screen, silence haptic, return
+            // to the watch face.
+            if (alarm_auto_stop_timer)
+            {
+                lv_timer_delete(alarm_auto_stop_timer);
+                alarm_auto_stop_timer = nullptr;
+            }
+            watch.prevent_sleep_until_ms = 0;
+            watch.preserve_screen_on_sleep = false;
             haptic_stop();
             lv_screen_load_anim(main_screen,
                                 LV_SCREEN_LOAD_ANIM_FADE_OUT, 100, 0, false);

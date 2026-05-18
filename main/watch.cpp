@@ -41,7 +41,15 @@ void Watch::pm_update()
             //     }
             // }
 
-            if (this->system.dosleep && esp_timer_get_time() / 1000 - this->sleep_time > watch.system.sleeptime && !this->goingtosleep)
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            if (now_ms < this->prevent_sleep_until_ms)
+            {
+                // Stay-awake hold (alarm / timer ring screen). Roll the
+                // idle clock forward so the normal timeout starts fresh
+                // once the hold ends.
+                this->sleep_time = (uint32_t)now_ms;
+            }
+            else if (this->system.dosleep && now_ms - this->sleep_time > watch.system.sleeptime && !this->goingtosleep)
             {
                 sleep();
             }
@@ -69,6 +77,15 @@ void Watch::pm_update()
 }
 
 /** Enter sleep mode */
+/** Ask the pm task to sleep on its next iteration. Doesn't itself touch
+ *  the display or LVGL — those run on the pm task to keep the calling
+ *  task (typically an LVGL timer callback) responsive. */
+void Watch::request_sleep()
+{
+    this->prevent_sleep_until_ms = 0;
+    this->sleep_time = 0; // wall-clock idle is now huge → pm_task triggers sleep
+}
+
 void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT ONLY WORKS THIS WAY
 {
     if (!this->sleeping)
@@ -99,9 +116,13 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
             // would wake to a half-faded screen because the fade-in
             // anim that loaded it was paused mid-flight by sleep —
             // resuming it on wake also tripped a draw-buffer alloc.
+            //
+            // Exception: when preserve_screen_on_sleep is set, leave
+            // the active screen alone so the alarm/timer ring screen
+            // is what shows up on next wake.
             if (lvgl_port_lock(0))
             {
-                if (lv_screen_active() != main_screen)
+                if (!preserve_screen_on_sleep && lv_screen_active() != main_screen)
                     lv_screen_load_anim(main_screen,
                                         LV_SCREEN_LOAD_ANIM_NONE, 0, 0, false);
                 // Clear any animations still in flight on the just-loaded
@@ -180,13 +201,42 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         // mutation in lvgl_port_lock so we don't race with the renderer.
         if (lvgl_port_lock(0))
         {
-            if (diff > 15000)
+            // Skip the wake-time scroll-back if the user was on the
+            // lower row (notifications / music). They're almost
+            // certainly there mid-task and snapping them back to the
+            // watch face is annoying.
+            bool on_lower = false;
+            if (ver_layer && lower_layer)
             {
-                lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF); // unconditionally go to watch face
+                int32_t sy = lv_obj_get_scroll_y(ver_layer);
+                int32_t ly = lv_obj_get_y(lower_layer);
+                on_lower = (sy >= ly - 50);
             }
-            else if (lv_screen_active() == main_screen)
+
+            // Exception: the music screen only earns the stay-put
+            // treatment when there's actually music playing. If the
+            // user stopped/paused playback before the watch slept,
+            // the screen has nothing dynamic going on, and waking
+            // back to it instead of the watch face is just clutter.
+            if (on_lower && musicscr && lower_layer)
             {
-                lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF); // only scroll vertical layer back
+                int32_t mx_in_scroll =
+                    lv_obj_get_x(musicscr) - lv_obj_get_scroll_x(lower_layer);
+                bool on_music = mx_in_scroll > -120 && mx_in_scroll < 120;
+                if (on_music && ble.music().state != "play")
+                    on_lower = false;
+            }
+
+            if (!on_lower)
+            {
+                if (diff > 15000)
+                {
+                    lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF); // unconditionally go to watch face
+                }
+                else if (lv_screen_active() == main_screen)
+                {
+                    lv_obj_scroll_to_view_recursive(hor_layer, LV_ANIM_OFF); // only scroll vertical layer back
+                }
             }
             lvgl_port_unlock();
         }

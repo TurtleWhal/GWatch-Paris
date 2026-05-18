@@ -11,6 +11,8 @@ LV_FONT_DECLARE(ProductSansBold_24);
 LV_FONT_DECLARE(ProductSansBold_30);
 LV_FONT_DECLARE(ProductSansBold_36);
 LV_FONT_DECLARE(ProductSansBold_42);
+LV_FONT_DECLARE(NotoEmojiRegular_16);
+LV_FONT_DECLARE(NotoEmojiRegular_20);
 LV_FONT_DECLARE(GoogleSansCode_46);
 LV_FONT_DECLARE(GoogleSansCode_28);
 LV_FONT_DECLARE(SirinStencil_92);
@@ -27,6 +29,8 @@ LV_FONT_DECLARE(FontAwesome_32);
 LV_FONT_DECLARE(FontAwesome_48);
 LV_FONT_DECLARE(GoogleSansCode_28);
 LV_FONT_DECLARE(GoogleSansCode_46);
+LV_FONT_DECLARE(NotoEmojiRegular_16);
+LV_FONT_DECLARE(NotoEmojiRegular_20);
 LV_FONT_DECLARE(ProductSansBold_16);
 LV_FONT_DECLARE(ProductSansBold_20);
 LV_FONT_DECLARE(ProductSansBold_24);
@@ -51,6 +55,8 @@ LV_FONT_DECLARE(SirinStencil_92);
 #define SET_SYMBOL_48(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_48, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_de_28(obj, sym) lv_obj_set_style_text_font(obj, &GoogleSansCode_28, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_de_46(obj, sym) lv_obj_set_style_text_font(obj, &GoogleSansCode_46, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_ular_16(obj, sym) lv_obj_set_style_text_font(obj, &NotoEmojiRegular_16, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_ular_20(obj, sym) lv_obj_set_style_text_font(obj, &NotoEmojiRegular_20, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_old_16(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_16, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_old_20(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_20, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_old_24(obj, sym) lv_obj_set_style_text_font(obj, &ProductSansBold_24, LV_PART_MAIN); lv_label_set_text(obj, sym);
@@ -92,3 +98,4 @@ LV_FONT_DECLARE(SirinStencil_92);
 #define FA_PAUSE          "" // '', Sizes: [32, 48]
 #define FA_NEXT           "" // '', Sizes: [32]
 #define FA_PREVIOUS       "" // '', Sizes: [32]
+#define FA_KEYBOARD       "" // '', Sizes: [22]

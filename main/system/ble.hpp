@@ -50,6 +50,8 @@ struct Notification
     std::string body;
     std::string sender; // for messages, the contact name
     int64_t when_ms;    // esp_timer_get_time() / 1000 at receipt
+    bool reply;
+    std::vector<std::string> replies;
 
     // Decoded RGB565 pixel buffer for the notification icon, filled in by
     // a follow-up `notify-img` GB message that carries the raw bitmap.
@@ -69,6 +71,13 @@ struct MusicState
     std::string track;
     int32_t duration_s = 0;
     int32_t position_s = 0;
+
+    // Album art delivered via the image GATT service with image_kind=0x01.
+    // album_art_w * album_art_h * 2 == album_art.size() when present; the
+    // pixels are raw RGB565 LE in PSRAM, same layout as notification icons.
+    PsramByteVec album_art;
+    uint16_t album_art_w = 0;
+    uint16_t album_art_h = 0;
 };
 
 class BLE
@@ -93,6 +102,10 @@ public:
     void send_status();                    // battery, charging
     void send_music_control(const char *cmd); // "play","pause","next","previous","volumeup","volumedown"
     void send_notification_action(uint32_t id, const char *action); // "DISMISS","OPEN","REPLY"
+    // Send a REPLY action with a body string. cJSON-built so quotes,
+    // backslashes, and multi-byte UTF-8 (the reply suggestions list
+    // includes things like ":)" and emoji) get escaped correctly.
+    void send_notification_reply(uint32_t id, const char *text);
     void send_find_phone(bool on);
 
     // Notification queue. Mutated from the BLE task only — UI reads from
@@ -115,10 +128,34 @@ public:
 
     const MusicState &music() const { return music_state; }
 
+    // Install album art delivered via the image GATT service. Called
+    // from ble_rx_task when an image transfer with image_kind=0x01
+    // completes. Takes ownership of the pixel buffer.
+    void set_album_art(PsramByteVec &&pixels, uint16_t w, uint16_t h)
+    {
+        music_state.album_art = std::move(pixels);
+        music_state.album_art_w = w;
+        music_state.album_art_h = h;
+    }
+
+    // Two-stage album-art install. The BLE task stages a new image in
+    // an internal pending slot (without taking lvgl_port_lock, so it
+    // works during light sleep when the LVGL task is suspended); the
+    // LVGL task drains the pending slot here on its next music_update
+    // tick, where the implicit LVGL lock makes the swap atomic with
+    // the descriptor rebind in the UI.
+    void post_pending_album_art(PsramByteVec &&pixels, uint16_t w, uint16_t h);
+    bool promote_pending_album_art();
+
     // The fields below are effectively module-private, but exposed for
     // file-scope C callbacks/initialisers in ble.cpp. Don't touch from
     // outside the BLE module.
     uint16_t tx_attr_handle = 0;
+    // Battery Level (0x2A19) value handle for the standard Battery
+    // Service (0x180F). Filled in by NimBLE during gatts_add_svcs; used
+    // by send_status to push BAS notifies so Android's connected-device
+    // battery widget tracks the level without the Gadgetbridge channel.
+    uint16_t bas_lvl_handle = 0;
     uint16_t conn_handle = 0xffff;
     uint8_t own_addr_type = 0;
     char device_name[20] = {0};

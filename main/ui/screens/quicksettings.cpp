@@ -10,7 +10,9 @@ lv_obj_t *create_setting(lv_obj_t *parent, const char *icon, lv_event_cb_t event
     lv_obj_t *app = lv_button_create(parent);
     lv_obj_set_size(app, 65, 65);
     lv_obj_set_style_bg_color(app, lv_color_hex(0x222222), 0);
-    lv_obj_set_style_bg_color(app, lv_theme_get_color_primary(parent), LV_STATE_CHECKED);
+    // Accent bg in the CHECKED state via the shared style so toggles
+    // (DnD, BT, rotate) refresh when the user picks a new theme color.
+    lv_obj_add_style(app, &accent_bg_style, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_radius(app, LV_RADIUS_CIRCLE, 0);
 
     lv_obj_t *label = lv_label_create(app);
@@ -47,7 +49,7 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
 
     lv_obj_t *rotate = create_setting(scr, FA_ROTATE, [](lv_event_t *)
                                       {
-                                      watch.display.set_rotation((lv_display_rotation_t)((lv_display_get_rotation(NULL) + 2) % 4));
+                                      settings_apply_rotation((lv_display_rotation_t)((lv_display_get_rotation(NULL) + 2) % 4));
                                       lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_ON); });
 
     // Toggle BLE advertising. Disabling drops any active connection and
@@ -90,7 +92,7 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent)
 
     lv_obj_t *knob = lv_obj_create(brightness);
     lv_obj_set_style_border_width(knob, 0, 0);
-    lv_obj_set_style_bg_color(knob, lv_theme_get_color_primary(brightness), 0);
+    lv_obj_add_style(knob, &accent_bg_style, 0);
     lv_obj_set_style_radius(knob, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_size(knob, KNOB_THICKNESS, KNOB_THICKNESS);
     lv_obj_set_flag(knob, LV_OBJ_FLAG_CLICKABLE, false);

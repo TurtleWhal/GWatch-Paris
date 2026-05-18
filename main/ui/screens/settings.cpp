@@ -1,0 +1,293 @@
+#include "ui.hpp"
+
+// Theme color palette. Indexed by the `theme_color` NVS setting; index 0
+// is the boot default. Order is also the order the swatches appear on
+// the settings screen. Kept here (not in ui_init) so ui_init can read
+// settings_color_at(idx) without duplicating the table.
+static const lv_color_t SETTINGS_PALETTE[] = {
+    LV_COLOR_MAKE(0x03, 0xA9, 0xF4), // Blue (default)
+    LV_COLOR_MAKE(0xF4, 0x43, 0x36), // Red
+    LV_COLOR_MAKE(0xFF, 0x50, 0x00), // Orange
+    LV_COLOR_MAKE(0xFF, 0x98, 0x00), // Gold
+    LV_COLOR_MAKE(0x4C, 0xAF, 0x50), // Green
+    LV_COLOR_MAKE(0x00, 0x96, 0x88), // Turquoise
+    LV_COLOR_MAKE(0xE0, 0x40, 0xFB), // Purple
+    // LV_COLOR_MAKE(0xFF, 0xEB, 0x3B), // Yellow
+    // LV_COLOR_MAKE(0xFF, 0xFF, 0xFF), // White
+};
+static constexpr uint8_t SETTINGS_PALETTE_N =
+    sizeof(SETTINGS_PALETTE) / sizeof(SETTINGS_PALETTE[0]);
+
+uint8_t settings_color_count() { return SETTINGS_PALETTE_N; }
+lv_color_t settings_color_at(uint8_t idx)
+{
+    if (idx >= SETTINGS_PALETTE_N) idx = 0;
+    return SETTINGS_PALETTE[idx];
+}
+
+lv_obj_t *create_setting(lv_obj_t *parent, const char *name, bool state, lv_event_cb_t event_cb)
+{
+    lv_obj_t *setting = lv_button_create(parent);
+    lv_obj_set_size(setting, 180, 44);
+    lv_obj_set_style_bg_color(setting, lv_color_hex(0x222222), 0);
+    lv_obj_set_style_radius(setting, LV_RADIUS_CIRCLE, 0);
+
+    lv_obj_t *label = lv_label_create(setting);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_label_set_text(label, name);
+    lv_obj_set_style_text_font(label, &ProductSansRegular_16, 0);
+
+    lv_obj_t *sw = lv_switch_create(setting);
+    lv_obj_align(sw, LV_ALIGN_RIGHT_MID, 6, 0);
+
+    lv_obj_set_state(sw, LV_STATE_CHECKED, state);
+
+    if (event_cb != nullptr)
+    {
+        lv_obj_add_event_cb(sw, event_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(setting, [](lv_event_t *e)
+                            {
+                                lv_obj_set_state((lv_obj_t *)lv_event_get_user_data(e), LV_STATE_CHECKED, !(lv_obj_get_state((lv_obj_t *)lv_event_get_user_data(e)) & LV_STATE_CHECKED));
+                                lv_obj_send_event((lv_obj_t *)lv_event_get_user_data(e), LV_EVENT_CLICKED, NULL); }, LV_EVENT_CLICKED, sw);
+
+        lv_obj_add_flag(label, LV_OBJ_FLAG_EVENT_BUBBLE);
+    }
+    else
+    {
+        lv_obj_set_style_opa(setting, LV_OPA_50, 0);
+        lv_obj_set_flag(setting, LV_OBJ_FLAG_CLICKABLE, false);
+    }
+
+    return setting;
+}
+
+// -------------------- Theme color row --------------------
+
+// Per-swatch context. The button's user_data points at one of these.
+struct ColorSwatchCtx
+{
+    uint8_t idx;
+    lv_obj_t *check;  // checkmark label, hidden unless this idx is active
+};
+
+// Re-apply the theme with a new primary color. The shared accent_*_style
+// instances in ui.cpp do the live propagation — every widget that calls
+// lv_obj_add_style on one of them repaints when apply_accent_color
+// reports the style change. lv_theme_default_init is called again as
+// well so any future widget creation that consults lv_theme_get_color_*
+// sees the new primary; existing widgets that captured the old color
+// into a private style won't update without going through the shared
+// style or g_accent_color.
+static void apply_theme_color(uint8_t idx)
+{
+    lv_color_t primary = settings_color_at(idx);
+    lv_theme_t *th = lv_theme_default_init(
+        lv_display_get_default(),
+        primary,
+        lv_color_hex(0x607D8B),
+        true,
+        &ProductSansRegular_14);
+    lv_display_set_theme(lv_display_get_default(), th);
+    apply_accent_color(primary);
+}
+
+static lv_obj_t *build_color_row(lv_obj_t *parent)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, 200, 36);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 4, 0);
+    lv_obj_set_scroll_dir(row, LV_DIR_NONE);
+
+    uint8_t current = watch.settings.readUint8("theme_color", 0);
+
+    for (uint8_t i = 0; i < settings_color_count(); i++)
+    {
+        lv_obj_t *btn = lv_button_create(row);
+        lv_obj_set_size(btn, 22, 22);
+        lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(btn, settings_color_at(i), 0);
+        lv_obj_set_style_border_width(btn, 2, 0);
+        lv_obj_set_style_border_color(btn,
+            i == current ? lv_color_white() : lv_color_hex(0x222222), 0);
+        lv_obj_set_style_pad_all(btn, 0, 0);
+        lv_obj_set_style_shadow_width(btn, 0, 0);
+
+        // Stash the swatch index in the LVGL user_data. The click handler
+        // walks every sibling to clear the previously-active border, so
+        // it doesn't need a back-pointer to the per-row context.
+        lv_obj_set_user_data(btn, (void *)(uintptr_t)i);
+
+        lv_obj_add_event_cb(btn, [](lv_event_t *e)
+        {
+            lv_obj_t *clicked = lv_event_get_target_obj(e);
+            uint8_t picked = (uint8_t)(uintptr_t)lv_obj_get_user_data(clicked);
+            lv_obj_t *r = lv_obj_get_parent(clicked);
+            for (uint32_t k = 0; k < lv_obj_get_child_count(r); k++)
+            {
+                lv_obj_t *sib = lv_obj_get_child(r, k);
+                uint8_t si = (uint8_t)(uintptr_t)lv_obj_get_user_data(sib);
+                lv_obj_set_style_border_color(sib,
+                    si == picked ? lv_color_white() : lv_color_hex(0x222222), 0);
+            }
+            watch.settings.writeUint8("theme_color", picked);
+            apply_theme_color(picked);
+            haptic_play(false, 30, 0);
+        }, LV_EVENT_CLICKED, NULL);
+    }
+
+    return row;
+}
+
+// -------------------- Rotation row --------------------
+
+// Apply a rotation and persist. Shared by the settings-screen buttons
+// below and the quick-settings rotate icon. The rotation value is the
+// raw LV_DISPLAY_ROTATION_* enum (0..3) — written through unchanged
+// because lv_display_rotation_t and uint8_t share a fixed mapping.
+void settings_apply_rotation(lv_display_rotation_t rot)
+{
+    watch.display.set_rotation(rot);
+    watch.settings.writeUint8("rotation", (uint8_t)rot);
+}
+
+static lv_obj_t *build_rotation_row(lv_obj_t *parent)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, 200, 36);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 6, 0);
+    lv_obj_set_scroll_dir(row, LV_DIR_NONE);
+
+    static const char *labels[4] = {"0", "90", "180", "270"};
+    uint8_t current = (uint8_t)lv_display_get_rotation(NULL);
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        lv_obj_t *btn = lv_button_create(row);
+        lv_obj_set_size(btn, 40, 30);
+        lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), 0);
+        // Selected button gets the accent bg via the shared style under
+        // the CHECKED state, so swapping the theme color live updates
+        // whichever rotation button is currently selected.
+        lv_obj_add_style(btn, &accent_bg_style, LV_PART_MAIN | LV_STATE_CHECKED);
+        lv_obj_set_style_pad_all(btn, 0, 0);
+        if (i == current) lv_obj_add_state(btn, LV_STATE_CHECKED);
+
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_obj_center(lbl);
+        lv_label_set_text(lbl, labels[i]);
+        lv_obj_set_style_text_font(lbl, &ProductSansRegular_14, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
+
+        lv_obj_set_user_data(btn, (void *)(uintptr_t)i);
+
+        lv_obj_add_event_cb(btn, [](lv_event_t *e)
+        {
+            lv_obj_t *clicked = lv_event_get_target_obj(e);
+            uint8_t picked = (uint8_t)(uintptr_t)lv_obj_get_user_data(clicked);
+            lv_obj_t *r = lv_obj_get_parent(clicked);
+            for (uint32_t k = 0; k < lv_obj_get_child_count(r); k++)
+            {
+                lv_obj_t *sib = lv_obj_get_child(r, k);
+                uint8_t si = (uint8_t)(uintptr_t)lv_obj_get_user_data(sib);
+                if (si == picked) lv_obj_add_state(sib, LV_STATE_CHECKED);
+                else               lv_obj_remove_state(sib, LV_STATE_CHECKED);
+            }
+            settings_apply_rotation((lv_display_rotation_t)picked);
+            haptic_play(false, 30, 0);
+        }, LV_EVENT_CLICKED, NULL);
+    }
+
+    return row;
+}
+
+// -------------------- Section header --------------------
+
+static lv_obj_t *section_label(lv_obj_t *parent, const char *text)
+{
+    lv_obj_t *l = lv_label_create(parent);
+    lv_label_set_text(l, text);
+    lv_obj_set_style_text_font(l, &ProductSansRegular_14, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0x999999), 0);
+    lv_obj_set_style_pad_top(l, 6, 0);
+    return l;
+}
+
+// -------------------- Uptime / build labels --------------------
+
+static lv_obj_t *uptime;
+
+static void settings_update(lv_timer_t *timer)
+{
+    if (lv_screen_active() == lv_timer_get_user_data(timer))
+    {
+        uint64_t t = esp_timer_get_time();
+        uint64_t ms = t / 1000;
+        uint64_t s = ms / 1000;
+        uint64_t m = s / 60;
+        uint64_t h = m / 60;
+        uint64_t d = h / 24;
+
+        if (d > 0)
+            lv_label_set_text_fmt(uptime, "Uptime: %lld Days %02lld:%02lld:%02lld", d, h % 24, m % 60, s % 60);
+        else
+            lv_label_set_text_fmt(uptime, "Uptime: %02lld:%02lld:%02lld", h % 24, m % 60, s % 60);
+    }
+}
+
+lv_obj_t *settingsscreen_create()
+{
+    lv_obj_t *scr = create_screen(NULL);
+
+    lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_flex_track_place(scr, LV_FLEX_ALIGN_CENTER, 0);
+    lv_obj_set_style_flex_cross_place(scr, LV_FLEX_ALIGN_CENTER, 0);
+    lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
+
+    // Inset the column ends so the first/last row don't get clipped by
+    // the round panel — top entry sits below the curve, bottom entry
+    // above it. The rest of the rows are scrollable in between.
+    lv_obj_set_style_pad_top(scr, 50, 0);
+    lv_obj_set_style_pad_bottom(scr, 50, 0);
+    lv_obj_set_style_pad_row(scr, 4, 0);
+
+    lv_obj_t *scrlbl = lv_label_create(scr);
+    lv_label_set_text(scrlbl, "Settings");
+    lv_obj_set_style_text_font(scrlbl, &ProductSansRegular_20, 0);
+    lv_obj_set_style_text_color(scrlbl, lv_color_white(), 0);
+    lv_obj_set_style_pad_bottom(scrlbl, 8, 0);
+
+    section_label(scr, "Theme Color");
+    build_color_row(scr);
+
+    section_label(scr, "Rotation");
+    build_rotation_row(scr);
+
+    section_label(scr, "Power");
+    create_setting(scr, "Disable Sleep", !watch.system.dosleep, [](lv_event_t *e)
+                   { watch.system.dosleep = !lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED); });
+
+    lv_obj_set_style_text_align(scr, LV_TEXT_ALIGN_CENTER, 0);
+
+    uptime = lv_label_create(scr);
+    lv_obj_set_style_text_font(uptime, &ProductSansRegular_14, 0);
+    lv_obj_set_style_text_color(uptime, lv_color_hex(0xaaaaaa), 0);
+    lv_obj_set_style_pad_top(uptime, 8, 0);
+
+    lv_obj_t *build = lv_label_create(scr);
+    lv_label_set_text_fmt(build, "Firmware Compiled on\n%s at %s", __DATE__, __TIME__);
+    lv_obj_set_style_text_font(build, &ProductSansRegular_14, 0);
+    lv_obj_set_style_text_color(build, lv_color_hex(0x888888), 0);
+
+    lv_timer_create(settings_update, 1000, scr);
+
+    return scr;
+}

@@ -122,7 +122,6 @@ void imuscreen_update(lv_timer_t *timer)
 
 lv_obj_t *imu_screen_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
@@ -165,7 +164,7 @@ lv_obj_t *imu_screen_create(lv_obj_t *parent)
 
     maxline = lv_line_create(scr);
     lv_line_set_points_mutable(maxline, maxpoints, NUM_POINTS + 1);
-    lv_obj_set_style_line_color(maxline, accent, 0);
+    lv_obj_add_style(maxline, &accent_line_style, 0);
     lv_obj_set_style_line_width(maxline, 4, 0);
     lv_obj_set_style_line_rounded(maxline, true, 0);
 

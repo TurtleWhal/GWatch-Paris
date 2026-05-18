@@ -34,7 +34,6 @@ static uint32_t last_battery_mv = 0;
 
 lv_obj_t *rotarywatch_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
@@ -89,7 +88,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     lv_scale_set_text_src(secondscale, second_ticks);
 
     lv_obj_set_style_text_font(secondscale, &ProductSansRegular_14, 0);
-    lv_obj_set_style_text_color(secondscale, accent, 0);
+    lv_obj_add_style(secondscale, &accent_text_style, 0);
 
     lv_obj_set_style_line_color(secondscale, gray, LV_PART_INDICATOR);
     lv_obj_set_style_length(secondscale, 8, LV_PART_INDICATOR);
@@ -114,7 +113,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     lv_obj_set_size(bound, 92, 36);
     lv_obj_set_style_bg_opa(bound, LV_OPA_0, 0);
     lv_obj_set_style_radius(bound, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_border_color(bound, accent, 0);
+    lv_obj_add_style(bound, &accent_border_style, 0);
     lv_obj_set_style_border_width(bound, 2, 0);
     lv_obj_align(bound, LV_ALIGN_LEFT_MID, 60, 0);
 
@@ -132,7 +131,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     lv_obj_align(minute, LV_ALIGN_LEFT_MID, 66, 0);
 
     /* Steps */
-    steps = create_valuearc(scr, accent, FA_STEPS);
+    steps = create_valuearc(scr, FA_STEPS);
     lv_obj_align(steps, LV_ALIGN_RIGHT_MID, -40, -68);
     lv_arc_set_range(steps, 0, 6500);
     lv_arc_set_value(steps, 1234);
@@ -147,7 +146,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     wday = lv_label_create(scr);
     lv_obj_align(wday, LV_ALIGN_CENTER, 80, -20);
     lv_obj_set_style_text_font(wday, &ProductSansBold_16, 0);
-    lv_obj_set_style_text_color(wday, accent, 0);
+    lv_obj_add_style(wday, &accent_text_style, 0);
     lv_label_set_text(wday, "WED");
 
     mday = lv_label_create(scr);
@@ -159,7 +158,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     date = lv_label_create(scr);
     lv_obj_align(date, LV_ALIGN_CENTER, 80, 20);
     lv_obj_set_style_text_font(date, &ProductSansRegular_16, 0);
-    lv_obj_set_style_text_color(date, accent, 0);
+    lv_obj_add_style(date, &accent_text_style, 0);
     lv_label_set_text(date, "12/03/25");
 
     // lv_obj_add_flag(wday, LV_OBJ_FLAG_CLICKABLE);
@@ -184,7 +183,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     // lv_obj_add_event_cb(date, change_date_visibility, LV_EVENT_CLICKED, NULL);
 
     /* Battery */
-    battery = create_valuearc(scr, accent, FA_BATTERY);
+    battery = create_valuearc(scr, FA_BATTERY);
     lv_obj_align(battery, LV_ALIGN_RIGHT_MID, -40, 68);
     lv_arc_set_range(battery, 0, 100);
     lv_arc_set_value(battery, 100);

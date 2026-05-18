@@ -1,5 +1,6 @@
 #include "ui.hpp"
 #include "ble.hpp"
+#include <inttypes.h>  // PRIu32 in the reply-chip log line
 
 static lv_obj_t *notif_list_container = nullptr;
 static lv_obj_t *empty_label = nullptr;
@@ -11,12 +12,35 @@ static uint32_t last_rendered_version = (uint32_t)-1;
 // cascade into additional dismisses on neighbouring cards.
 static bool dismiss_in_progress = false;
 
+// Render `when_ms` (Notification.when_ms — esp_timer_get_time() / 1000 at
+// receipt, monotonic across light sleep) into a short relative-time
+// string like "now", "5m ago", "2h ago", "3d ago". The string only
+// re-renders when the notification list rebuilds (on add/dismiss), so it
+// doesn't tick by itself — fine for this UI since cards already refresh
+// whenever notifications mutate.
+static void format_age(int64_t when_ms, char *buf, size_t bufsz)
+{
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    int64_t delta_s = (now_ms - when_ms) / 1000;
+    if (delta_s < 0)
+        delta_s = 0;
+    if (delta_s < 60)
+        snprintf(buf, bufsz, "now");
+    else if (delta_s < 3600)
+        snprintf(buf, bufsz, "%dm ago", (int)(delta_s / 60));
+    else if (delta_s < 86400)
+        snprintf(buf, bufsz, "%dh ago", (int)(delta_s / 3600));
+    else
+        snprintf(buf, bufsz, "%dd ago", (int)(delta_s / 86400));
+}
+
 // ----- Popup for newly-arrived notifications -----
 
 static lv_obj_t *popup_screen = nullptr;
 static lv_obj_t *popup_src = nullptr;
 static lv_obj_t *popup_title = nullptr;
 static lv_obj_t *popup_body = nullptr;
+static lv_obj_t *popup_replies = nullptr;
 static lv_obj_t *popup_icon_box = nullptr; // circle-clip container
 static lv_obj_t *popup_icon_img = nullptr; // image inside the container
 static lv_obj_t *popup_prev_screen = nullptr;
@@ -91,17 +115,29 @@ static lv_obj_t *popup_build()
     lv_obj_set_style_max_width(popup_src, 100, 0);
 
     popup_title = lv_label_create(card);
-    lv_obj_set_style_text_font(popup_title, &ProductSansBold_24, 0);
+    lv_obj_set_style_text_font(popup_title, &ProductSansBold_24_emoji, 0);
     lv_obj_set_style_text_color(popup_title, lv_color_white(), 0);
     lv_label_set_long_mode(popup_title, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_max_width(popup_title, 100, 0);
 
     popup_body = lv_label_create(scr);
-    lv_obj_set_style_text_font(popup_body, &ProductSansRegular_20, 0);
+    lv_obj_set_style_text_font(popup_body, &ProductSansRegular_20_emoji, 0);
     lv_obj_set_style_text_color(popup_body, lv_color_hex(0xcccccc), 0);
     lv_obj_set_style_text_align(popup_body, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(popup_body, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(popup_body, 200);
+
+    popup_replies = lv_obj_create(scr);
+    lv_obj_set_style_bg_opa(popup_replies, 0, 0);
+    lv_obj_set_style_border_width(popup_replies, 0, 0);
+    lv_obj_set_style_pad_all(popup_replies, 0, 0);
+    lv_obj_set_width(popup_replies, 200);
+    lv_obj_set_height(popup_replies, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(popup_replies, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_flex_main_place(popup_replies, LV_FLEX_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_row(popup_replies, 6, 0);
+    lv_obj_set_style_pad_column(popup_replies, 6, 0);
+    lv_obj_set_style_margin_top(popup_replies, 6, 0);
 
     // Swipe right to dismiss the popup. After popup_close swaps back to
     // the notifications screen, the user's finger is still down and the
@@ -116,8 +152,7 @@ static lv_obj_t *popup_build()
                             {
                                 popup_close();
                                 lv_indev_reset(act, NULL);
-                            }
-                        }, LV_EVENT_GESTURE, NULL);
+                            } }, LV_EVENT_GESTURE, NULL);
 
     return scr;
 }
@@ -165,6 +200,48 @@ static void popup_show(const Notification &n, bool animate = true)
                       n.src.empty() ? "Notification" : n.src.c_str());
     lv_label_set_text(popup_title, n.title.empty() ? "" : n.title.c_str());
     lv_label_set_text(popup_body, n.body.empty() ? "" : n.body.c_str());
+
+    lv_obj_clean(popup_replies);
+
+    if (n.reply)
+    {
+        for (uint8_t i = 0; i < n.replies.size(); i++)
+        {
+            lv_obj_t *reply = lv_obj_create(popup_replies);
+            lv_obj_set_size(reply, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_border_color(reply, lv_color_hex(0x888888), 0);
+            lv_obj_set_style_border_width(reply, 2, 0);
+            lv_obj_set_style_bg_opa(reply, 0, 0);
+            lv_obj_set_style_pad_ver(reply, 4, 0);
+            lv_obj_set_style_radius(reply, (lv_font_get_line_height(&ProductSansRegular_20_emoji) + lv_obj_get_style_pad_top(reply, LV_PART_MAIN) * 2 + 4) / 2, 0);
+            // lv_obj_set_style_max_width(reply, 200, 0);
+            
+            lv_obj_t *lbl = lv_label_create(reply);
+            lv_obj_set_style_text_font(lbl, &ProductSansRegular_20_emoji, 0);
+            lv_label_set_text(lbl, n.replies.at(i).c_str());
+            lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_WRAP);
+            lv_obj_set_style_max_width(lbl, 172, 0);
+
+            // Stash the notification id on the chip's user_data; the
+            // click handler reads the reply text back off the chip's
+            // label child so we don't have to manage per-button string
+            // lifetimes (LVGL already owns the label text). Sends the
+            // reply, then closes the popup — Gadgetbridge auto-dismisses
+            // the notification on its side and the follow-up notify-
+            // message will clean it out of the watch queue.
+            lv_obj_set_user_data(reply, (void *)(uintptr_t)n.id);
+            lv_obj_add_event_cb(reply, [](lv_event_t *e) {
+                lv_obj_t *chip = lv_event_get_target_obj(e);
+                uint32_t id = (uint32_t)(uintptr_t)lv_obj_get_user_data(chip);
+                lv_obj_t *l = lv_obj_get_child(chip, 0);
+                const char *text = l ? lv_label_get_text(l) : "";
+                ESP_LOGI("popup", "REPLY id=%" PRIu32 " text='%s'", id, text);
+                ble.send_notification_reply(id, text);
+                haptic_play(false, 40, 0);
+                popup_close();
+            }, LV_EVENT_CLICKED, NULL);
+        }
+    }
 
     popup_apply_icon(n);
 
@@ -261,7 +338,8 @@ static void rebuild_notification_list()
     // Bumped by ble.cpp on every mutation (add / dismiss / image attach),
     // so we don't need to diff the queue ourselves.
     uint32_t v = ble.notifications_version();
-    if (v == last_rendered_version) return;
+    if (v == last_rendered_version)
+        return;
     last_rendered_version = v;
     const auto &list = ble.notifications();
     size_t count = list.size();
@@ -316,7 +394,8 @@ static void rebuild_notification_list()
         lv_obj_set_flag(snap, LV_OBJ_FLAG_SCROLL_ONE, true);
         lv_obj_set_flag(snap, LV_OBJ_FLAG_SCROLL_ELASTIC, true);
 
-        auto make_spacer = [&]() {
+        auto make_spacer = [&]()
+        {
             lv_obj_t *sp = lv_obj_create(snap);
             lv_obj_set_size(sp, 240, 1);
             lv_obj_set_style_bg_opa(sp, 0, 0);
@@ -346,7 +425,12 @@ static void rebuild_notification_list()
         lv_obj_set_style_min_height(card, 62, 0);
         lv_obj_set_style_bg_color(card, lv_color_hex(0x1c1c1c), 0);
         lv_obj_set_style_radius(card, 62 / 2, 0);
-        lv_obj_set_style_pad_all(card, 8, 0);
+        // Horizontal padding stays 8; vertical padding drops to 4 so the
+        // natural height for src(10pt) + title(16pt) + 1-line body(14pt)
+        // plus the 2 px pad_row gaps lands exactly on the 62 px min.
+        // With pad_all=8 it was 70 px and every card overflowed its min.
+        lv_obj_set_style_pad_hor(card, 8, 0);
+        lv_obj_set_style_pad_ver(card, 4, 0);
         lv_obj_set_style_pad_left(card, 8 * 2 + 46, 0);
         lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_row(card, 2, 0);
@@ -368,7 +452,10 @@ static void rebuild_notification_list()
         lv_obj_set_scrollbar_mode(icon_box, LV_SCROLLBAR_MODE_OFF);
         lv_obj_set_flag(icon_box, LV_OBJ_FLAG_SCROLLABLE, false);
         lv_obj_set_flag(icon_box, LV_OBJ_FLAG_IGNORE_LAYOUT, true);
-        lv_obj_set_pos(icon_box, -46 - 8, 0);
+        // y=4 so the 46 px circle stays centred in the 62 px card: the
+        // 8 px gap above and below comes from pad_top(4) + this y(4) on
+        // top and pad_bottom(4) + (62 - 46 - 4 - 4 - 4) on bottom.
+        lv_obj_set_pos(icon_box, -46 - 8, 4);
 
         if (!n.img.empty() && n.img_w > 0 && n.img_h > 0)
         {
@@ -394,7 +481,16 @@ static void rebuild_notification_list()
         }
 
         lv_obj_t *src_label = lv_label_create(card);
-        lv_label_set_text(src_label, n.src.empty() ? "Notification" : n.src.c_str());
+        // "Source · age" — receipt age is recorded by ble.cpp on notify
+        // arrival into Notification.when_ms; format_age formats it into
+        // a short suffix appended to the src name.
+        char age_buf[16];
+        format_age(n.when_ms, age_buf, sizeof(age_buf));
+        char src_buf[64];
+        snprintf(src_buf, sizeof(src_buf), "%s · %s",
+                 n.src.empty() ? "Notification" : n.src.c_str(),
+                 age_buf);
+        lv_label_set_text(src_label, src_buf);
         lv_obj_set_style_text_font(src_label, &ProductSansRegular_10, 0);
         lv_obj_set_style_text_color(src_label, lv_color_hex(0x6699ff), 0);
 
@@ -402,10 +498,12 @@ static void rebuild_notification_list()
         {
             lv_obj_t *title = lv_label_create(card);
             lv_label_set_text(title, n.title.c_str());
-            lv_obj_set_style_text_font(title, &ProductSansBold_16, 0);
+            lv_obj_set_style_text_font(title, &ProductSansBold_16_emoji, 0);
             lv_obj_set_style_text_color(title, lv_color_white(), 0);
             lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
             lv_obj_set_width(title, 130);
+            lv_obj_set_style_pad_top(title, -2, 0);
+            lv_obj_set_style_pad_bottom(title, -4, 0);
         }
 
         if (!n.body.empty())
@@ -420,14 +518,14 @@ static void rebuild_notification_list()
             constexpr int BODY_LINES = 4;
             lv_obj_t *body = lv_label_create(card);
             lv_label_set_text(body, n.body.c_str());
-            lv_obj_set_style_text_font(body, &ProductSansRegular_14, 0);
+            lv_obj_set_style_text_font(body, &ProductSansRegular_14_emoji, 0);
             lv_obj_set_style_text_color(body, lv_color_hex(0xcccccc), 0);
-            int line_h = lv_font_get_line_height(&ProductSansRegular_14);
+            int line_h = lv_font_get_line_height(&ProductSansRegular_14_emoji);
             int line_space = lv_obj_get_style_text_line_space(body, LV_PART_MAIN);
             lv_obj_set_width(body, 130);
             lv_obj_set_height(body, LV_SIZE_CONTENT);
             lv_obj_set_style_max_height(body,
-                line_h * BODY_LINES + line_space * (BODY_LINES - 1), 0);
+                                        line_h * BODY_LINES + line_space * (BODY_LINES - 1), 0);
             lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
         }
 

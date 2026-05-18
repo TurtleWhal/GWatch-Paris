@@ -8,12 +8,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_mac.h"
+#include "esp_heap_caps.h"
 
 #include "freertos/queue.h"
 #include "freertos/idf_additions.h"
 
 #include "cJSON.h"
-#include "mbedtls/base64.h"
 
 extern "C"
 {
@@ -45,6 +45,18 @@ static const ble_uuid128_t nus_tx_uuid =
     BLE_UUID128_INIT(0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
                      0x93, 0xf3, 0xa3, 0xb5, 0x03, 0x00, 0x40, 0x6e);
 
+// Notification-image transfer service (custom, alongside NUS).
+//   6E500001-B5A3-F393-E0A9-E50E24DCCA9E   service
+//   6E500002-...                           Image Data char (phone -> watch, write)
+// The phone reassembles BEGIN / DATA*N / END / ABORT frames here; see the
+// state machine in ble_image_rx_access below for the wire format.
+static const ble_uuid128_t img_svc_uuid =
+    BLE_UUID128_INIT(0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
+                     0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x50, 0x6e);
+static const ble_uuid128_t img_data_uuid =
+    BLE_UUID128_INIT(0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
+                     0x93, 0xf3, 0xa3, 0xb5, 0x02, 0x00, 0x50, 0x6e);
+
 // RX-side incoming-data queue. The NimBLE host calls our access callback on
 // its own task; we copy the bytes into a queue so we don't block the host.
 struct RxChunk
@@ -54,15 +66,66 @@ struct RxChunk
 };
 static QueueHandle_t rx_queue = nullptr;
 
-// Large scratch buffers used during notify-img processing. Both held in
-// PSRAM so they don't tax internal SRAM — the BT controller already takes
-// ~80 KB and pushing 16 KB of BSS in here was making BT init OOM at boot.
-// Sized for one 48×48 RGB565 icon (~6.2 KB base64, ~4.6 KB raw) with
-// comfortable headroom for slightly larger payloads.
+// Posted from the image-RX state machine (NimBLE host task) to ble_rx_task
+// on transfer completion. Ownership of `buffer` (heap_caps_malloc'd in
+// PSRAM) transfers along with the message — ble_rx_task copies it into the
+// destination (Notification.img or MusicState.album_art) and frees the
+// original.
+struct ImageInstallMsg
+{
+    uint8_t kind;            // matches BEGIN image_kind (0x00 icon, 0x01 album art)
+    uint32_t correlation_id; // notification id for icons, 0 for album art
+    uint16_t width;
+    uint16_t height;
+    uint32_t length;
+    uint8_t *buffer;
+};
+static QueueHandle_t img_done_queue = nullptr;
+
+// Pending album-art handoff. Written from ble_rx_task and drained by
+// the LVGL music_update timer. Uses its own mutex (not lvgl_port_lock)
+// so the BLE side can stage new art even while the watch is asleep —
+// LVGL is suspended then, and the LVGL port mutex might be held by the
+// suspended task, which would deadlock anyone trying to take it.
+struct PendingAlbumArt
+{
+    PsramByteVec pixels;
+    uint16_t w;
+    uint16_t h;
+    bool dirty;
+};
+static PendingAlbumArt s_pending_album_art;
+static SemaphoreHandle_t s_album_art_mux = nullptr;
+
+// Queue set lets ble_rx_task drain both the text rx queue and the
+// image-install queue on a single blocking wait. All notifs-vector
+// mutation happens on ble_rx_task so there's no concurrent writer.
+static QueueSetHandle_t rx_queue_set = nullptr;
+
+// Line buffer for the text-protocol RX task. PSRAM-backed so it
+// doesn't tax internal SRAM — BT controller alone takes ~80 KB.
 static constexpr size_t RX_LINE_BUF_SIZE = 8192;
-static constexpr size_t RX_SCRATCH_SIZE = 8192;
 static char *s_rx_line = nullptr;
-static uint8_t *s_rx_scratch = nullptr;
+
+// Image-RX state machine state. Mutated only on the NimBLE host task
+// (the only thread that runs ble_image_rx_access), so no locking is
+// required even across multi-frame transfers.
+struct ImageRxState
+{
+    bool in_progress;
+    uint16_t transfer_id;
+    uint8_t image_kind;      // BEGIN offset 12 — 0x00 icon, 0x01 album art
+    uint32_t correlation_id; // notification id for icons, 0 for album art
+    uint16_t width;
+    uint16_t height;
+    uint16_t chunk_payload_size;
+    uint32_t total_bytes;
+    uint32_t received_bytes;
+    int64_t last_frame_us;
+    uint8_t *buffer; // PSRAM, sized to total_bytes
+};
+static ImageRxState s_img_rx = {};
+static constexpr int64_t IMG_RX_TIMEOUT_US = 5'000'000; // 5 s
 
 int ble_nus_rx_access(uint16_t conn_handle, uint16_t attr_handle,
                       struct ble_gatt_access_ctxt *ctxt, void *arg)
@@ -77,9 +140,250 @@ int ble_nus_rx_access(uint16_t conn_handle, uint16_t attr_handle,
         return BLE_ATT_ERR_UNLIKELY;
 
     chunk.len = copied;
-    if (rx_queue)
-        xQueueSend(rx_queue, &chunk, 0); // drop on overflow
+    if (rx_queue && xQueueSend(rx_queue, &chunk, 0) != pdTRUE)
+        ESP_LOGW(TAG, "rx queue overflow; dropped %u B", (unsigned)copied);
     return 0;
+}
+
+// Standard CRC-32/IEEE 802.3 (PNG / zlib / java.util.zip.CRC32).
+// Reflected polynomial 0xEDB88320, init 0xFFFFFFFF, reflect in/out,
+// final XOR 0xFFFFFFFF. Implemented byte-at-a-time without a lookup
+// table; ~200 µs for a 4.6 KB icon on the S3 at 240 MHz — well below
+// the wall-clock of the BLE transfer.
+//
+// The ROM's esp_rom_crc32_le has the same polynomial but its
+// pre/post-XOR convention varies across chip families, so rolling our
+// own is the simplest way to guarantee a byte-for-byte match with the
+// phone's CRC.
+static uint32_t crc32_ieee(const uint8_t *buf, size_t len)
+{
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; i++)
+    {
+        crc ^= buf[i];
+        for (int j = 0; j < 8; j++)
+        {
+            uint32_t mask = (uint32_t)(-(int32_t)(crc & 1u));
+            crc = (crc >> 1) ^ (0xEDB88320u & mask);
+        }
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+
+// Reset the in-progress image RX state and free its buffer.
+static void img_rx_reset(void)
+{
+    if (s_img_rx.buffer)
+    {
+        heap_caps_free(s_img_rx.buffer);
+        s_img_rx.buffer = nullptr;
+    }
+    s_img_rx.in_progress = false;
+    s_img_rx.received_bytes = 0;
+}
+
+// Notification-image RX state machine. One write = one frame.
+//
+//   BEGIN  (20 B): 0x01, tid u16, nid u32, w u16, h u16, fmt u8, flags u8,
+//                  total_bytes u32, chunk_size u16, reserved u8
+//   DATA   (5+N B): 0x02, tid u16, seq u16, payload[N]
+//   END    (7 B):  0x03, tid u16, crc32 u32 (CRC-32/IEEE 802.3 over the
+//                                            reassembled payload only)
+//   ABORT  (3 B):  0x04, tid u16
+//
+// All multi-byte fields little-endian. Only pixel_format 0x01 (RGB565 LE)
+// is supported. On a successful END the buffer is handed off to
+// ble_rx_task via img_done_queue so the Notification.img install runs
+// on the same task that does the text-protocol writes (single-writer
+// invariant on the notifs vector).
+int ble_image_rx_access(uint16_t conn_handle, uint16_t attr_handle,
+                        struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR)
+        return 0;
+
+    // Stack buffer for one write. Generous upper bound covers MTU up to 517.
+    uint8_t buf[520];
+    uint16_t len = 0;
+    if (ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof(buf), &len) != 0)
+        return BLE_ATT_ERR_UNLIKELY;
+
+    if (len < 1)
+        return 0;
+
+    int64_t now_us = esp_timer_get_time();
+    if (s_img_rx.in_progress &&
+        (now_us - s_img_rx.last_frame_us) > IMG_RX_TIMEOUT_US)
+    {
+        ESP_LOGW(TAG, "img transfer stalled, resetting");
+        img_rx_reset();
+    }
+    s_img_rx.last_frame_us = now_us;
+
+    uint8_t op = buf[0];
+
+    if (op == 0x01) // BEGIN
+    {
+        if (len != 20)
+            return 0;
+        uint16_t transfer_id = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
+        uint32_t correlation = (uint32_t)buf[3] | ((uint32_t)buf[4] << 8) |
+                               ((uint32_t)buf[5] << 16) | ((uint32_t)buf[6] << 24);
+        uint16_t width = (uint16_t)buf[7] | ((uint16_t)buf[8] << 8);
+        uint16_t height = (uint16_t)buf[9] | ((uint16_t)buf[10] << 8);
+        uint8_t pixel_format = buf[11];
+        uint8_t image_kind = buf[12];
+        uint32_t total = (uint32_t)buf[13] | ((uint32_t)buf[14] << 8) |
+                         ((uint32_t)buf[15] << 16) | ((uint32_t)buf[16] << 24);
+        uint16_t chunk_size = (uint16_t)buf[17] | ((uint16_t)buf[18] << 8);
+        // buf[19] = reserved
+
+        if (pixel_format != 0x01)
+        {
+            ESP_LOGW(TAG, "img: unsupported pixel_format 0x%02x", pixel_format);
+            return 0;
+        }
+        // Reject kinds we don't know how to route on completion — saves
+        // allocating a full PSRAM buffer just to drop it at END.
+        if (image_kind != 0x00 && image_kind != 0x01)
+        {
+            ESP_LOGW(TAG, "img: unsupported image_kind 0x%02x", image_kind);
+            return 0;
+        }
+        if (width == 0 || height == 0 || chunk_size == 0 ||
+            total == 0 || total != (uint32_t)width * height * 2)
+        {
+            ESP_LOGW(TAG, "img: bogus header w=%u h=%u total=%u",
+                     width, height, total);
+            return 0;
+        }
+
+        // BEGIN pre-empts any in-progress transfer.
+        img_rx_reset();
+        s_img_rx.buffer = (uint8_t *)heap_caps_malloc(total,
+                                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_img_rx.buffer)
+        {
+            ESP_LOGE(TAG, "img: PSRAM alloc %u B failed", total);
+            return 0;
+        }
+        s_img_rx.transfer_id = transfer_id;
+        s_img_rx.image_kind = image_kind;
+        s_img_rx.correlation_id = correlation;
+        s_img_rx.width = width;
+        s_img_rx.height = height;
+        s_img_rx.chunk_payload_size = chunk_size;
+        s_img_rx.total_bytes = total;
+        s_img_rx.received_bytes = 0;
+        s_img_rx.in_progress = true;
+        ESP_LOGI(TAG, "img BEGIN tid=%u kind=0x%02x corr=%" PRIu32 " %ux%u total=%u chunk=%u",
+                 transfer_id, image_kind, correlation,
+                 width, height, total, chunk_size);
+        return 0;
+    }
+
+    if (op == 0x02) // DATA
+    {
+        if (!s_img_rx.in_progress || len < 5)
+            return 0;
+        uint16_t transfer_id = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
+        if (transfer_id != s_img_rx.transfer_id)
+            return 0; // stale
+        uint16_t seq = (uint16_t)buf[3] | ((uint16_t)buf[4] << 8);
+        size_t chunk_len = (size_t)len - 5;
+        size_t offset = (size_t)seq * s_img_rx.chunk_payload_size;
+        if (offset + chunk_len > s_img_rx.total_bytes)
+        {
+            ESP_LOGW(TAG, "img DATA out of range seq=%u offset=%u len=%u",
+                     seq, (unsigned)offset, (unsigned)chunk_len);
+            img_rx_reset();
+            return 0;
+        }
+        memcpy(s_img_rx.buffer + offset, buf + 5, chunk_len);
+        s_img_rx.received_bytes += chunk_len;
+        return 0;
+    }
+
+    if (op == 0x03) // END
+    {
+        if (!s_img_rx.in_progress || len != 7)
+            return 0;
+        uint16_t transfer_id = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
+        if (transfer_id != s_img_rx.transfer_id)
+            return 0;
+        uint32_t expected_crc = (uint32_t)buf[3] | ((uint32_t)buf[4] << 8) |
+                                ((uint32_t)buf[5] << 16) | ((uint32_t)buf[6] << 24);
+        if (s_img_rx.received_bytes != s_img_rx.total_bytes)
+        {
+            ESP_LOGW(TAG, "img END size mismatch got=%u expected=%u",
+                     s_img_rx.received_bytes, s_img_rx.total_bytes);
+            img_rx_reset();
+            return 0;
+        }
+        uint32_t actual_crc = crc32_ieee(s_img_rx.buffer, s_img_rx.total_bytes);
+        if (actual_crc != expected_crc)
+        {
+            ESP_LOGW(TAG, "img END CRC mismatch got=0x%08x expected=0x%08x",
+                     (unsigned)actual_crc, (unsigned)expected_crc);
+            img_rx_reset();
+            return 0;
+        }
+
+        ImageInstallMsg msg = {
+            .kind = s_img_rx.image_kind,
+            .correlation_id = s_img_rx.correlation_id,
+            .width = s_img_rx.width,
+            .height = s_img_rx.height,
+            .length = s_img_rx.total_bytes,
+            .buffer = s_img_rx.buffer,
+        };
+        if (img_done_queue && xQueueSend(img_done_queue, &msg, 0) == pdTRUE)
+        {
+            s_img_rx.buffer = nullptr; // ownership transferred
+            s_img_rx.in_progress = false;
+            ESP_LOGI(TAG, "img complete kind=0x%02x corr=%" PRIu32 " %ux%u",
+                     msg.kind, msg.correlation_id, msg.width, msg.height);
+        }
+        else
+        {
+            ESP_LOGW(TAG, "img install queue full; dropping corr=%" PRIu32,
+                     msg.correlation_id);
+            img_rx_reset();
+        }
+        return 0;
+    }
+
+    if (op == 0x04) // ABORT
+    {
+        if (!s_img_rx.in_progress || len != 3)
+            return 0;
+        uint16_t transfer_id = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
+        if (transfer_id != s_img_rx.transfer_id)
+            return 0;
+        ESP_LOGI(TAG, "img ABORT tid=%u", transfer_id);
+        img_rx_reset();
+        return 0;
+    }
+
+    return 0;
+}
+
+// Standard Battery Service (BAS) so Android's connected-device battery
+// widget — the same one that shows headphones / smartwatch levels —
+// can read and subscribe to the watch's battery percent. BAS is just
+// service 0x180F + Battery Level char 0x2A19, value = one uint8_t [0..100].
+static const ble_uuid16_t bas_svc_uuid = BLE_UUID16_INIT(0x180F);
+static const ble_uuid16_t bas_lvl_uuid = BLE_UUID16_INIT(0x2A19);
+
+static int ble_bas_lvl_access(uint16_t conn_handle, uint16_t attr_handle,
+                              struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    if (ctxt->op != BLE_GATT_ACCESS_OP_READ_CHR)
+        return 0;
+    uint8_t lvl = watch.battery.percent;
+    if (lvl > 100) lvl = 100; // sentinel UINT8_MAX during pre-init reads
+    int rc = os_mbuf_append(ctxt->om, &lvl, sizeof(lvl));
+    return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
 static const struct ble_gatt_svc_def nus_svcs[] = {
@@ -99,6 +403,37 @@ static const struct ble_gatt_svc_def nus_svcs[] = {
                 .access_cb = ble_nus_rx_access, // unused for notify-only
                 .flags = BLE_GATT_CHR_F_NOTIFY,
                 .val_handle = &ble.tx_attr_handle,
+            },
+            {0},
+        },
+    },
+    {
+        // Image transfer service (phone -> watch). Custom protocol with
+        // BEGIN / DATA / END / ABORT frames; see ble_image_rx_access.
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = &img_svc_uuid.u,
+        .characteristics = (struct ble_gatt_chr_def[]){
+            {
+                .uuid = &img_data_uuid.u,
+                .access_cb = ble_image_rx_access,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+            },
+            {0},
+        },
+    },
+    {
+        // Standard Battery Service so Android's connected-device battery
+        // widget picks up the watch's level. Read returns the current
+        // watch.battery.percent; notifications are pushed from
+        // BLE::send_status whenever the level changes.
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = &bas_svc_uuid.u,
+        .characteristics = (struct ble_gatt_chr_def[]){
+            {
+                .uuid = &bas_lvl_uuid.u,
+                .access_cb = ble_bas_lvl_access,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+                .val_handle = &ble.bas_lvl_handle,
             },
             {0},
         },
@@ -175,6 +510,19 @@ void BLE::send_status()
              watch.battery.charging ? 1 : 0,
              (double)watch.battery.voltage / 1000.0);
     send_gb(buf);
+
+    // Mirror to the standard BAS Battery Level characteristic so Android's
+    // generic connected-device battery widget tracks it without needing
+    // the Gadgetbridge channel. Called whenever battery_task observes a
+    // percent or charging change, which is the right cadence for BAS too.
+    if (connected() && bas_lvl_handle != 0)
+    {
+        uint8_t lvl = watch.battery.percent;
+        if (lvl > 100) lvl = 100;
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(&lvl, sizeof(lvl));
+        if (om)
+            ble_gatts_notify_custom(conn_handle, bas_lvl_handle, om);
+    }
 }
 
 void BLE::send_music_control(const char *cmd)
@@ -190,6 +538,26 @@ void BLE::send_notification_action(uint32_t id, const char *action)
     snprintf(buf, sizeof(buf),
              "{\"t\":\"notify\",\"id\":%" PRIu32 ",\"n\":\"%s\"}", id, action);
     send_gb(buf);
+}
+
+void BLE::send_notification_reply(uint32_t id, const char *text)
+{
+    // Build via cJSON so the body field is properly escaped — reply
+    // strings can contain quotes, backslashes, and multi-byte UTF-8
+    // (the suggestion list often includes things like ":)" and emoji),
+    // all of which would corrupt a hand-rolled snprintf format.
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "t", "notify");
+    cJSON_AddNumberToObject(root, "id", (double)id);
+    cJSON_AddStringToObject(root, "n", "REPLY");
+    cJSON_AddStringToObject(root, "msg", text ? text : "");
+    char *s = cJSON_PrintUnformatted(root);
+    if (s)
+    {
+        send_gb(s);
+        cJSON_free(s);
+    }
+    cJSON_Delete(root);
 }
 
 void BLE::send_find_phone(bool on)
@@ -245,21 +613,139 @@ void BLE::dismiss_notification(uint32_t id, bool send_to_phone)
         send_notification_action(id, "DISMISS");
 }
 
+void BLE::post_pending_album_art(PsramByteVec &&pixels, uint16_t w, uint16_t h)
+{
+    if (!s_album_art_mux)
+        return;
+    xSemaphoreTake(s_album_art_mux, portMAX_DELAY);
+    s_pending_album_art.pixels = std::move(pixels);
+    s_pending_album_art.w = w;
+    s_pending_album_art.h = h;
+    s_pending_album_art.dirty = true;
+    xSemaphoreGive(s_album_art_mux);
+}
+
+bool BLE::promote_pending_album_art()
+{
+    if (!s_album_art_mux)
+        return false;
+    bool changed = false;
+    if (xSemaphoreTake(s_album_art_mux, 0) == pdTRUE)
+    {
+        if (s_pending_album_art.dirty)
+        {
+            // Promote pending into the live music_state. Called from
+            // the LVGL task with the LVGL lock held implicitly, so
+            // the subsequent descriptor rebind in music_update is
+            // atomic with this swap from a render's point of view.
+            music_state.album_art = std::move(s_pending_album_art.pixels);
+            music_state.album_art_w = s_pending_album_art.w;
+            music_state.album_art_h = s_pending_album_art.h;
+            s_pending_album_art.pixels = PsramByteVec{};
+            s_pending_album_art.w = 0;
+            s_pending_album_art.h = 0;
+            s_pending_album_art.dirty = false;
+            changed = true;
+        }
+        xSemaphoreGive(s_album_art_mux);
+    }
+    return changed;
+}
+
 void BLE::clear_notifications()
 {
-    if (notifs.empty()) return;
+    if (notifs.empty())
+        return;
     notifs.clear();
     notifs_version++;
 }
 
 // ---------- Incoming command parsing ----------
 
-// Optional helper: pull a child field as std::string. Missing → empty.
+// Collapse Unicode whitespace variants to a plain ASCII space, and drop
+// zero-width / direction-mark control characters entirely. Product Sans
+// (and most TTFs) only has a glyph for U+0020, so any other space-like
+// codepoint that survives into LVGL renders as the missing-glyph box.
+// Doing the rewrite at the BLE ingest layer means every label
+// downstream (notification labels, popup, music info) is clean without
+// needing to repeat the substitution per UI surface.
+//
+// The mapping is UTF-8 byte-pattern based:
+//   C2 A0                          U+00A0 NO-BREAK SPACE          → ' '
+//   E2 80 80..8A                   U+2000..U+200A (en/em/thin/etc.) → ' '
+//   E2 80 8B..8F                   U+200B..U+200F (zero-width / LRM/RLM) → dropped
+//   E2 80 AF                       U+202F NARROW NO-BREAK SPACE   → ' '
+//   E2 81 9F                       U+205F MEDIUM MATHEMATICAL SPACE → ' '
+//   E3 80 80                       U+3000 IDEOGRAPHIC SPACE       → ' '
+//   EF BB BF                       U+FEFF ZERO WIDTH NO-BREAK SPACE (BOM) → dropped
+static std::string sanitize_text(const char *s)
+{
+    std::string out;
+    if (!s)
+        return out;
+    size_t n = strlen(s);
+    out.reserve(n);
+    const uint8_t *p = (const uint8_t *)s;
+    size_t i = 0;
+    while (i < n)
+    {
+        uint8_t c = p[i];
+        if (i + 1 < n && c == 0xC2 && p[i + 1] == 0xA0)
+        {
+            out += ' ';
+            i += 2;
+            continue;
+        }
+        if (i + 2 < n && c == 0xE2 && p[i + 1] == 0x80)
+        {
+            uint8_t lo = p[i + 2];
+            if (lo >= 0x80 && lo <= 0x8A)
+            {
+                out += ' ';
+                i += 3;
+                continue;
+            }
+            if (lo >= 0x8B && lo <= 0x8F)
+            {
+                i += 3;
+                continue;
+            }
+            if (lo == 0xAF)
+            {
+                out += ' ';
+                i += 3;
+                continue;
+            }
+        }
+        if (i + 2 < n && c == 0xE2 && p[i + 1] == 0x81 && p[i + 2] == 0x9F)
+        {
+            out += ' ';
+            i += 3;
+            continue;
+        }
+        if (i + 2 < n && c == 0xE3 && p[i + 1] == 0x80 && p[i + 2] == 0x80)
+        {
+            out += ' ';
+            i += 3;
+            continue;
+        }
+        if (i + 2 < n && c == 0xEF && p[i + 1] == 0xBB && p[i + 2] == 0xBF)
+        {
+            i += 3;
+            continue;
+        }
+        out += (char)c;
+        i++;
+    }
+    return out;
+}
+
+// Optional helper: pull a child field as std::string, sanitised. Missing → empty.
 static std::string json_str(const cJSON *obj, const char *key)
 {
     cJSON *f = cJSON_GetObjectItemCaseSensitive(obj, key);
     if (cJSON_IsString(f) && f->valuestring)
-        return std::string(f->valuestring);
+        return sanitize_text(f->valuestring);
     return std::string();
 }
 
@@ -297,9 +783,12 @@ static size_t fix_js_x_escapes(char *s, size_t len)
 {
     auto hex = [](char c) -> int
     {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
         return -1;
     };
     size_t r = 0, w = 0;
@@ -357,6 +846,8 @@ void BLE::handle_gb_json(const char *json, size_t len)
         return;
     }
 
+    ESP_LOGI(TAG, "GB msg: %s\n", json);
+
     if (strcmp(t->valuestring, "notify") == 0)
     {
         Notification n;
@@ -369,9 +860,30 @@ void BLE::handle_gb_json(const char *json, size_t len)
             n.body = json_str(root, "subject");
         n.sender = json_str(root, "sender");
         n.when_ms = esp_timer_get_time() / 1000;
+        cJSON *reply = cJSON_GetObjectItemCaseSensitive(root, "reply");
+        n.reply = cJSON_IsTrue(reply);
 
-        ESP_LOGI(TAG, "notify: id=%" PRIu32 " src='%s' title='%s'",
-                 n.id, n.src.c_str(), n.title.c_str());
+        if (n.reply)
+        {
+            cJSON *replies = cJSON_GetObjectItemCaseSensitive(root, "suggestions");
+            if (cJSON_IsArray(replies))
+            {
+                cJSON *item = NULL;
+
+                // 3. Iterate through each element in the array
+                cJSON_ArrayForEach(item, replies)
+                {
+                    // 4. Verify the element is a string before accessing it
+                    if (cJSON_IsString(item) && (item->valuestring != NULL))
+                    {
+                        n.replies.push_back(item->valuestring);
+                    }
+                }
+            }
+        }
+
+        ESP_LOGI(TAG, "notify: id=%" PRIu32 " src='%s' title='%s' body='%s' reply=%s",
+                 n.id, n.src.c_str(), n.title.c_str(), n.body.c_str(), n.reply ? "true" : "false");
 
         push_notification(std::move(n));
 
@@ -390,69 +902,9 @@ void BLE::handle_gb_json(const char *json, size_t len)
         if (cJSON_IsNumber(id))
             dismiss_notification((uint32_t)id->valuedouble, /*send_to_phone=*/false);
     }
-    else if (strcmp(t->valuestring, "notify-img") == 0)
-    {
-        // Companion message that lands after a `notify`, carrying a base64-
-        // encoded raw RGB565 icon for that id. Wire format of the decoded
-        // base64 buffer:
-        //   bytes 0..1: width  u16 LE
-        //   bytes 2..3: height u16 LE
-        //   bytes 4..:  w*h*2 RGB565 LE pixels, row-major, no padding
-        // We strip the 4-byte header and store the pixels as-is so the UI
-        // can hand them straight to LVGL with LV_COLOR_FORMAT_RGB565 — no
-        // allocator, no color conversion.
-        //
-        // Memory: read the base64 directly off cJSON's valuestring (no
-        // std::string copy) and decode into a BSS scratch buffer rather
-        // than a heap vector — three concurrent 6 KB allocs (cJSON tree,
-        // string copy, decode buffer) used to blow internal SRAM. Only
-        // the final pixel buffer is heap-allocated.
-        cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "id");
-        cJSON *img_node = cJSON_GetObjectItemCaseSensitive(root, "img");
-        if (!cJSON_IsNumber(id) || !cJSON_IsString(img_node) ||
-            !img_node->valuestring)
-        {
-            ESP_LOGW(TAG, "notify-img missing id or img");
-        }
-        else
-        {
-            uint32_t nid = (uint32_t)id->valuedouble;
-            const char *b64 = img_node->valuestring;
-            size_t b64_len = strlen(b64);
-
-            // PSRAM scratch (see file-scope s_rx_scratch).
-            size_t raw_len = 0;
-            int rc = mbedtls_base64_decode(s_rx_scratch, RX_SCRATCH_SIZE, &raw_len,
-                                           (const unsigned char *)b64, b64_len);
-            if (rc != 0)
-            {
-                ESP_LOGW(TAG, "notify-img base64 decode rc=%d size=%u",
-                         rc, (unsigned)b64_len);
-            }
-            else if (raw_len < 4)
-            {
-                ESP_LOGW(TAG, "notify-img payload too short (%u)",
-                         (unsigned)raw_len);
-            }
-            else
-            {
-                uint16_t w = (uint16_t)s_rx_scratch[0] | ((uint16_t)s_rx_scratch[1] << 8);
-                uint16_t h = (uint16_t)s_rx_scratch[2] | ((uint16_t)s_rx_scratch[3] << 8);
-                size_t expected = 4 + (size_t)w * h * 2;
-                if (w == 0 || h == 0 || raw_len != expected)
-                {
-                    ESP_LOGW(TAG, "notify-img size mismatch: w=%u h=%u "
-                             "raw=%u expected=%u",
-                             w, h, (unsigned)raw_len, (unsigned)expected);
-                }
-                else
-                {
-                    PsramByteVec pixels(s_rx_scratch + 4, s_rx_scratch + raw_len);
-                    attach_notification_image(nid, std::move(pixels), w, h);
-                }
-            }
-        }
-    }
+    // Notification images now arrive on the dedicated image GATT
+    // characteristic (ble_image_rx_access); the old "notify-img" JSON
+    // case was removed when that wire format took over.
     else if (strcmp(t->valuestring, "find") == 0)
     {
         // Phone is asking us to ring (find watch).
@@ -480,8 +932,14 @@ void BLE::handle_gb_json(const char *json, size_t len)
     else if (strcmp(t->valuestring, "is_gps_active") == 0)
     {
         send_gb("{t:\"gps_power\", status: false}");
-    } else {
-        ESP_LOGW(TAG, "Unhandled gb msg: %s\n", json);
+    }
+    else if (strcmp(t->valuestring, "reboot") == 0)
+    {
+        esp_restart();
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Failed to handle GB message\n");
     }
 
     cJSON_Delete(root);
@@ -546,45 +1004,99 @@ void BLE::handle_line(const char *line, size_t len)
     ESP_LOGD(TAG, "unhandled line: %.*s", (int)len, line);
 }
 
-// ---------- ble_rx_task: text / JSON line dispatcher ----------
+// ---------- ble_rx_task: text + image consumer ----------
 
-// Pulls bytes off rx_queue, line-buffers them, dispatches.
-//
-// Line buffer is allocated in PSRAM (see s_rx_line above). 8 KB fits the
-// largest single GB() message (`notify-img` with a base64 RGB565 icon)
-// with comfortable headroom.
+// Blocks on a queue set covering both rx_queue (text-protocol bytes from
+// the NUS RX char) and img_done_queue (completed image transfers from
+// the image GATT state machine). Keeping everything on one task is the
+// reason the image RX state machine in ble_image_rx_access doesn't
+// touch the notifs vector itself — it hands the buffer off here so the
+// install runs on the same task that does push_notification(), which
+// keeps the single-writer invariant on `notifs` intact.
 void ble_rx_task(void *arg)
 {
     char *line = s_rx_line;
     size_t lpos = 0;
 
-    RxChunk chunk;
     while (true)
     {
-        if (xQueueReceive(rx_queue, &chunk, portMAX_DELAY) != pdTRUE)
+        QueueSetMemberHandle_t activated =
+            xQueueSelectFromSet(rx_queue_set, portMAX_DELAY);
+        if (!activated)
             continue;
 
-        for (uint16_t i = 0; i < chunk.len; i++)
+        if (activated == (QueueSetMemberHandle_t)rx_queue)
         {
-            uint8_t c = chunk.data[i];
-            if (c == '\n' || c == '\r')
+            RxChunk chunk;
+            if (xQueueReceive(rx_queue, &chunk, 0) != pdTRUE)
+                continue;
+
+            for (uint16_t i = 0; i < chunk.len; i++)
             {
-                if (lpos > 0)
+                uint8_t c = chunk.data[i];
+                if (c == '\n' || c == '\r')
                 {
-                    line[lpos] = 0;
-                    ble.handle_line(line, lpos);
+                    if (lpos > 0)
+                    {
+                        line[lpos] = 0;
+                        ble.handle_line(line, lpos);
+                        lpos = 0;
+                    }
+                }
+                else if (lpos < RX_LINE_BUF_SIZE - 1)
+                {
+                    line[lpos++] = (char)c;
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "rx line buffer overflow (%u bytes); dropping",
+                             (unsigned)RX_LINE_BUF_SIZE);
                     lpos = 0;
                 }
             }
-            else if (lpos < RX_LINE_BUF_SIZE - 1)
+        }
+        else if (activated == (QueueSetMemberHandle_t)img_done_queue)
+        {
+            ImageInstallMsg msg;
+            if (xQueueReceive(img_done_queue, &msg, 0) != pdTRUE)
+                continue;
+
+            // Copy from the raw PSRAM buffer into a PsramByteVec the
+            // destination structure owns. Then route based on image_kind.
+            // The std::move into the destination vector frees the
+            // previous album-art / icon buffer via the allocator, so
+            // memory doesn't accumulate across image updates.
+            //
+            // For album art specifically: it lives in MusicState and
+            // the music screen's lv_image_dsc_t points directly at the
+            // buffer, so the move could free pixels mid-render. Take
+            // lvgl_port_lock around that branch so LVGL can't be in
+            // the middle of drawing while we swap the vector.
+            // Notification icons use a copy-out path (UI rebuilds the
+            // card list from the version counter) so they don't need
+            // the same protection.
+            PsramByteVec pixels(msg.buffer, msg.buffer + msg.length);
+            heap_caps_free(msg.buffer);
+            switch (msg.kind)
             {
-                line[lpos++] = (char)c;
-            }
-            else
-            {
-                ESP_LOGW(TAG, "rx line buffer overflow (%u bytes); dropping",
-                         (unsigned)RX_LINE_BUF_SIZE);
-                lpos = 0;
+            case 0x00: // notification icon
+                attach_notification_image(msg.correlation_id, std::move(pixels),
+                                          msg.width, msg.height);
+                break;
+            case 0x01: // album art (correlation_id ignored per spec)
+                // Stage the new image in the pending slot under our
+                // own mutex; the LVGL music_update timer promotes it
+                // to music_state on its next tick. Doing the install
+                // there means we can update music data while the watch
+                // is asleep (LVGL task is suspended, but ble_rx_task
+                // keeps running) — the live install runs at wake.
+                ble.post_pending_album_art(std::move(pixels),
+                                           msg.width, msg.height);
+                break;
+            default:
+                ESP_LOGW(TAG, "img install: unknown kind 0x%02x dropped",
+                         msg.kind);
+                break;
             }
         }
     }
@@ -622,6 +1134,13 @@ void BLE::start_advertising()
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
     fields.tx_pwr_lvl_is_present = 1;
     fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
+
+    // Appearance = Smartwatch (BT SIG category 0x00C2). Tells Android to
+    // surface this as a watch in the Connected Devices list — picks the
+    // watch icon and slots into the same battery-widget code path that
+    // headphones and smartwatches use.
+    fields.appearance = 0x00C2;
+    fields.appearance_is_present = 1;
 
     // 128-bit NUS UUID in main advertisement so phones can filter for it.
     fields.uuids128 = const_cast<ble_uuid128_t *>(&nus_svc_uuid);
@@ -669,18 +1188,24 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
             ble.conn_handle = event->connect.conn_handle;
             ESP_LOGI(TAG, "connected, handle=%d", ble.conn_handle);
 
-            // Request slow + drift-tolerant connection parameters. The BT
-            // controller's sleep clock is the internal RTC RC oscillator
-            // (~5 % accuracy) so a 7.5 ms phone-default interval plus the
-            // default 720 ms supervision timeout drops the link within
-            // seconds. Stretching the interval, raising slave latency, and
-            // pushing the timeout to ~15 s lets the link ride through RC
-            // drift between connection events.
+            // Request faster, drift-tolerant connection parameters.
+            // Earlier this used 100–200 ms interval + slave latency 4
+            // to save power; that strangled the notification-image
+            // and album-art transfers — 4 KB at MTU 244 should take
+            // <1 s but was taking 5–10 s because every connection
+            // event only carries a handful of writes. Dropping the
+            // interval to 24–48 ms (30–60 ms) with no latency gives
+            // ~5× more events per second so the phone can stream
+            // image chunks through quickly. Supervision timeout
+            // stays generous since the controller's main XTAL is the
+            // sleep clock now (BT_CTRL_LPCLK_SEL_MAIN_XTAL) and
+            // doesn't have the RC-oscillator drift problem the
+            // previous params worked around.
             struct ble_gap_upd_params p = {
-                .itvl_min = 80,             // 100 ms (units of 1.25 ms)
-                .itvl_max = 160,            // 200 ms
-                .latency = 4,               // skip up to 4 events
-                .supervision_timeout = 1500,// 15 s (units of 10 ms)
+                .itvl_min = 24,             // 30 ms (units of 1.25 ms)
+                .itvl_max = 48,             // 60 ms
+                .latency = 0,               // don't skip events
+                .supervision_timeout = 400, // 4 s (units of 10 ms)
                 .min_ce_len = 0,
                 .max_ce_len = 0,
             };
@@ -703,7 +1228,24 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         return 0;
 
     case BLE_GAP_EVENT_CONN_UPDATE:
+    {
+        // Log the params the link actually settled on. If the phone
+        // pushed the interval back up to something slow we'll see it
+        // here rather than scratching our heads at the transfer rate.
+        struct ble_gap_conn_desc d = {};
+        if (ble_gap_conn_find(event->conn_update.conn_handle, &d) == 0)
+            ESP_LOGI(TAG, "conn_update itvl=%u (×1.25ms) latency=%u timeout=%u (×10ms)",
+                     d.conn_itvl, d.conn_latency, d.supervision_timeout);
+        return 0;
+    }
     case BLE_GAP_EVENT_MTU:
+        // The image GATT char's effective chunk size is mtu - 5 (frame
+        // header) - 3 (att opcode + handle). A small MTU here is the
+        // most likely cause of slow image transfers.
+        ESP_LOGI(TAG, "mtu negotiated: %u (image chunk = %u B)",
+                 event->mtu.value,
+                 (event->mtu.value > 8u) ? (event->mtu.value - 8u) : 0u);
+        return 0;
     case BLE_GAP_EVENT_SUBSCRIBE:
     case BLE_GAP_EVENT_NOTIFY_TX:
         return 0;
@@ -754,31 +1296,56 @@ void BLE::init()
     if (rx_queue)
         return; // already inited
 
-    // Line + scratch buffers live in PSRAM. Both are 8 KB; allocating
-    // them in internal BSS pushed BT init over the SRAM cliff (BT
-    // controller's r_ble_util_buf_rx_alloc would assert at boot).
+    // Line buffer lives in PSRAM — allocating it in internal BSS pushed
+    // BT init over the SRAM cliff (controller's r_ble_util_buf_rx_alloc
+    // would assert at boot).
     s_rx_line = (char *)heap_caps_malloc(RX_LINE_BUF_SIZE,
                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    s_rx_scratch = (uint8_t *)heap_caps_malloc(RX_SCRATCH_SIZE,
-                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!s_rx_line || !s_rx_scratch)
+    if (!s_rx_line)
     {
-        ESP_LOGE(TAG, "rx scratch alloc failed");
+        ESP_LOGE(TAG, "rx line alloc failed");
         return;
     }
 
-    // 32 slots × 244 B/chunk = ~7.8 KB capacity. A single notify-img is
-    // ~25 BLE writes at MTU 247; NimBLE can deliver several chunks per
-    // connection interval, and the older 8-slot queue overflowed mid-
-    // message (xQueueSend with timeout=0 silently dropped chunks),
-    // leaving the b64 short and the decode rejecting it as invalid.
-    // Use xQueueCreateWithCaps to put the queue storage in PSRAM too —
-    // 8 KB of internal heap matters for BT controller init.
+    // Text-protocol queue (NUS RX writes). 32 slots × 244 B/chunk ≈ 8 KB,
+    // backed by PSRAM so it doesn't eat internal heap.
     rx_queue = xQueueCreateWithCaps(32, sizeof(RxChunk),
                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!rx_queue)
     {
-        ESP_LOGE(TAG, "queue alloc failed");
+        ESP_LOGE(TAG, "rx_queue alloc failed");
+        return;
+    }
+
+    // Completed-image queue. Small — one ImageInstallMsg per image, the
+    // RX state machine only finalises one at a time.
+    // Pending album-art slot's mutex. Lightweight FreeRTOS mutex,
+    // independent of lvgl_port_lock so the BLE side can stage new
+    // album art while LVGL is suspended during light sleep.
+    s_album_art_mux = xSemaphoreCreateMutex();
+    if (!s_album_art_mux)
+    {
+        ESP_LOGE(TAG, "album_art_mux alloc failed");
+        return;
+    }
+
+    img_done_queue = xQueueCreateWithCaps(4, sizeof(ImageInstallMsg),
+                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!img_done_queue)
+    {
+        ESP_LOGE(TAG, "img_done_queue alloc failed");
+        return;
+    }
+
+    // Queue set lets ble_rx_task block on both queues simultaneously
+    // (rather than polling) — keeps the single-writer invariant on the
+    // notifs vector since one task drains text and image installs.
+    rx_queue_set = xQueueCreateSet((UBaseType_t)(32 + 4));
+    if (!rx_queue_set ||
+        xQueueAddToSet(rx_queue, rx_queue_set) != pdPASS ||
+        xQueueAddToSet(img_done_queue, rx_queue_set) != pdPASS)
+    {
+        ESP_LOGE(TAG, "queue set setup failed");
         return;
     }
 
@@ -820,6 +1387,12 @@ void BLE::init()
 
     // Set placeholder name; ble_on_sync() overwrites with MAC-derived name.
     ble_svc_gap_device_name_set("G-Watch");
+
+    // Smartwatch appearance on the GAP service (0x1800 / 0x2A01) — read
+    // by hosts that pick up appearance from the GATT GAP service rather
+    // than the advertisement, including some Android paths that decide
+    // the device's icon and category after pairing.
+    ble_svc_gap_device_appearance_set(0x00C2);
 
     nimble_port_freertos_init(ble_host_task);
 

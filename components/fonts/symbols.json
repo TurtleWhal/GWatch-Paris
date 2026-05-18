@@ -27,13 +27,15 @@
         {"name": "play", "char": "",  "sizes": [32, 48] },
         {"name": "pause", "char": "",  "sizes": [32, 48] },
         {"name": "next", "char": "",  "sizes": [32] },
-        {"name": "previous", "char": "",  "sizes": [32] }
+        {"name": "previous", "char": "",  "sizes": [32] },
+        {"name": "keyboard", "char": "",  "sizes": [22] }
     ], 
     "fonts": [
-        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24],     "range":"default,0xA0-0x17F", "symbols":"×÷→’—",                      "bpp":8},
-        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 30, 36, 42], "range":"default,0xA0-0x17F", "symbols":"’—",                         "bpp":8},
-        {"font":"GoogleSansCode.ttf",      "size": [46, 28],                 "range":"",                   "symbols":"1234567890:.+-×÷eErNanIif", "bpp":8},
-        {"font":"SirinStencil.ttf",        "size": [92, 32],                 "range":"",                   "symbols":"1234567890:.APM",           "bpp":8},
-        {"font":"BadeenDisplay.ttf",       "size": [84],                     "range":"",                   "symbols":"1234567890:.",              "bpp":8}
+        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24],     "range":"default,0xA0-0x24F,0x2000-0x21FF", "symbols":"",                          "bpp":8},
+        {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 30, 36, 42], "range":"default,0xA0-0x24F,0x2000-0x21FF", "symbols":"",                          "bpp":8},
+        {"font":"NotoEmoji-Regular.ttf",   "size": [16, 20], "range": "0x231A-0x231B,0x23E9-0x23F3,0x25FB-0x25FE,0x2600-0x27BF,0x1F004,0x1F300-0x1F64F,0x1F680-0x1F6FF,0x1F900-0x1F9FF,0x1FA70-0x1FAFF", "symbols": "", "bpp": 8},
+        {"font":"GoogleSansCode.ttf",      "size": [46, 28],                 "range":"",                                               "symbols":"1234567890:.+-×÷eErNanIif", "bpp":8},
+        {"font":"SirinStencil.ttf",        "size": [92, 32],                 "range":"",                                               "symbols":"1234567890:.APM",           "bpp":8},
+        {"font":"BadeenDisplay.ttf",       "size": [84],                     "range":"",                                               "symbols":"1234567890:.",              "bpp":8}
     ]
 }
