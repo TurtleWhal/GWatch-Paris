@@ -81,11 +81,11 @@ static lv_obj_t *popup_build()
 
     lv_obj_t *card = lv_obj_create(scr);
     lv_obj_set_size(card, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_min_height(card, 82, 0);
+    lv_obj_set_style_min_height(card, 72 + 8 * 2, 0);
     lv_obj_set_style_bg_opa(card, 0, 0);
     lv_obj_set_style_border_width(card, 0, 0);
     lv_obj_set_style_pad_all(card, 8, 0);
-    lv_obj_set_style_pad_left(card, 8 * 2 + 66, 0);
+    lv_obj_set_style_pad_left(card, 8 * 2 + 72, 0);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_flex_main_place(card, LV_FLEX_ALIGN_CENTER, 0);
     lv_obj_set_style_pad_row(card, 2, 0);
@@ -94,7 +94,7 @@ static lv_obj_t *popup_build()
     // matching notify-img arrives; popup_show() swaps that for the icon
     // image when one is available.
     popup_icon_box = lv_obj_create(card);
-    lv_obj_set_size(popup_icon_box, 66, 66);
+    lv_obj_set_size(popup_icon_box, 72, 72);
     lv_obj_set_style_radius(popup_icon_box, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_clip_corner(popup_icon_box, true, 0);
     lv_obj_set_style_border_width(popup_icon_box, 0, 0);
@@ -103,7 +103,7 @@ static lv_obj_t *popup_build()
     lv_obj_set_scrollbar_mode(popup_icon_box, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_flag(popup_icon_box, LV_OBJ_FLAG_SCROLLABLE, false);
     lv_obj_set_flag(popup_icon_box, LV_OBJ_FLAG_IGNORE_LAYOUT, true);
-    lv_obj_set_pos(popup_icon_box, -66 - 8, 0);
+    lv_obj_set_pos(popup_icon_box, -72 - 8, 0);
 
     popup_icon_img = lv_image_create(popup_icon_box);
     lv_obj_set_flag(popup_icon_img, LV_OBJ_FLAG_HIDDEN, true);
@@ -177,7 +177,13 @@ static void popup_apply_icon(const Notification &n)
         // straddle the container origin; pin to top-left so 0..scaled_size
         // fills the container exactly.
         lv_image_set_pivot(popup_icon_img, 0, 0);
-        lv_image_set_scale(popup_icon_img, 256 * 66 / n.img_w);
+        // Fixed 3:2 upscale (LVGL scale value 384 = 256 * 1.5). With the
+        // 48 px notification icons Gadgetbridge sends, this lands at
+        // exactly 72 px and fills the 72 px container. Switched from
+        // the previous "fit to container" formula (256 * 72 / img_w) so
+        // off-spec sources still render at a predictable pixel size
+        // instead of getting stretched to fit.
+        lv_image_set_scale(popup_icon_img, 256 * 3 / 2);
         lv_obj_set_pos(popup_icon_img, 0, 0);
         lv_obj_set_flag(popup_icon_img, LV_OBJ_FLAG_HIDDEN, false);
         lv_obj_set_style_bg_opa(popup_icon_box, 0, 0);
@@ -244,6 +250,8 @@ static void popup_show(const Notification &n, bool animate = true)
     }
 
     popup_apply_icon(n);
+
+    lv_obj_scroll_to_y(popup_body, 0, LV_ANIM_OFF);
 
     // Don't trample our own popup as the "previous screen" if a second
     // notification arrives while the first popup is still up.
@@ -422,16 +430,16 @@ static void rebuild_notification_list()
 
         lv_obj_t *card = lv_button_create(center);
         lv_obj_set_size(card, 200, LV_SIZE_CONTENT);
-        lv_obj_set_style_min_height(card, 62, 0);
+        lv_obj_set_style_min_height(card, 64, 0);
         lv_obj_set_style_bg_color(card, lv_color_hex(0x1c1c1c), 0);
-        lv_obj_set_style_radius(card, 62 / 2, 0);
+        lv_obj_set_style_radius(card, 64 / 2, 0);
         // Horizontal padding stays 8; vertical padding drops to 4 so the
         // natural height for src(10pt) + title(16pt) + 1-line body(14pt)
-        // plus the 2 px pad_row gaps lands exactly on the 62 px min.
+        // plus the 2 px pad_row gaps lands exactly on the 64 px min.
         // With pad_all=8 it was 70 px and every card overflowed its min.
         lv_obj_set_style_pad_hor(card, 8, 0);
         lv_obj_set_style_pad_ver(card, 4, 0);
-        lv_obj_set_style_pad_left(card, 8 * 2 + 46, 0);
+        lv_obj_set_style_pad_left(card, 8 * 2 + 48, 0);
         lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_row(card, 2, 0);
         lv_obj_set_flag(card, LV_OBJ_FLAG_SCROLL_ON_FOCUS, false);
@@ -443,7 +451,7 @@ static void rebuild_notification_list()
         // when we have an image it goes inside, otherwise the container's
         // own white background fills the circle as a placeholder.
         lv_obj_t *icon_box = lv_obj_create(card);
-        lv_obj_set_size(icon_box, 46, 46);
+        lv_obj_set_size(icon_box, 48, 48);
         lv_obj_set_style_radius(icon_box, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_clip_corner(icon_box, true, 0);
         lv_obj_set_style_border_width(icon_box, 0, 0);
@@ -452,10 +460,10 @@ static void rebuild_notification_list()
         lv_obj_set_scrollbar_mode(icon_box, LV_SCROLLBAR_MODE_OFF);
         lv_obj_set_flag(icon_box, LV_OBJ_FLAG_SCROLLABLE, false);
         lv_obj_set_flag(icon_box, LV_OBJ_FLAG_IGNORE_LAYOUT, true);
-        // y=4 so the 46 px circle stays centred in the 62 px card: the
+        // y=4 so the 48 px circle stays centred in the 64 px card: the
         // 8 px gap above and below comes from pad_top(4) + this y(4) on
-        // top and pad_bottom(4) + (62 - 46 - 4 - 4 - 4) on bottom.
-        lv_obj_set_pos(icon_box, -46 - 8, 4);
+        // top and pad_bottom(4) + (64 - 48 - 4 - 4 - 4) on bottom.
+        lv_obj_set_pos(icon_box, -48 - 8, 4);
 
         if (!n.img.empty() && n.img_w > 0 && n.img_h > 0)
         {
@@ -476,7 +484,7 @@ static void rebuild_notification_list()
             // output fills the container from (0,0) — the default center
             // pivot leaves it offset by half the size difference.
             lv_image_set_pivot(icon_img, 0, 0);
-            lv_image_set_scale(icon_img, 256 * 46 / n.img_w);
+            lv_image_set_scale(icon_img, 256 * 48 / n.img_w);
             lv_obj_set_style_bg_opa(icon_box, 0, 0);
         }
 

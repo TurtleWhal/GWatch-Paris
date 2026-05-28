@@ -46,7 +46,7 @@ lv_obj_t *schedule_screen_create(lv_obj_t *parent)
     lv_obj_set_style_border_width(dropdown, 0, 0);
     lv_obj_set_style_radius(dropdown, LV_RADIUS_CIRCLE, 0);
 
-    lv_dropdown_set_options(dropdown, "O Day\nE Day\nA Day\nY Day\nMorning Assembly");
+    lv_dropdown_set_options(dropdown, "O Day\nE Day\nA Day\nY Day\nMorning Assembly\nSBA Testing");
 
     lv_obj_set_style_text_font(dropdown, &FontAwesome_18, LV_PART_INDICATOR);
 

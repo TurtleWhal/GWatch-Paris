@@ -5,30 +5,33 @@
 
 #define DEG2RAD (M_PI / 180.0f)
 
-const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+static const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+static const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
 static uint8_t last_sec = 255, last_min = 255, last_hour = 255;
 static uint8_t last_day = 255, last_month = 255;
 static uint32_t last_battery_check = 0;
 static uint32_t last_battery_mv = 0;
 
-lv_obj_t *secondhand;
-lv_obj_t *minutehand;
-lv_obj_t *hourhand;
-lv_obj_t *time_label;
+// File-scope statics — other faces (divewatch, rotarywatch, timewatch) reuse
+// the same names for their own widgets, and once watchface.cpp registers
+// every face's create/update the linker pulls all of them in together.
+static lv_obj_t *secondhand;
+static lv_obj_t *minutehand;
+static lv_obj_t *hourhand;
+static lv_obj_t *time_label;
 
-lv_obj_t *schedulelabel;
-lv_obj_t *datelabel;
+static lv_obj_t *schedulelabel;
+static lv_obj_t *datelabel;
 
-lv_obj_t *timerarc;
+static lv_obj_t *timerarc;
 
-lv_obj_t *baticon;
-lv_obj_t *battery;
-lv_obj_t *steps;
-lv_obj_t *glance;
+static lv_obj_t *baticon;
+static lv_obj_t *battery;
+static lv_obj_t *steps;
+static lv_obj_t *glance;
 
-lv_obj_t *wifiicon;
+static lv_obj_t *wifiicon;
 
 static lv_point_precise_t second_hand_points[] = {
     {120, 120},
@@ -100,7 +103,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     // lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
     baticon = lv_label_create(infobox);
-    SET_SYMBOL_16(baticon, FA_BATTERY);
+    SET_SYMBOL_16(baticon, FA_BATTERY_EMPTY);
 
     battery = lv_label_create(infobox);
     lv_obj_set_style_text_font(battery, &ProductSansRegular_16, 0);
@@ -224,6 +227,7 @@ void analogwatch_update()
     }
 
     lv_label_set_text_fmt(battery, "%d%%", watch.battery.percent);
+    // lv_label_set_text_fmt(battery, "%dmV", watch.battery.voltage);
 
     lv_label_set_text_fmt(steps, "%ld", watch.imu.steps);
 
@@ -232,8 +236,7 @@ void analogwatch_update()
         SET_SYMBOL_14(wifiicon, icon);
     }
 
-    SET_SYMBOL_16(baticon,
-                  watch.battery.charging ? FA_LIGHTNING : FA_BATTERY);
+    SET_SYMBOL_16(baticon, getbaticon(watch.battery.charging, watch.battery.percent));
 
     if (watch.chrono.stopwatchrunning)
     {

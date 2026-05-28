@@ -1,4 +1,6 @@
 set(GENERATED_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ArsenalBold_14.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ArsenalBold_48.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/BadeenDisplay_84.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_14.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_16.c
@@ -9,6 +11,8 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_48.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/GoogleSansCode_46.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/LexendExaSemiBold_14.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/LexendExaSemiBold_48.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/NotoEmojiRegular_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/NotoEmojiRegular_20.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_16.c
@@ -17,6 +21,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_30.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_36.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_42.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_96.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_10.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_14.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_16.c

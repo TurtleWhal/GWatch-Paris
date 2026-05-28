@@ -26,22 +26,43 @@ static void IRAM_ATTR touch_isr(void *arg)
 }
 
 /** Update power management and sleep logic */
+// Rotation-aware wrist-tilt detector. Returns true if the gyro shows a
+// "lift to look at the watch" rotation strong enough to count. Shared by
+// the fade-cancel path (awake but goingtosleep) and the asleep wake
+// path. The mapping picks the gyro axis + sign whose positive rotation
+// brings the screen's "up" toward the user's face:
+//   0°    → -Y
+//   90°   → -X
+//   180°  → +Y
+//   270°  → +X
+static bool tilt_wake_detected(float *out_signed_dps = nullptr)
+{
+    constexpr float TILT_WAKE_DPS = 250.0f;
+    GyroData g = gyro_read();
+    float axis_dps = 0;
+    switch (lv_display_get_rotation(NULL))
+    {
+        case LV_DISPLAY_ROTATION_0:   axis_dps = -g.y; break;
+        case LV_DISPLAY_ROTATION_90:  axis_dps = -g.x; break;
+        case LV_DISPLAY_ROTATION_180: axis_dps =  g.y; break;
+        case LV_DISPLAY_ROTATION_270: axis_dps =  g.x; break;
+    }
+    if (out_signed_dps) *out_signed_dps = axis_dps;
+    return axis_dps > TILT_WAKE_DPS;
+}
+
 void Watch::pm_update()
 {
     while (true)
     {
         if (!this->sleeping) // if awake
         {
-            // if (this->goingtosleep)
-            // {
-            //     if (abs(gyro_read().x) > 450)
-            //     {
-            //         wakeup();
-            //         this->sleep_time = (esp_timer_get_time() / 1000) - 10000;
-            //     }
-            // }
-
             int64_t now_ms = esp_timer_get_time() / 1000;
+
+            // (Fade-cancel for tilt lives inside Watch::sleep itself —
+            // pm_task is blocked inside that call for the whole fade,
+            // so a check here would never run during the fade window.)
+
             if (now_ms < this->prevent_sleep_until_ms)
             {
                 // Stay-awake hold (alarm / timer ring screen). Roll the
@@ -67,11 +88,28 @@ void Watch::pm_update()
                 touch_interrupt = false;
                 wakeup();
             }
+            else
+            {
+                // Tilt-to-wake while asleep. See tilt_wake_detected for
+                // the rotation-aware axis selection. The IMU stays at
+                // 56 Hz gyro ODR through imu_sleep, so the I²C read is
+                // a 6-byte burst — ~200 µs every 100 ms, well under 1 %
+                // duty cycle, ~100 µA on top of the ~12 mA light-sleep
+                // floor. The QMI8658's own WoM is accel-only and would
+                // misfire on bumps (per CLAUDE.md), so we poll the gyro.
+                float dps;
+                if (tilt_wake_detected(&dps))
+                {
+                    ESP_LOGI("pm", "tilt wake (axis=%.0f dps)", dps);
+                    wakeup();
+                }
+            }
         }
 
-        // 200 ms while sleeping is a compromise: long enough that I²C wakes
-        // don't dominate average current, short enough that touch/tilt wake
-        // feels reasonably responsive.
+        // 100 ms while sleeping is a compromise: long enough that the
+        // tilt-wake I²C read and FreeRTOS-tick wakeup don't dominate
+        // average current, short enough that touch / tilt wake feels
+        // reasonably responsive.
         vTaskDelay(pdMS_TO_TICKS(this->sleeping ? 100 : 50));
     }
 }
@@ -99,7 +137,34 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
         prevBrightness = display.get_brightness();
 
         display.set_backlight_gradual(0, BACKLIGHT_FADE_MS);
-        vTaskDelay(pdMS_TO_TICKS(BACKLIGHT_FADE_MS));
+        // Wait out the fade in small chunks so we can poll the gyro
+        // for a tilt-cancel mid-fade. A single vTaskDelay(FADE_MS) would
+        // block pm_task for the whole fade and the pm_update loop's
+        // tilt check would never see this window. 100 ms chunks match
+        // the asleep-poll cadence; touch-cancel still works because the
+        // LVGL task (which clears goingtosleep on press) is on a
+        // different core and isn't blocked by our delay here.
+        {
+            uint16_t elapsed = 0;
+            while (elapsed < BACKLIGHT_FADE_MS && this->goingtosleep)
+            {
+                uint16_t step = (BACKLIGHT_FADE_MS - elapsed) > 100
+                                    ? 100
+                                    : (BACKLIGHT_FADE_MS - elapsed);
+                vTaskDelay(pdMS_TO_TICKS(step));
+                elapsed += step;
+
+                float dps;
+                if (tilt_wake_detected(&dps))
+                {
+                    ESP_LOGI("pm", "tilt cancel fade (axis=%.0f dps)", dps);
+                    this->goingtosleep = false;
+                    display.set_backlight(prevBrightness);
+                    this->sleep_time = (uint32_t)(esp_timer_get_time() / 1000);
+                    break;
+                }
+            }
+        }
 
         // make sure the display hasn't been touched while the display was fading off
         if (goingtosleep)
@@ -385,6 +450,12 @@ void Watch::init()
     display.set_backlight(100);
 
     ble.init();
+
+    // Register apps that can't be created during ui_init because their
+    // boot-time widget allocation would starve the BT controller's malloc.
+    lvgl_port_lock(0);
+    unistroke_register_app();
+    lvgl_port_unlock();
 
     haptic_play(false, 80, 80, 80, 80, 80, 0); // vibrate 3 times
 

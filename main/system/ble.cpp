@@ -14,6 +14,11 @@
 #include "freertos/idf_additions.h"
 
 #include "cJSON.h"
+#include "lvgl.h"
+#include "draw/snapshot/lv_snapshot.h"
+#include "esp_lvgl_port.h"
+
+#include <atomic>
 
 extern "C"
 {
@@ -106,6 +111,14 @@ static QueueSetHandle_t rx_queue_set = nullptr;
 // doesn't tax internal SRAM — BT controller alone takes ~80 KB.
 static constexpr size_t RX_LINE_BUF_SIZE = 8192;
 static char *s_rx_line = nullptr;
+
+// Set from BLE_GAP_EVENT_DISCONNECT to ask ble_rx_task to clear its line
+// buffer and drain rx_queue. Doing the reset on the rx task itself keeps
+// the line buffer a single-writer structure (no atomic-lpos gymnastics).
+// Without this, a half-message left in the accumulator across a drop
+// gets glued onto the first message of the next session — the most
+// common cause of "BLE can't receive after a reconnect."
+static std::atomic<bool> s_rx_force_reset{false};
 
 // Image-RX state machine state. Mutated only on the NimBLE host task
 // (the only thread that runs ble_image_rx_access), so no locking is
@@ -483,17 +496,40 @@ bool BLE::send_gb(const char *json_payload)
     while (off < total)
     {
         size_t n = (total - off > chunk) ? chunk : (total - off);
-        struct os_mbuf *om = ble_hs_mbuf_from_flat(buf + off, n);
-        if (!om)
+
+        // Backpressure-tolerant notify. NimBLE's mbuf pool is small and
+        // a bulk sender (screenshot, image transfer) easily out-runs the
+        // radio's drain rate — mbuf alloc returns NULL or notify returns
+        // BLE_HS_ENOMEM/EAGAIN under back-pressure. Retry with a short
+        // yield so the host task can drain TX completions; if it still
+        // fails after ~150 ms the link is probably broken, give up.
+        constexpr int MAX_RETRIES = 15;
+        int retries = 0;
+        struct os_mbuf *om = nullptr;
+        int rc = 0;
+        for (;;)
         {
-            ok = false;
-            break;
+            om = ble_hs_mbuf_from_flat(buf + off, n);
+            if (om)
+            {
+                rc = ble_gatts_notify_custom(conn_handle, tx_attr_handle, om);
+                // ble_gatts_notify_custom consumes the mbuf on success
+                // and on most error paths; don't double-free.
+                if (rc == 0) break;
+            }
+            else
+            {
+                rc = -1;
+            }
+            if (++retries > MAX_RETRIES)
+            {
+                ESP_LOGW(TAG, "notify gave up after %d retries (rc=%d)", retries, rc);
+                ok = false;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
-        if (ble_gatts_notify_custom(conn_handle, tx_attr_handle, om) != 0)
-        {
-            ok = false;
-            break;
-        }
+        if (!ok) break;
         off += n;
     }
 
@@ -505,7 +541,7 @@ void BLE::send_status()
 {
     char buf[96];
     snprintf(buf, sizeof(buf),
-             "{\"t\":\"status\",\"bat\":%u,\"chg\":%d,\"volt\":%.2f}",
+             "{\"t\":\"status\",\"bat\":%u,\"chg\":%d,\"volt\":%.3f}",
              (unsigned)watch.battery.percent,
              watch.battery.charging ? 1 : 0,
              (double)watch.battery.voltage / 1000.0);
@@ -565,6 +601,228 @@ void BLE::send_find_phone(bool on)
     char buf[48];
     snprintf(buf, sizeof(buf), "{\"t\":\"findPhone\",\"n\":%s}", on ? "true" : "false");
     send_gb(buf);
+}
+
+// Capture lv_screen_active() and stream it to the phone as a 24-bit BMP
+// file via Gadgetbridge's chunked file-write protocol. Each chunk is
+//   {"t":"file","n":"<name>","part":"first|next|last","d":"<base64>"}
+// with "first" truncating any prior file by that name and "last"
+// signalling the final chunk. The Gadgetbridge fork's BangleJS message
+// handler is expected to concatenate and save the decoded bytes to a
+// watched directory — that's the side this protocol mates with.
+//
+// Memory: a 240×240 24-bit BMP is ~173 KB, allocated in PSRAM. The LVGL
+// snapshot is rendered straight into the pixel-data region of the BMP
+// (after we lay out the header), so we don't keep two big buffers
+// alive at the same time.
+//
+// Wall-clock: at MTU 247 + 30 ms conn interval, transfer takes roughly
+// 8–15 s. Blocks the rx task for the duration — fine for a one-shot
+// user-triggered command, not OK for periodic use.
+void BLE::send_screenshot()
+{
+    if (!connected())
+        return;
+
+    // 240×240 fits on this build; if you change the panel size the BMP
+    // header field sizes don't need to change — they're computed below.
+    lv_display_t *disp = lv_display_get_default();
+    int32_t w = disp ? lv_display_get_horizontal_resolution(disp) : 240;
+    int32_t h = disp ? lv_display_get_vertical_resolution(disp) : 240;
+
+    // BMP layout: 14-byte BITMAPFILEHEADER + 40-byte BITMAPINFOHEADER
+    // + 24-bit BGR pixel rows, each row padded up to a 4-byte multiple,
+    // stored bottom-up (positive height field).
+    const uint32_t header_size = 14 + 40;
+    const uint32_t row_bytes = ((w * 3 + 3) / 4) * 4;
+    const uint32_t pixel_bytes = row_bytes * h;
+    const uint32_t file_size = header_size + pixel_bytes;
+
+    uint8_t *bmp = (uint8_t *)heap_caps_malloc(
+        file_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!bmp)
+    {
+        ESP_LOGE(TAG, "screenshot bmp alloc %u B failed", (unsigned)file_size);
+        return;
+    }
+    // Heap may return uninitialised memory; the row-padding bytes need
+    // to be zero, and zeroing the whole pixel area means a partial
+    // snapshot still produces a sane image.
+    memset(bmp, 0, file_size);
+
+    // Headers (all little-endian on the wire and on this chip, so we
+    // can just write 16/32-bit fields with byte stores or aligned writes).
+    bmp[0] = 'B'; bmp[1] = 'M';
+    *(uint32_t *)(bmp + 2)  = file_size;
+    *(uint32_t *)(bmp + 6)  = 0;            // reserved (2x u16)
+    *(uint32_t *)(bmp + 10) = header_size;  // pixel offset
+    *(uint32_t *)(bmp + 14) = 40;           // info header size
+    *(int32_t  *)(bmp + 18) = w;
+    *(int32_t  *)(bmp + 22) = h;            // positive = bottom-up rows
+    *(uint16_t *)(bmp + 26) = 1;            // planes
+    *(uint16_t *)(bmp + 28) = 24;           // bpp
+    *(uint32_t *)(bmp + 30) = 0;            // BI_RGB
+    *(uint32_t *)(bmp + 34) = pixel_bytes;
+    *(int32_t  *)(bmp + 38) = 2835;         // ~72 DPI horizontal
+    *(int32_t  *)(bmp + 42) = 2835;         // ~72 DPI vertical
+    *(uint32_t *)(bmp + 46) = 0;
+    *(uint32_t *)(bmp + 50) = 0;
+
+    // Render the screen into a temporary RGB565 buffer in PSRAM and
+    // then convert row-by-row into the BMP's bottom-up BGR888 layout.
+    // lv_snapshot_take_to_buf is the buffer-borrowing variant of
+    // lv_snapshot_take, which avoids a 115 KB internal-heap allocation
+    // that wouldn't fit.
+    const uint32_t snap_bytes = w * h * 2;  // RGB565
+    uint8_t *snap = (uint8_t *)heap_caps_malloc(
+        snap_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!snap)
+    {
+        ESP_LOGE(TAG, "screenshot snap alloc %u B failed", (unsigned)snap_bytes);
+        heap_caps_free(bmp);
+        return;
+    }
+
+    // lv_snapshot_take_to_draw_buf is the non-deprecated API (the older
+    // lv_snapshot_take_to_buf prints a runtime warning). It wants an
+    // lv_draw_buf_t wrapper around our raw buffer — lv_draw_buf_init
+    // populates the header in-place without allocating, so the pixel
+    // bytes still come from PSRAM.
+    lv_draw_buf_t dbuf = {};
+    bool snap_ok = false;
+    if (lvgl_port_lock(0))
+    {
+        lv_obj_t *target = lv_screen_active();
+        if (target &&
+            lv_draw_buf_init(&dbuf, w, h, LV_COLOR_FORMAT_RGB565,
+                             /*stride auto*/ 0, snap, snap_bytes) == LV_RESULT_OK)
+        {
+            lv_result_t rc = lv_snapshot_take_to_draw_buf(
+                target, LV_COLOR_FORMAT_RGB565, &dbuf);
+            snap_ok = (rc == LV_RESULT_OK);
+        }
+        lvgl_port_unlock();
+    }
+    if (!snap_ok)
+    {
+        ESP_LOGE(TAG, "lv_snapshot_take_to_draw_buf failed");
+        heap_caps_free(snap);
+        heap_caps_free(bmp);
+        return;
+    }
+
+    // RGB565 (LE, R5-G6-B5) → BGR888, written into BMP rows bottom-up.
+    // The (r5<<3)|(r5>>2) form fills the low bits so 0x1F → 0xFF rather
+    // than 0xF8, preserving full-range whites/blacks across the
+    // 5→8-bit expansion.
+    for (int32_t y = 0; y < h; y++)
+    {
+        uint8_t *row = bmp + header_size + (h - 1 - y) * row_bytes;
+        const uint16_t *src_row = (const uint16_t *)(snap + y * w * 2);
+        for (int32_t x = 0; x < w; x++)
+        {
+            uint16_t p = src_row[x];
+            uint8_t r5 = (p >> 11) & 0x1F;
+            uint8_t g6 = (p >> 5)  & 0x3F;
+            uint8_t b5 =  p        & 0x1F;
+            row[x * 3 + 0] = (b5 << 3) | (b5 >> 2);
+            row[x * 3 + 1] = (g6 << 2) | (g6 >> 4);
+            row[x * 3 + 2] = (r5 << 3) | (r5 >> 2);
+        }
+    }
+    heap_caps_free(snap);
+
+    // Stream as Gadgetbridge {t:"file"} chunked writes. Field shapes
+    // per the BangleJS file-write API:
+    //   n: filename
+    //   m: "w" on the first chunk (truncate), "a" on the rest (append)
+    //   c: contents as a string — raw bytes encoded with Espruino's
+    //      \xNN convention so the string parses back to the original
+    //      binary on the GB side. Printable ASCII (except " and \) is
+    //      sent unescaped to keep the payload smaller; everything else
+    //      is \xNN (4 chars per byte). The watch uses the same escape
+    //      convention on inbound messages (see fix_js_x_escapes), so
+    //      the GB fork already understands it.
+    //
+    // CHUNK_RAW is tuned so the worst-case-escaped payload + JSON
+    // wrapper stays under ~1.1 KB — well within Gadgetbridge's RX line
+    // buffer on the BangleJS side.
+    constexpr size_t CHUNK_RAW = 256;            // 256 * 4 = 1024 worst-case
+    constexpr size_t ESC_CAP   = CHUNK_RAW * 4 + 8;
+    constexpr size_t JSON_CAP  = ESC_CAP + 96;
+    char *esc = (char *)heap_caps_malloc(ESC_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    char *jsn = (char *)heap_caps_malloc(JSON_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!esc || !jsn)
+    {
+        ESP_LOGE(TAG, "screenshot chunk buf alloc failed");
+        heap_caps_free(esc);
+        heap_caps_free(jsn);
+        heap_caps_free(bmp);
+        return;
+    }
+
+    char filename[40];
+    uint64_t ts = (uint64_t)(esp_timer_get_time() / 1000);
+    snprintf(filename, sizeof(filename), "screenshot_%llu.bmp",
+             (unsigned long long)ts);
+
+    ESP_LOGI(TAG, "screenshot %s: %u B in %ux%u",
+             filename, (unsigned)file_size, (unsigned)w, (unsigned)h);
+
+    static const char hex[] = "0123456789abcdef";
+    size_t offset = 0;
+    while (offset < file_size)
+    {
+        size_t chunk = (file_size - offset > CHUNK_RAW)
+                           ? CHUNK_RAW
+                           : (file_size - offset);
+
+        // Escape bytes into `esc`. Keep printable ASCII unescaped except
+        // " (would close the string) and \ (escape lead-in); everything
+        // else is \xNN.
+        size_t epos = 0;
+        const uint8_t *src = bmp + offset;
+        for (size_t i = 0; i < chunk; i++)
+        {
+            uint8_t b = src[i];
+            if (b >= 0x20 && b <= 0x7E && b != '"' && b != '\\')
+            {
+                esc[epos++] = (char)b;
+            }
+            else
+            {
+                esc[epos++] = '\\';
+                esc[epos++] = 'x';
+                esc[epos++] = hex[b >> 4];
+                esc[epos++] = hex[b & 0x0F];
+            }
+        }
+        esc[epos] = 0;
+
+        const char *mode = (offset == 0) ? "w" : "a";
+        snprintf(jsn, JSON_CAP,
+                 "{\"t\":\"file\",\"n\":\"%s\",\"m\":\"%s\",\"c\":\"%s\"}",
+                 filename, mode, esc);
+        if (!send_gb(jsn))
+        {
+            ESP_LOGW(TAG, "screenshot send_gb failed at offset %u",
+                     (unsigned)offset);
+            break;
+        }
+        offset += chunk;
+
+        // One chunk = one full JSON message = ~5 sub-notifies after
+        // send_gb's MTU split. The negotiated conn interval is 30 ms
+        // and the controller drains 5–10 packets per event, so each
+        // chunk consumes roughly one event's worth of bandwidth. Wait
+        // ~30 ms between chunks so we don't out-run the radio and
+        // exhaust NimBLE's mbuf pool (the source of the rc=-1 retries).
+        vTaskDelay(pdMS_TO_TICKS(30));
+    }
+
+    heap_caps_free(esc);
+    heap_caps_free(jsn);
+    heap_caps_free(bmp);
 }
 
 // ---------- Notification queue ----------
@@ -929,6 +1187,14 @@ void BLE::handle_gb_json(const char *json, size_t len)
         if (cJSON_IsNumber(dur))
             music_state.duration_s = (int32_t)dur->valuedouble;
     }
+    else if (strcmp(t->valuestring, "screenshot") == 0)
+    {
+        // No point grabbing a snapshot while the LVGL task is suspended
+        // (Watch::sleep stops it) — the panel is dark anyway and the
+        // last rendered frame may be partial. Just ignore the request.
+        if (!watch.sleeping)
+            send_screenshot();
+    }
     else if (strcmp(t->valuestring, "is_gps_active") == 0)
     {
         send_gb("{t:\"gps_power\", status: false}");
@@ -1020,8 +1286,21 @@ void ble_rx_task(void *arg)
 
     while (true)
     {
+        // Disconnect-triggered reset. Drains the rx queue and clears
+        // the line accumulator so a half-message from before the drop
+        // doesn't poison the first message of the next session. The
+        // 500 ms select timeout below is what lets this fire promptly
+        // when no traffic is in flight.
+        if (s_rx_force_reset.exchange(false, std::memory_order_acq_rel))
+        {
+            lpos = 0;
+            RxChunk discard;
+            while (rx_queue && xQueueReceive(rx_queue, &discard, 0) == pdTRUE) {}
+            img_rx_reset();
+        }
+
         QueueSetMemberHandle_t activated =
-            xQueueSelectFromSet(rx_queue_set, portMAX_DELAY);
+            xQueueSelectFromSet(rx_queue_set, pdMS_TO_TICKS(500));
         if (!activated)
             continue;
 
@@ -1224,6 +1503,13 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(TAG, "disconnected reason=%d", event->disconnect.reason);
         ble.conn_handle = 0xffff;
+        // Ask ble_rx_task to drop any half-assembled line + drained
+        // queue + in-progress image transfer. Without this, the first
+        // message of the next session can be glued onto whatever bytes
+        // were in flight when the link dropped (very common cause of
+        // "BLE can't receive after a reconnect"). img_rx_reset is
+        // safe to call multiple times.
+        s_rx_force_reset.store(true, std::memory_order_release);
         ble.start_advertising();
         return 0;
 
@@ -1396,7 +1682,16 @@ void BLE::init()
 
     nimble_port_freertos_init(ble_host_task);
 
-    xTaskCreatePinnedToCore(ble_rx_task, "ble_rx", 1024 * 6, NULL, 5, NULL, 0);
+    // Stack lives in PSRAM — rx_task does no DMA or ISR work (just
+    // blocking queue reads + JSON parse + std::vector mutation), and
+    // internal SRAM is too tight on this build for a 6 KB contiguous
+    // chunk after the BT controller and LVGL have taken their share.
+    BaseType_t ok = xTaskCreatePinnedToCoreWithCaps(
+        ble_rx_task, "ble_rx", 1024 * 6, NULL, 5, NULL, 0,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ok != pdPASS)
+        ESP_LOGE(TAG, "ble_rx_task creation failed (rc=%d); BLE RX is dead",
+                 (int)ok);
 
     ESP_LOGI(TAG, "BLE initialised");
 }

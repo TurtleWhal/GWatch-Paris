@@ -11,6 +11,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/idf_additions.h"  // xTaskCreateWithCaps for PSRAM stacks
 
 #include <driver/i2c_master.h>
 

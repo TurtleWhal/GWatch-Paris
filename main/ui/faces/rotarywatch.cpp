@@ -3,29 +3,32 @@
 
 LV_IMAGE_DECLARE(croppedoverlay);
 
-const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+// All file-scope decls here are `static` — every face .cpp tends to use the
+// same widget names (battery, steps, wifiicon, ...) and once watchface.cpp
+// links all faces together those collide at link time.
+static const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+static const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
-const char *minute_ticks[] = {"00", "55", "50", "45", "40", "35", "30",
-                              "25", "20", "15", "10", "05", NULL};
+static const char *minute_ticks[] = {"00", "55", "50", "45", "40", "35", "30",
+                                     "25", "20", "15", "10", "05", NULL};
 
-const char *second_ticks[] = {"00", "55", "50", "45", "40", "35", "30",
-                              "25", "20", "15", "10", "05", NULL};
+static const char *second_ticks[] = {"00", "55", "50", "45", "40", "35", "30",
+                                     "25", "20", "15", "10", "05", NULL};
 
-lv_obj_t *minutescale;
-lv_obj_t *secondscale;
+static lv_obj_t *minutescale;
+static lv_obj_t *secondscale;
 
-lv_obj_t *hour;
-lv_obj_t *minute;
+static lv_obj_t *hour;
+static lv_obj_t *minute;
 
-lv_obj_t *mday;
-lv_obj_t *wday;
-lv_obj_t *date;
+static lv_obj_t *mday;
+static lv_obj_t *wday;
+static lv_obj_t *date;
 
-lv_obj_t *battery;
-lv_obj_t *steps;
+static lv_obj_t *battery;
+static lv_obj_t *steps;
 
-lv_obj_t *wifiicon;
+static lv_obj_t *wifiicon;
 
 static uint8_t last_sec = 255, last_min = 255, last_hour = 255;
 static uint8_t last_day = 255, last_month = 255;
@@ -183,7 +186,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
     // lv_obj_add_event_cb(date, change_date_visibility, LV_EVENT_CLICKED, NULL);
 
     /* Battery */
-    battery = create_valuearc(scr, FA_BATTERY);
+    battery = create_valuearc(scr, FA_BATTERY_FULL);
     lv_obj_align(battery, LV_ALIGN_RIGHT_MID, -40, 68);
     lv_arc_set_range(battery, 0, 100);
     lv_arc_set_value(battery, 100);
@@ -279,5 +282,5 @@ void rotarywatch_update()
     }
 
     SET_SYMBOL_14(lv_obj_get_child_by_name(battery, "icon"),
-                  watch.battery.charging ? FA_LIGHTNING : FA_BATTERY);
+                  getbaticon(watch.battery.charging, watch.battery.percent));
 }

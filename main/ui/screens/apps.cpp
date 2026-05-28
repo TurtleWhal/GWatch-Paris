@@ -2,7 +2,7 @@
 
 void app_press(lv_event_t *e)
 {
-    haptic_play(false, 80, 0);
+    haptic_play(false, 50, 0);
 }
 
 void scroll_reset(lv_event_t *e)

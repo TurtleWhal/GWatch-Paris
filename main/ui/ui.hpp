@@ -56,16 +56,29 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
 lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_obj_t *screen, bool appsonly = false);
 lv_obj_t *create_setting(lv_obj_t *parent, const char *name, bool state, lv_event_cb_t event_cb);
 
-// lv_obj_t *rotarywatch_create(lv_obj_t *parent);
-// void rotarywatch_update();
+char *getbaticon(bool charging, uint8_t percent);
+
+lv_obj_t *rotarywatch_create(lv_obj_t *parent);
+void rotarywatch_update();
 
 lv_obj_t *analogwatch_create(lv_obj_t *parent);
 void analogwatch_update();
 
-// lv_obj_t *timescreen_create(lv_obj_t *parent);
-// void timescreen_update();
+lv_obj_t *timescreen_create(lv_obj_t *parent);
+void timescreen_update();
+
+lv_obj_t *divewatch_create(lv_obj_t *parent);
+void divewatch_update();
 
 lv_obj_t *watchface_create(lv_obj_t *parent);
+extern lv_obj_t *watchface;
+
+// Watch-face picker API. watchface_set_active() persists the new index in
+// NVS and live-swaps the on-screen face obj.
+uint8_t watchface_count();
+const char *watchface_name_at(uint8_t idx);
+uint8_t watchface_active_idx();
+void watchface_set_active(uint8_t idx);
 
 lv_obj_t *quicksettings_create(lv_obj_t *parent);
 lv_obj_t *apps_screen_create(lv_obj_t *parent);
@@ -79,7 +92,19 @@ lv_obj_t *dice_create(lv_obj_t *parent);
 lv_obj_t *schedule_screen_create(lv_obj_t *parent);
 lv_obj_t *notifications_screen_create(lv_obj_t *parent);
 lv_obj_t *music_create(lv_obj_t *parent);
-lv_obj_t *draw_create(lv_obj_t *parent);
+lv_obj_t *weather_create(lv_obj_t *parent);
+
+// Standalone $1 unistroke recognizer screen. Screen widgets allocate on
+// first call; cheap until then.
+lv_obj_t *unistroke_create(lv_obj_t *parent);
+
+// Adds the "Unistroke" entry to the apps grid. Call AFTER ble.init() —
+// the BT controller's boot-time malloc needs internal SRAM that even one
+// additional pre-BLE widget allocation is enough to starve.
+void unistroke_register_app();
+
+// Set at the end of ui_init so post-boot code can append app entries.
+extern lv_obj_t *g_appsscreen;
 
 // Show the latest pending notification (if any) as the active screen with
 // no animation. Call from Watch::wakeup() before the backlight comes on so

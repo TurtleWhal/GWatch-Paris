@@ -5,6 +5,10 @@ lv_obj_t *ver_layer;
 lv_obj_t *hor_layer;
 lv_obj_t *lower_layer;
 
+// Captured at the end of ui_init so post-boot code (e.g. unistroke_register_app)
+// can append entries after BLE has claimed its boot-time SRAM allocations.
+lv_obj_t *g_appsscreen = nullptr;
+
 // RAM wrappers around the generated `const lv_font_t` fonts in flash.
 // LVGL's fallback chain is a per-font field; the generator emits the
 // originals into .rodata so we can't write to them — instead we copy
@@ -224,6 +228,41 @@ void apply_accent_color(lv_color_t c)
     lv_obj_report_style_change(NULL);
 }
 
+char *getbaticon(bool charging, uint8_t percent)
+{
+    if (watch.battery.charging)
+    {
+        return FA_CHARGING;
+    }
+    else
+    {
+        if (watch.battery.percent > 75)
+        {
+            return FA_BATTERY_FULL;
+        }
+        else if (watch.battery.percent > 50)
+        {
+            return FA_BATTERY_75;
+        }
+        else if (watch.battery.percent > 25)
+        {
+            return FA_BATTERY_50;
+        }
+        else if (watch.battery.percent > 10)
+        {
+            return FA_BATTERY_25;
+        }
+        else if (watch.battery.percent > 5)
+        {
+            return FA_BATTERY_10;
+        }
+        else
+        {
+            return FA_BATTERY_EMPTY;
+        }
+    }
+}
+
 void Display::ui_init()
 {
     ProductSansBold_30_emoji = ProductSansBold_30;
@@ -236,7 +275,6 @@ void Display::ui_init()
     ProductSansBold_16_emoji.fallback = &NotoEmojiRegular_16;
     ProductSansRegular_14_emoji = ProductSansRegular_14;
     ProductSansRegular_14_emoji.fallback = &NotoEmojiRegular_16;
-
 
     // Primary color comes from the persisted "theme_color" setting; the
     // palette table lives in screens/debug.cpp so the settings screen
@@ -333,13 +371,18 @@ void Display::ui_init()
     lv_obj_set_style_margin_all(lower_layer, 0, 0);
     lv_obj_set_style_pad_all(lower_layer, 0, 0);
 
-    // lv_obj_add_event_cb(lower_layer, scroll_loop_event_cb, LV_EVENT_SCROLL, NULL);
+    lv_obj_add_event_cb(lower_layer, scroll_loop_event_cb, LV_EVENT_SCROLL, NULL);
 
+    lv_obj_t *weather = weather_create(lower_layer);
+    lv_obj_set_style_bg_opa(weather, 0, 0);
+    
     lv_obj_t *notifications = notifications_screen_create(lower_layer);
     lv_obj_set_style_bg_opa(notifications, 0, 0);
-
+    
     lv_obj_t *music = music_create(lower_layer);
     lv_obj_set_style_bg_opa(music, 0, 0);
+
+    lv_obj_scroll_to_view(notifications, LV_ANIM_OFF);
 
     static ScrollEventData scroll_dataB = {lower_layer, LV_DIR_BOTTOM};
     lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb, LV_EVENT_SCROLL, &scroll_dataB);
@@ -396,12 +439,18 @@ void Display::ui_init()
             lv_obj_set_scroll_dir(ver_layer, LV_DIR_NONE);
         } }, LV_EVENT_SCROLL, watchscr);
 
-    // create_app(appsscreen, FA_KEYBOARD, "Keyboard", draw_create(NULL), true);
-
     create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
     create_app(appsscreen, FA_TIMER, "Timer", timer);
     create_app(appsscreen, FA_ALARM, "Alarm", alarm);
     create_app(appsscreen, FA_CALCULATOR, "Calculator", calcscreen);
+
+    // Unistroke's app entry is registered post-BLE-init from watch.cpp.
+    // Even just adding the button widget here was enough to push LVGL's
+    // internal-SRAM use past the threshold the BT controller's malloc
+    // needs at boot. unistroke_register_app() runs after ble.init() has
+    // claimed its memory, and the screen widgets behind the button are
+    // lazy-built on first tap (no boot cost at all).
+    g_appsscreen = appsscreen;
 
     create_app(appsscreen, FA_FLASHLIGHT, "Flashlight", [](lv_event_t *)
                {
@@ -433,11 +482,9 @@ void Display::ui_init()
     lv_obj_t *settings = settingsscreen_create();
     create_app(appsscreen, FA_SETTINGS, "Settings", settings, true);
 
-    create_app(appsscreen, FA_METRONOME, "Metronome");
+    // create_app(appsscreen, FA_METRONOME, "Metronome");
 
     lv_screen_load(main_screen);
 
     lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
-
-    // lv_screen_load(draw_create(NULL));
 }

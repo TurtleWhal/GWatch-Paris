@@ -108,6 +108,12 @@ public:
     void send_notification_reply(uint32_t id, const char *text);
     void send_find_phone(bool on);
 
+    // Capture the current LVGL screen and stream it to the phone as a
+    // BMP file via Gadgetbridge's `{t:"file"}` chunked-write protocol.
+    // Heavyweight (~170 KB transfer) — call from the BLE rx task on a
+    // user-triggered `screenshot` command, not periodically.
+    void send_screenshot();
+
     // Notification queue. Mutated from the BLE task only — UI reads from
     // LVGL task. Callers must hold lvgl_port_lock OR be on the LVGL task
     // when iterating.

@@ -50,7 +50,7 @@ lv_obj_t *calculator_create(lv_obj_t *parent)
     lv_obj_add_event_cb(matrix, btn_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_add_event_cb(matrix, [](lv_event_t *e)
-                        { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);
+                        { haptic_play(false, 50, 0); }, LV_EVENT_PRESSED, NULL);
 
     /* Create output text area */
     output = lv_textarea_create(scr);

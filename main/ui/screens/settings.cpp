@@ -95,11 +95,14 @@ static lv_obj_t *build_color_row(lv_obj_t *parent)
 {
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, 200, 36);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    // Wrap + content-sized height so adding more swatches just spills onto
+    // a new line instead of overflowing the round screen's edges.
+    lv_obj_set_size(row, 220, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(row, 4, 0);
+    lv_obj_set_style_pad_row(row, 4, 0);
     lv_obj_set_scroll_dir(row, LV_DIR_NONE);
 
     uint8_t current = watch.settings.readUint8("theme_color", 0);
@@ -158,11 +161,12 @@ static lv_obj_t *build_rotation_row(lv_obj_t *parent)
 {
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, 200, 36);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_size(row, 220, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(row, 6, 0);
+    lv_obj_set_style_pad_row(row, 4, 0);
     lv_obj_set_scroll_dir(row, LV_DIR_NONE);
 
     static const char *labels[4] = {"0", "90", "180", "270"};
@@ -202,6 +206,63 @@ static lv_obj_t *build_rotation_row(lv_obj_t *parent)
                 else               lv_obj_remove_state(sib, LV_STATE_CHECKED);
             }
             settings_apply_rotation((lv_display_rotation_t)picked);
+            haptic_play(false, 30, 0);
+        }, LV_EVENT_CLICKED, NULL);
+    }
+
+    return row;
+}
+
+// -------------------- Watch face row --------------------
+
+static lv_obj_t *build_watchface_row(lv_obj_t *parent)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, 220, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 6, 0);
+    lv_obj_set_style_pad_row(row, 4, 0);
+    lv_obj_set_scroll_dir(row, LV_DIR_NONE);
+
+    uint8_t current = watchface_active_idx();
+    uint8_t count = watchface_count();
+
+    for (uint8_t i = 0; i < count; i++)
+    {
+        lv_obj_t *btn = lv_button_create(row);
+        // 66 wide fits 3 pills + 2×6 gap = 210, leaves 5 px margin in the
+        // 220-wide row. With ROW_WRAP, 4+ pills spill onto a second line.
+        lv_obj_set_size(btn, 66, 30);
+        lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), 0);
+        lv_obj_add_style(btn, &accent_bg_style, LV_PART_MAIN | LV_STATE_CHECKED);
+        lv_obj_set_style_pad_all(btn, 0, 0);
+        if (i == current) lv_obj_add_state(btn, LV_STATE_CHECKED);
+
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_obj_center(lbl);
+        lv_label_set_text(lbl, watchface_name_at(i));
+        lv_obj_set_style_text_font(lbl, &ProductSansRegular_14, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
+
+        lv_obj_set_user_data(btn, (void *)(uintptr_t)i);
+
+        lv_obj_add_event_cb(btn, [](lv_event_t *e)
+        {
+            lv_obj_t *clicked = lv_event_get_target_obj(e);
+            uint8_t picked = (uint8_t)(uintptr_t)lv_obj_get_user_data(clicked);
+            lv_obj_t *r = lv_obj_get_parent(clicked);
+            for (uint32_t k = 0; k < lv_obj_get_child_count(r); k++)
+            {
+                lv_obj_t *sib = lv_obj_get_child(r, k);
+                uint8_t si = (uint8_t)(uintptr_t)lv_obj_get_user_data(sib);
+                if (si == picked) lv_obj_add_state(sib, LV_STATE_CHECKED);
+                else               lv_obj_remove_state(sib, LV_STATE_CHECKED);
+            }
+            watchface_set_active(picked);
             haptic_play(false, 30, 0);
         }, LV_EVENT_CLICKED, NULL);
     }
@@ -264,6 +325,9 @@ lv_obj_t *settingsscreen_create()
     lv_obj_set_style_text_font(scrlbl, &ProductSansRegular_20, 0);
     lv_obj_set_style_text_color(scrlbl, lv_color_white(), 0);
     lv_obj_set_style_pad_bottom(scrlbl, 8, 0);
+
+    section_label(scr, "Watch Face");
+    build_watchface_row(scr);
 
     section_label(scr, "Theme Color");
     build_color_row(scr);

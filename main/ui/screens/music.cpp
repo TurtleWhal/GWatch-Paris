@@ -371,13 +371,13 @@ lv_obj_t *music_create(lv_obj_t *parent)
 
     // Short haptic tap on every button press for tactile feedback.
     lv_obj_add_event_cb(
-        playbtn, [](lv_event_t *) { haptic_play(false, 80, 0); },
+        playbtn, [](lv_event_t *) { haptic_play(false, 50, 0); },
         LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(
-        prevbtn, [](lv_event_t *) { haptic_play(false, 80, 0); },
+        prevbtn, [](lv_event_t *) { haptic_play(false, 50, 0); },
         LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(
-        nextbtn, [](lv_event_t *) { haptic_play(false, 80, 0); },
+        nextbtn, [](lv_event_t *) { haptic_play(false, 50, 0); },
         LV_EVENT_PRESSED, NULL);
 
     // 1 Hz refresh — drives the position label/slider tick. Slider

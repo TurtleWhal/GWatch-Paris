@@ -247,10 +247,10 @@ lv_obj_t *timerscr_create(lv_obj_t *parent)
                                 SET_SYMBOL_32((lv_obj_t*)lv_event_get_user_data(e), FA_PLAY); }, LV_EVENT_CLICKED, starticon);
 
     lv_obj_add_event_cb(btn, [](lv_event_t *e)
-                        { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);
+                        { haptic_play(false, 40, 0); }, LV_EVENT_PRESSED, NULL);
 
     lv_obj_add_event_cb(reset, [](lv_event_t *e)
-                        { haptic_play(false, 80, 0); }, LV_EVENT_PRESSED, NULL);
+                        { haptic_play(false, 40, 0); }, LV_EVENT_PRESSED, NULL);
 
     alarmscr = lv_obj_create(NULL);
 
@@ -287,8 +287,11 @@ lv_obj_t *timerscr_create(lv_obj_t *parent)
     // 8 KB so the wake-from-asleep path fits: when the timer expires
     // mid-sleep, timer_task calls watch.wakeup() which runs lv_refr_now
     // on the caller's stack, and the LVGL render walk's recursion eats
-    // a lot of frames. Same reason alarm_task is 8 KB.
-    xTaskCreate(timer_task, "timer_task", 1024 * 8, NULL, 2, &taskhandle);
+    // a lot of frames. Same reason alarm_task is 8 KB. Stack in PSRAM
+    // since this task does no DMA or ISR work — frees 8 KB of internal
+    // SRAM that the BT controller + LVGL nearly exhaust on their own.
+    xTaskCreateWithCaps(timer_task, "timer_task", 1024 * 8, NULL, 2,
+                        &taskhandle, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     return scr;
 }

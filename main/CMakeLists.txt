@@ -48,6 +48,7 @@ idf_component_register(
     REQUIRES
         lvgl
         fonts
+        images
         # watchui
         driver
         esp_timer

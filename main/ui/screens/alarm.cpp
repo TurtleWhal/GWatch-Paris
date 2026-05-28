@@ -608,8 +608,10 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
     // 8 KB stack: watch.wakeup() runs synchronously on the caller's
     // stack and does a full lv_refr_now (display re-init, LCD render of
     // a 240×240 frame) plus IMU reconfig — the default 3 KB blew up
-    // when the alarm fired during light sleep.
-    xTaskCreate(alarm_task, "alarm_task", 1024 * 8, NULL, 2, NULL);
+    // when the alarm fired during light sleep. Stack in PSRAM (no DMA
+    // / ISR usage on this task) so the 8 KB doesn't tax internal SRAM.
+    xTaskCreateWithCaps(alarm_task, "alarm_task", 1024 * 8, NULL, 2, NULL,
+                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     return scr;
 }

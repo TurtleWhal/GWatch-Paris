@@ -75,7 +75,12 @@ void imu_init(i2c_master_bus_handle_t bus)
 
     imu_configure_normal();
 
-    xTaskCreate(imu_task, "imu_task", 1024 * 4, NULL, 4, &imu_task_handle);
+    // Stack in PSRAM — I2C reads use the i2c master driver's own
+    // buffers; the task itself is pure math + queue posts. Frees 4 KB
+    // of internal SRAM.
+    xTaskCreateWithCaps(imu_task, "imu_task", 1024 * 4, NULL, 4,
+                        &imu_task_handle,
+                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 }
 
 Acceleration accel_read()

@@ -2,7 +2,7 @@
 
 void press(lv_event_t *e)
 {
-    haptic_play(false, 80, 0);
+    haptic_play(false, 40, 0);
 }
 
 lv_obj_t *create_setting(lv_obj_t *parent, const char *icon, lv_event_cb_t event_cb = nullptr)

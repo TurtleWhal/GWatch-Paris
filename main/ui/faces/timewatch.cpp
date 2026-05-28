@@ -1,22 +1,24 @@
 #include "ui.hpp"
 #include <sys/time.h>
 
-const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+// File-scope statics so widget pointer names don't collide with the
+// identically-named ones in the other face .cpp files.
+static const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+static const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
 static uint8_t last_sec = 255, last_min = 255, last_hour = 255;
 static uint8_t last_day = 255, last_month = 255;
 
-lv_obj_t *timelabel;
-lv_obj_t *datelabel;
+static lv_obj_t *timelabel;
+static lv_obj_t *datelabel;
 // lv_obj_t *secondscale;
-lv_obj_t *secondslabel;
+static lv_obj_t *secondslabel;
 
-lv_obj_t *baticon;
-lv_obj_t *battery;
-lv_obj_t *steps;
+static lv_obj_t *baticon;
+static lv_obj_t *battery;
+static lv_obj_t *steps;
 
-lv_obj_t *wifiicon;
+static lv_obj_t *wifiicon;
 
 lv_obj_t *timescreen_create(lv_obj_t *parent)
 {
@@ -76,7 +78,7 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
     lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
     baticon = lv_label_create(infobox);
-    SET_SYMBOL_16(baticon, FA_BATTERY);
+    SET_SYMBOL_16(baticon, getbaticon(watch.battery.charging, watch.battery.percent));
 
     battery = lv_label_create(infobox);
     lv_obj_set_style_text_font(battery, &ProductSansRegular_16, 0);
@@ -159,5 +161,5 @@ void timescreen_update()
     }
 
     SET_SYMBOL_16(baticon,
-                  watch.battery.charging ? FA_LIGHTNING : FA_BATTERY);
+                  getbaticon(watch.battery.charging, watch.battery.percent));
 }
