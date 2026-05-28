@@ -1,48 +1,38 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.14)
 project(gwatch_sim C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# The watch project's UI uses C++17 lambdas (LVGL event callbacks) and a
-# bunch of `lv_obj_t * = ...` lines that older standards reject.
-
-# -----------------------------------------------------------------------------
-# Where the upstream LVGL simulator template lives. The default points at the
-# user's existing clone; override on the command line if it moved:
-#   cmake -B build -DLV_PORT_DIR=/path/to/lv_port_pc_vscode
-# We use that repo for two things only: its bundled lvgl/ submodule and its
-# (already-tuned-for-SDL) lv_conf.h. The watch project's own lv_conf.h
-# lives next to this CMakeLists.txt and is the one actually consumed via
-# LV_CONF_INCLUDE_SIMPLE.
-set(LV_PORT_DIR "/Users/garrett/Documents/github/lv_port_pc_vscode"
-    CACHE PATH "Path to the lv_port_pc_vscode checkout (provides lvgl/)")
-
-if(NOT EXISTS "${LV_PORT_DIR}/lvgl/CMakeLists.txt")
-    message(FATAL_ERROR
-        "LVGL not found at ${LV_PORT_DIR}/lvgl. "
-        "Clone https://github.com/lvgl/lv_port_pc_vscode --recursive "
-        "or pass -DLV_PORT_DIR=<path> on the cmake command line.")
-endif()
+# The watch project's UI uses C++17 lambdas (LVGL event callbacks) and
+# `lv_obj_t *foo = ...` lines that older standards reject.
 
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # -----------------------------------------------------------------------------
-# Dependencies
+# LVGL — fetched from upstream at the same tag the firmware pins via the IDF
+# component registry (lvgl/lvgl: ^9.4.0 → v9.5.0). This keeps the simulator
+# behaviour identical to on-device. The fetch happens once at configure time;
+# rebuilds are free.
+include(FetchContent)
+FetchContent_Declare(lvgl
+    GIT_REPOSITORY https://github.com/lvgl/lvgl.git
+    GIT_TAG        v9.5.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(lvgl)
+target_include_directories(lvgl PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
+
+# -----------------------------------------------------------------------------
+# SDL
 find_package(SDL2 REQUIRED)
 find_package(Threads REQUIRED)
 
-# -----------------------------------------------------------------------------
-# LVGL — pulled from the simulator template's submodule. We hand its target
-# the simulator dir on the include path so its `#include "lv_conf.h"` lands
-# on ours (next to this CMakeLists.txt), not the template's.
-add_subdirectory(${LV_PORT_DIR}/lvgl ${CMAKE_BINARY_DIR}/lvgl_build)
-target_include_directories(lvgl PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${SDL2_INCLUDE_DIRS}
-)
-target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
+target_include_directories(lvgl PUBLIC ${SDL2_INCLUDE_DIRS})
 
 # -----------------------------------------------------------------------------
 # Sources
@@ -51,8 +41,7 @@ file(GLOB UI_SRCS
     "${PROJECT_ROOT}/main/ui/faces/*.cpp"
     "${PROJECT_ROOT}/main/ui/screens/*.cpp"
 )
-
-file(GLOB FONT_SRCS "${PROJECT_ROOT}/components/fonts/generated/*.c")
+file(GLOB FONT_SRCS  "${PROJECT_ROOT}/components/fonts/generated/*.c")
 file(GLOB IMAGE_SRCS "${PROJECT_ROOT}/components/images/generated/*.c")
 file(GLOB ASSET_SRCS "${PROJECT_ROOT}/main/assets/*.c")
 
@@ -91,17 +80,10 @@ target_compile_definitions(gwatch_sim PRIVATE
     # toolchain ships it. Patch via the compile line rather than touching
     # the on-device source.
     M_TWOPI=6.283185307179586
-    # The watch's UI uses LVGL 9.5's v8-compat rotation names
-    # (LV_DISP_ROTATION_*). The simulator's 9.6-dev v8 map dropped those
-    # specific aliases — restore them here.
-    LV_DISP_ROTATION_0=LV_DISPLAY_ROTATION_0
-    LV_DISP_ROTATION_90=LV_DISPLAY_ROTATION_90
-    LV_DISP_ROTATION_180=LV_DISPLAY_ROTATION_180
-    LV_DISP_ROTATION_270=LV_DISPLAY_ROTATION_270
 )
 
-# Watch UI was written for ESP-IDF's compilers, which are looser about a
-# couple of things than vanilla clang/gcc on the host:
+# The watch UI was written for ESP-IDF's compilers, which are looser about
+# a couple of things than vanilla clang/gcc on the host:
 target_compile_options(gwatch_sim PRIVATE
     -Wno-unused-parameter
     -Wno-unused-variable
@@ -119,5 +101,5 @@ target_link_libraries(gwatch_sim PRIVATE
     m
 )
 
-# `run` convenience target (matches the upstream simulator's UX).
+# `run` convenience target.
 add_custom_target(run COMMAND $<TARGET_FILE:gwatch_sim> DEPENDS gwatch_sim)

@@ -1,5 +1,8 @@
 {
-  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.autocomplete": "disabled",
+  "C_Cpp.codeAnalysis.runAutomatically": false,
+  "C_Cpp.formatting": "disabled",
   "idf.espIdfPath": "/Users/garrett/esp/v5.5/esp-idf",
   "idf.pythonInstallPath": "/usr/local/bin/python",
   "idf.openOcdConfigs": [
@@ -11,9 +14,12 @@
     "IDF_TARGET": "esp32s3"
   },
   "clangd.path": "/Users/garrett/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
+  "clangd.inlayHints.enabled": false,
+  "cmake.configureOnOpen": false,
+  "cmake.configureOnEdit": false,
   "clangd.arguments": [
     "--background-index",
-    "--query-driver=/Users/garrett/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc",
+    "--query-driver=/Users/garrett/.espressif/tools/xtensa-esp-elf/**/bin/xtensa-esp*-elf-*",
     "--compile-commands-dir=${workspaceFolder}/build"
   ],
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
@@ -53,14 +59,14 @@
     "chrono": "cpp",
     "bitset": "cpp"
   },
-  "C_Cpp.errorSquiggles": "enabled",
+  "C_Cpp.errorSquiggles": "disabled",
   "idf.portWin": "COM4",
   "idf.currentSetup": "/Users/garrett/esp/v6.0/esp-idf",
   "actionButtons": {
     "commands": [
       {
         "name": "$(debug-alt) Simulate",
-        "color": "white",
+        "color": "lightgray",
         "command": "sh simulate.sh"
       }
     ]

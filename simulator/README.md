@@ -50,13 +50,10 @@ Dependencies on macOS:
 brew install sdl2 cmake
 ```
 
-The build pulls LVGL itself from a pre-existing checkout of the upstream
-PC simulator at `/Users/garrett/Documents/github/lv_port_pc_vscode`. If
-that's elsewhere, point the config at it:
-
-```sh
-cmake -B build -DLV_PORT_DIR=/path/to/lv_port_pc_vscode
-```
+LVGL is pulled via CMake `FetchContent` at configure time, pinned to
+`v9.5.0` to match the firmware's IDF component lock. First-run downloads
+take ~30 s; subsequent builds reuse the cached checkout under
+`build/_deps/`. No external paths required.
 
 ## Layout
 
@@ -83,8 +80,5 @@ simulator/
   periodic update fires before all its objects exist, which produces a
   flood of `obj != NULL` warnings on launch. They're cosmetic — same
   behaviour as on-device — and a useful tripwire for real UI bugs.
-- `LV_DISP_ROTATION_*` is aliased to `LV_DISPLAY_ROTATION_*` via a
-  compile define. The watch project uses the LVGL 9.5 v8-compat names;
-  the simulator's bundled LVGL is 9.6-dev which dropped them.
-- `M_TWOPI` is supplied via a compile define for the same reason — ESP-
-  IDF's `<math.h>` defines it, macOS clang's doesn't.
+- `M_TWOPI` is supplied via a compile define — ESP-IDF's `<math.h>`
+  ships it, macOS clang's doesn't.
