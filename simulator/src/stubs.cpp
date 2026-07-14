@@ -25,6 +25,10 @@
 #include <unordered_map>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 // ---- Globals matching the real firmware's extern symbols -----------------
 Watch watch;
 BLE   ble;
@@ -73,11 +77,19 @@ extern "C" void lvgl_port_unlock(void)
     pthread_mutex_unlock(&g_lvgl_mtx);
 }
 
-// ---- FreeRTOS tasks → detached pthreads -----------------------------------
+// ---- FreeRTOS tasks → detached pthreads (native) / asyncify (web) -------
+// Native: spawn a real pthread, detach. The task body just runs.
+// Web: spawn the task body via emscripten_async_call so it runs on the
+//      browser's main thread. The body's vTaskDelay calls emscripten_sleep,
+//      which (with -sASYNCIFY on the link line) yields back to the event
+//      loop so the canvas stays responsive. The watch firmware's two task
+//      users (alarm_task, timer_task) are simple `while(true) { …;
+//      vTaskDelay(N); }` loops that work unchanged under this model.
 namespace {
 struct PthreadTask { TaskFunction_t fn; void *arg; };
 }
 
+#ifndef __EMSCRIPTEN__
 static void *task_trampoline(void *p)
 {
     auto *t = static_cast<PthreadTask *>(p);
@@ -85,17 +97,30 @@ static void *task_trampoline(void *p)
     delete t;
     return nullptr;
 }
+#endif
 
-extern "C" BaseType_t xTaskCreate(TaskFunction_t fn, const char * /*name*/,
+extern "C" BaseType_t xTaskCreate(TaskFunction_t fn, const char *name,
                                   uint32_t /*stack*/, void *arg,
                                   UBaseType_t /*prio*/, TaskHandle_t *out)
 {
+#ifdef __EMSCRIPTEN__
+    /* Native pthreads aren't available in the single-threaded WASM build.
+     * We special-case the two firmware tasks we actually need (timer +
+     * alarm) by name and run them as lv_timer callbacks instead — see
+     * sim_tasks_web.cpp. Anything else gets dropped. */
+    extern void sim_web_schedule_task(const char *, TaskFunction_t, void *);
+    sim_web_schedule_task(name, fn, arg);
+    if (out) *out = nullptr;
+    return pdPASS;
+#else
+    (void)name;
     auto *t = new PthreadTask{fn, arg};
     pthread_t pt;
     pthread_create(&pt, nullptr, task_trampoline, t);
     pthread_detach(pt);
     if (out) *out = reinterpret_cast<TaskHandle_t>(pt);
     return pdPASS;
+#endif
 }
 
 extern "C" BaseType_t xTaskCreatePinnedToCore(TaskFunction_t fn, const char *name,
@@ -114,10 +139,27 @@ extern "C" BaseType_t xTaskCreateWithCaps(TaskFunction_t fn, const char *name,
     return xTaskCreate(fn, name, stack, arg, prio, out);
 }
 
-extern "C" void vTaskDelete(TaskHandle_t /*h*/) { pthread_exit(nullptr); }
+extern "C" void vTaskDelete(TaskHandle_t /*h*/)
+{
+#ifndef __EMSCRIPTEN__
+    pthread_exit(nullptr);
+#endif
+}
 extern "C" void vTaskDeleteWithCaps(TaskHandle_t h) { vTaskDelete(h); }
 
-extern "C" void vTaskDelay(TickType_t ticks) { usleep((useconds_t)ticks * 1000); }
+extern "C" void vTaskDelay(TickType_t ticks)
+{
+#ifdef __EMSCRIPTEN__
+    /* No-op in web. The two FreeRTOS task bodies (timer_task, alarm_task)
+     * are re-implemented as lv_timer callbacks in sim_tasks_web.cpp, so
+     * we never actually enter their `while(true) { …; vTaskDelay(); }`
+     * loop. Any other vTaskDelay caller would block the JS event loop;
+     * the firmware doesn't have any such call sites outside tasks. */
+    (void)ticks;
+#else
+    usleep((useconds_t)ticks * 1000);
+#endif
+}
 extern "C" void vTaskSuspend(TaskHandle_t) {}
 extern "C" void vTaskResume(TaskHandle_t)  {}
 extern "C" TaskHandle_t xTaskGetCurrentTaskHandle(void) { return nullptr; }
@@ -429,8 +471,35 @@ void BLE::start_advertising()                              {}
 void BLE::handle_line(const char *, size_t)                {}
 void BLE::handle_gb_json(const char *, size_t)             {}
 void BLE::push_notification(Notification &&n)              { notifs.push_back(std::move(n)); notifs_version++; }
-void BLE::post_pending_album_art(PsramByteVec &&, uint16_t, uint16_t) {}
-bool BLE::promote_pending_album_art()                      { return false; }
+// Two-stage album art install — staged here, swapped into music_state
+// on the next music_update tick. The real BLE module uses this so the
+// LVGL task can pick up an image that arrived during light sleep without
+// needing lvgl_port_lock from the rx task; on the host the same two-step
+// hand-off matters because music_update wipes music_state.album_art on
+// every track change and expects the new image via the pending slot.
+namespace {
+PsramByteVec g_pending_album_art;
+uint16_t     g_pending_album_art_w = 0;
+uint16_t     g_pending_album_art_h = 0;
+}
+
+void BLE::post_pending_album_art(PsramByteVec &&pixels, uint16_t w, uint16_t h)
+{
+    g_pending_album_art   = std::move(pixels);
+    g_pending_album_art_w = w;
+    g_pending_album_art_h = h;
+}
+
+bool BLE::promote_pending_album_art()
+{
+    if (g_pending_album_art.empty()) return false;
+    set_album_art(std::move(g_pending_album_art),
+                  g_pending_album_art_w,
+                  g_pending_album_art_h);
+    g_pending_album_art_w = 0;
+    g_pending_album_art_h = 0;
+    return true;
+}
 
 void BLE::dismiss_notification(uint32_t id, bool)
 {

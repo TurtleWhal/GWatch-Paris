@@ -675,7 +675,10 @@
 
 /** Include `lvgl_private.h` in `lvgl.h` to access internal data and functions by default */
 #ifndef LV_USE_PRIVATE_API
-    #define LV_USE_PRIVATE_API  0
+    /* Notifications.cpp's hit-test callback peeks `lv_hit_test_info_t`
+     * fields directly. Those moved into a private header in v9.5 — we
+     * need the private include to compile the unchanged firmware. */
+    #define LV_USE_PRIVATE_API  1
 #endif
 
 /*==================
@@ -856,7 +859,7 @@
 
 #define LV_USE_LIST       1
 
-#define LV_USE_LOTTIE     1
+#define LV_USE_LOTTIE     0
 
 #define LV_USE_MENU       1
 
@@ -1091,11 +1094,11 @@
  *  Requires `LV_USE_MATRIX = 1`
  *  and a rendering engine supporting vector graphics, e.g.
  *  (LV_USE_DRAW_SW and LV_USE_THORVG) or LV_USE_DRAW_VG_LITE or LV_USE_NEMA_VG. */
-#define LV_USE_VECTOR_GRAPHIC  1
+#define LV_USE_VECTOR_GRAPHIC  0
 
 /** Enable ThorVG (vector graphics library) from the src/libs folder.
  *  Requires LV_USE_VECTOR_GRAPHIC */
-#define LV_USE_THORVG_INTERNAL 1
+#define LV_USE_THORVG_INTERNAL 0
 
 /** Enable ThorVG by assuming that its installed and linked to the project
  *  Requires LV_USE_VECTOR_GRAPHIC */
@@ -1310,7 +1313,10 @@
 /** Use SDL to open window on PC and handle mouse and keyboard. */
 #define LV_USE_SDL              1
 #if LV_USE_SDL
-    #define LV_SDL_INCLUDE_PATH     <SDL2/SDL.h>
+    /* `<SDL.h>` without the SDL2/ prefix works for Homebrew SDL2 (its
+     * pkg-config -I lands on the SDL2 dir directly) AND for Emscripten's
+     * bundled SDL2 port, where the header is just `SDL.h`. */
+    #define LV_SDL_INCLUDE_PATH     <SDL.h>
     #define LV_SDL_RENDER_MODE      LV_DISPLAY_RENDER_MODE_DIRECT   /**< LV_DISPLAY_RENDER_MODE_DIRECT is recommended for best performance */
     #define LV_SDL_BUF_COUNT        1    /**< 1 or 2 */
     #define LV_SDL_ACCELERATED      1    /**< 1: Use hardware acceleration*/
@@ -1490,10 +1496,10 @@
 *======================*/
 
 /** Enable examples to be built with the library. */
-#define LV_BUILD_EXAMPLES 1
+#define LV_BUILD_EXAMPLES 0
 
 /** Build the demos */
-#define LV_BUILD_DEMOS 1
+#define LV_BUILD_DEMOS 0
 
 /*===================
  * DEMO USAGE

@@ -63,6 +63,28 @@ struct Notification
     uint16_t img_h = 0;
 };
 
+// Latest weather snapshot from Gadgetbridge's {t:"weather"} broadcast.
+// Updated by the BLE rx task whenever a new message arrives; read on the
+// LVGL task by weather_update. `version` is bumped on every successful
+// parse so the UI can render only on change.
+struct WeatherState
+{
+    std::string txt;       // human description, e.g. "Clear Sky"
+    std::string loc;       // location name
+    int32_t temp_k = 0;    // integer Kelvin (Gadgetbridge: "temp":290 → 16.85°C ≈ 62°F)
+    int32_t hi_k = 0;
+    int32_t lo_k = 0;
+    uint8_t humidity = 0;  // %
+    uint8_t uv = 0;        // index 0..11
+    uint16_t code = 0;     // OpenWeatherMap condition code
+    float wind_mps = 0.0f; // km/h despite the name — the "wind" field
+                           // from Gadgetbridge is km/h, not m/s.
+                           // Keeping the variable name to avoid a
+                           // ripple-edit across the screens that read it.
+    uint16_t wind_dir = 0; // degrees, 0=N
+    uint32_t version = 0;  // bumped on each parse; UI re-renders when this changes
+};
+
 struct MusicState
 {
     std::string state;  // "play" / "pause"
@@ -71,6 +93,14 @@ struct MusicState
     std::string track;
     int32_t duration_s = 0;
     int32_t position_s = 0;
+
+    // esp_timer_get_time() / 1000 stamp of the most recent musicstate
+    // or musicinfo message from the phone. Used by ui_init's music
+    // visibility tick to retire the music screen after a long period
+    // of silence — meaning the user has fully disengaged from the
+    // music app on the phone (whether paused, stopped, or just no
+    // longer the foreground app sending updates), not just paused.
+    int64_t last_msg_ms = 0;
 
     // Album art delivered via the image GATT service with image_kind=0x01.
     // album_art_w * album_art_h * 2 == album_art.size() when present; the
@@ -133,6 +163,14 @@ public:
     void bump_version() { notifs_version++; }
 
     const MusicState &music() const { return music_state; }
+    const WeatherState &weather() const { return weather_state; }
+
+    // Mutable accessors for the simulator's placeholder loader. The
+    // on-device BLE rx task writes these fields directly via the parse
+    // callbacks in ble.cpp; on the host the sim populates them from
+    // simulator/src/sim_placeholders.cpp.
+    MusicState   &music_mut()   { return music_state; }
+    WeatherState &weather_mut() { return weather_state; }
 
     // Install album art delivered via the image GATT service. Called
     // from ble_rx_task when an image transfer with image_kind=0x01
@@ -170,6 +208,18 @@ public:
     void handle_line(const char *line, size_t len);
     void handle_gb_json(const char *json, size_t len);
 
+    // Renegotiate the connection interval. Watch::sleep / Watch::wakeup
+    // call these to trade BLE latency for radio duty cycle: while the
+    // display is dark we only need notifications/time sync to land at
+    // human-perceptible cadence (~500 ms is invisible), but each
+    // connection event still wakes the BT controller from modem-sleep,
+    // so dropping from 30–60 ms to 320–400 ms cuts radio wake events by
+    // roughly an order of magnitude. No-op if not currently connected;
+    // the phone may negotiate the requested range down but typically
+    // honours it.
+    void request_low_power_conn_params();
+    void request_normal_conn_params();
+
 private:
     void push_notification(Notification &&n);
 
@@ -177,6 +227,7 @@ private:
     std::vector<Notification> notifs;
     uint32_t notifs_version = 0;
     MusicState music_state;
+    WeatherState weather_state;
 };
 
 extern BLE ble;

@@ -15,9 +15,6 @@ enum class ClassSchedule
     O,
     E,
     A,
-    Y,
-    MA,
-    SBA,
     AUTO = 254,
     NONE = 255
 };
@@ -36,7 +33,7 @@ private:
         ClassSchedule::E,
         ClassSchedule::NONE};
 
-    const struct ScheduleEvent schedules[6][MAX_EVENTS] = {
+    const struct ScheduleEvent schedules[7][MAX_EVENTS] = {
         {
             // O
             {7, 0, 7, 43, "Jazz Band"},
@@ -85,14 +82,22 @@ private:
             {12, 30, 12, 55, "Lunch"},
             {13, 05, 14, 35, "P5/P6"},
         },
-        {
-            // SBA Testing
-            {7, 50, 10, 45, "Testing"},
-            {11, 0, 11, 55, "P1/P2"},
-            {11, 55, 12, 30, "Lunch"},
-            {12, 40, 13, 35, "P3/P4"},
-            {13, 40, 14, 35, "P5/P6"},
-        },
+        // {
+        //     // SBA Testing
+        //     {7, 50, 10, 45, "Testing"},
+        //     {11, 0, 11, 55, "P1/P2"},
+        //     {11, 55, 12, 30, "Lunch"},
+        //     {12, 40, 13, 35, "P3/P4"},
+        //     {13, 40, 14, 35, "P5/P6"},
+        // },
+        // {
+        //     // Yearbook Day
+        //     {7, 0, 7, 43, "Jazz Band"},
+        //     {7, 50, 9, 15, "P1/P2"},
+        //     {9, 30, 10, 55, "P3/P4"},
+        //     {10, 55, 11, 30, "Lunch"},
+        //     {11, 40, 13, 45, "P5/P6"},
+        // },
     };
 
     // const struct ScheduleEvent schedules[5][MAX_EVENTS] = {

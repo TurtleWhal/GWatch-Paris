@@ -92,11 +92,11 @@ void Watch::pm_update()
             {
                 // Tilt-to-wake while asleep. See tilt_wake_detected for
                 // the rotation-aware axis selection. The IMU stays at
-                // 56 Hz gyro ODR through imu_sleep, so the I²C read is
-                // a 6-byte burst — ~200 µs every 100 ms, well under 1 %
-                // duty cycle, ~100 µA on top of the ~12 mA light-sleep
-                // floor. The QMI8658's own WoM is accel-only and would
-                // misfire on bumps (per CLAUDE.md), so we poll the gyro.
+                // 28 Hz gyro ODR through imu_sleep, so the I²C read is
+                // a 6-byte burst — ~200 µs every 200 ms, well under
+                // 1 % duty cycle. The QMI8658's own WoM is accel-only
+                // and would misfire on bumps (per CLAUDE.md), so we
+                // poll the gyro.
                 float dps;
                 if (tilt_wake_detected(&dps))
                 {
@@ -106,11 +106,13 @@ void Watch::pm_update()
             }
         }
 
-        // 100 ms while sleeping is a compromise: long enough that the
-        // tilt-wake I²C read and FreeRTOS-tick wakeup don't dominate
-        // average current, short enough that touch / tilt wake feels
-        // reasonably responsive.
-        vTaskDelay(pdMS_TO_TICKS(this->sleeping ? 100 : 50));
+        // 200 ms while sleeping. Touch wake is GPIO-IRQ driven and
+        // doesn't depend on this poll period — only tilt-wake does,
+        // and 5 Hz is plenty for a wrist-raise gesture (200–500 ms
+        // duration). Each iteration is a wake from light sleep, so
+        // doubling the period roughly halves the contribution this
+        // task makes to the ~12 mA floor.
+        vTaskDelay(pdMS_TO_TICKS(this->sleeping ? 200 : 50));
     }
 }
 
@@ -197,6 +199,14 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
                 lvgl_port_unlock();
             }
 
+            // Ask the central to relax the connection interval. Done
+            // before display/imu teardown so any back-and-forth with the
+            // phone happens while we're still at the higher CPU freq —
+            // and so the slow params are active by the time we drop the
+            // pm locks below. The previous 30–60 ms request fired ~22
+            // radio events / s; 320–400 ms drops that to ~3.
+            ble.request_low_power_conn_params();
+
             display.sleep();
             imu_sleep();
 
@@ -252,6 +262,13 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         esp_pm_lock_acquire(pm_freq_lock);
         esp_pm_lock_acquire(pm_sleep_lock);
 
+        // Re-request the fast interactive conn params right away. The
+        // negotiation rides the next connection event (which at the
+        // slow params arrives in up to ~400 ms), so doing this before
+        // display.wake() means the link is usually already back to
+        // 30–60 ms by the time the user is poking the screen.
+        ble.request_normal_conn_params();
+
         imu_wake();
 
         // Resume the LVGL task before any lvgl_port_lock attempt below —
@@ -266,33 +283,28 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         // mutation in lvgl_port_lock so we don't race with the renderer.
         if (lvgl_port_lock(0))
         {
-            // Skip the wake-time scroll-back if the user was on the
-            // lower row (notifications / music). They're almost
-            // certainly there mid-task and snapping them back to the
-            // watch face is annoying.
-            bool on_lower = false;
-            if (ver_layer && lower_layer)
+            // Skip the wake-time scroll-back ONLY when the user was on
+            // the music screen AND music is currently playing — that's
+            // the single case where leaving them there is useful
+            // (active media control). For any other lower-row screen,
+            // or for music with playback stopped/paused, snap back to
+            // the watch face just like we would from any other screen.
+            bool preserve_lower = false;
+            if (ver_layer && lower_layer && musicscr)
             {
                 int32_t sy = lv_obj_get_scroll_y(ver_layer);
                 int32_t ly = lv_obj_get_y(lower_layer);
-                on_lower = (sy >= ly - 50);
-            }
+                bool on_lower_row = (sy >= ly - 50);
 
-            // Exception: the music screen only earns the stay-put
-            // treatment when there's actually music playing. If the
-            // user stopped/paused playback before the watch slept,
-            // the screen has nothing dynamic going on, and waking
-            // back to it instead of the watch face is just clutter.
-            if (on_lower && musicscr && lower_layer)
-            {
                 int32_t mx_in_scroll =
                     lv_obj_get_x(musicscr) - lv_obj_get_scroll_x(lower_layer);
-                bool on_music = mx_in_scroll > -120 && mx_in_scroll < 120;
-                if (on_music && ble.music().state != "play")
-                    on_lower = false;
+                bool on_music = (mx_in_scroll > -120 && mx_in_scroll < 120);
+
+                preserve_lower = on_lower_row && on_music &&
+                                 ble.music().state == "play";
             }
 
-            if (!on_lower)
+            if (!preserve_lower)
             {
                 if (diff > 15000)
                 {
@@ -319,6 +331,16 @@ void Watch::wakeup() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THA
         if (lvgl_port_lock(0))
         {
             notification_popup_present_now();
+
+            // Sync the music screen to whatever musicstate/musicinfo/
+            // album-art updates arrived via BLE during sleep, and
+            // rebase its local position clock so the sleep duration
+            // isn't added to the displayed playback time. Done before
+            // the lv_refr_now below so the first frame on backlight
+            // restore already shows the up-to-date music state. No-op
+            // if music_create hasn't been called or has been retired.
+            music_refresh();
+
             lvgl_port_unlock();
         }
 
@@ -423,6 +445,15 @@ void Watch::init()
     watch.settings.init();
     iic_init();
 
+    // ble.init() FIRST among the heavyweight subsystems. The BT
+    // controller asks for a ~30 KB contiguous internal-RAM block
+    // (emi.c:164 / `param 0x7800`); after LVGL's draw buffers, font
+    // copies, and several task stacks have been allocated, the largest
+    // free internal block is too small and ble_init aborts with
+    // "BLE_INIT: Malloc failed" + an EMI param assert. NimBLE doesn't
+    // depend on display/IMU/battery, so it's safe to run before them.
+    ble.init();
+
     haptic_init();
 
     battery_init();
@@ -449,7 +480,9 @@ void Watch::init()
 
     display.set_backlight(100);
 
-    ble.init();
+    // (ble.init() now runs above, before display.init, so the BT
+    // controller's 30 KB malloc can land on a contiguous internal-RAM
+    // block before LVGL fragments the heap.)
 
     // Register apps that can't be created during ui_init because their
     // boot-time widget allocation would starve the BT controller's malloc.
@@ -460,6 +493,192 @@ void Watch::init()
     haptic_play(false, 80, 80, 80, 80, 80, 0); // vibrate 3 times
 
     // i2c_scan();
+}
+
+// ----- Low-battery shutdown + early-boot voltage check -----
+//
+// When the cell rail dips below CRITICAL_MV battery_task calls
+// low_battery_shutdown(). That tears down BLE/IMU/display and drops
+// the chip into deep sleep with a 30 s timer wake. Each wake re-runs
+// app_main, which calls battery_early_check_or_sleep_again() FIRST —
+// if the rail is still under SAFE_BOOT_MV it re-enters deep sleep
+// without bringing up LVGL or BLE, so we don't hit the ~80 mA boot
+// burst on a dead cell and trip the protection circuit again. Plug
+// in USB → rail jumps to ~4.5 V → next wake passes the check and
+// proceeds with normal init.
+
+#include <esp_adc/adc_oneshot.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+
+// Sleep period between checks while the cell is below SAFE_BOOT_MV.
+// 30 s keeps average current under 30 µA (10 µA deep sleep + a brief
+// ADC wake) while still recovering within seconds of plug-in.
+#define LOW_BAT_WAKE_PERIOD_US (30LL * 1000 * 1000)
+
+// Rail values (post-divider × BAT_DIVIDER_RATIO).
+//
+// SAFE_BOOT_MV needs LARGE hysteresis above the shutdown trigger
+// (which fires under load around 2.95 V): once we deep-sleep, load
+// drops to ~10 µA and the cell's voltage sag relaxes — a depleted
+// cell that read 2.95 V loaded can easily rebound to 3.2–3.4 V
+// unloaded, and continues drifting up as chemistry settles. Without
+// the hysteresis, the next timer wake passes a low threshold (e.g.
+// 3.1 V) → app_main brings everything up → ~80 mA cold boot burst
+// → rail collapses again → shutdown re-trips → cell-relax-and-boot
+// loop, same as the original brown-out loop we set out to fix.
+//
+// 3.7 V is the right cut-off: it's comfortably above what a
+// depleted cell can rebound to on this board (~3.4 V max even
+// after long rest) but well below what USB plug-in produces
+// (3.7–4.5 V rail — see CLAUDE.md "Hardware quirks (board)").
+// In effect this means "only boot when USB is plugged in," which
+// is exactly the behaviour we want.
+#define SAFE_BOOT_MV 3700
+
+static bool sample_battery_mv_once(uint32_t *out_mv)
+{
+    adc_oneshot_unit_handle_t adc = nullptr;
+    adc_cali_handle_t cali = nullptr;
+    adc_oneshot_unit_init_cfg_t unit_cfg = { .unit_id = ADC_UNIT_1 };
+    if (adc_oneshot_new_unit(&unit_cfg, &adc) != ESP_OK) return false;
+    adc_oneshot_chan_cfg_t ch_cfg = {
+        .atten    = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    adc_oneshot_config_channel(adc, ADC_CHANNEL_0 /* GPIO1, BAT_ADC */, &ch_cfg);
+
+    adc_cali_curve_fitting_config_t cali_cfg = {
+        .unit_id  = ADC_UNIT_1,
+        .chan     = ADC_CHANNEL_0,
+        .atten    = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali);
+
+    // Cheap oversample — 8 reads, ~1 ms total. We just need a coarse
+    // "is the rail >= SAFE_BOOT" answer, not the smoothed value the
+    // main battery_task produces.
+    int sum_mv = 0, got = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        int raw = 0, mv = 0;
+        if (adc_oneshot_read(adc, ADC_CHANNEL_0, &raw) != ESP_OK) continue;
+        if (adc_cali_raw_to_voltage(cali, raw, &mv) != ESP_OK) continue;
+        sum_mv += mv;
+        got++;
+    }
+    if (cali) adc_cali_delete_scheme_curve_fitting(cali);
+    if (adc)  adc_oneshot_del_unit(adc);
+    if (got == 0) return false;
+    *out_mv = (uint32_t)((sum_mv / got) * 3 /* BAT_DIVIDER_RATIO */);
+    return true;
+}
+
+// Persistent "we entered low-battery shutdown" marker. RTC_NOINIT_ATTR
+// memory survives every reset cause EXCEPT a full power-on reset
+// (POR — i.e. battery physically removed or completely flat) so the
+// flag also survives a brown-out reset that happens mid-shutdown
+// sequence. The early-boot check uses BOTH the wake-cause AND this
+// marker so that a brown-out mid-shutdown still ends up in the
+// re-sleep path instead of doing a full boot.
+//
+// The "valid" sentinel is a 32-bit magic; any other value (including
+// the random garbage RTC RAM holds on first power-up) is treated as
+// "no marker." Cleared once we successfully boot through the check.
+#define LOW_BAT_MARKER_MAGIC 0xB47B47B4u
+static RTC_NOINIT_ATTR uint32_t s_low_bat_marker;
+
+void Watch::low_battery_shutdown()
+{
+    ESP_LOGW("pm", "low-battery shutdown");
+
+    // Set the persistent marker FIRST, before doing anything else.
+    // If we brown-out mid-tear-down, the marker is still set, and the
+    // next boot's early check will re-sleep instead of running full
+    // watch_init.
+    s_low_bat_marker = LOW_BAT_MARKER_MAGIC;
+
+    // Kill the heavy loads BEFORE the user-visible message. BLE radio
+    // bursts and IMU polling are what tip the cell over the brown-out
+    // edge during the shutdown window — turning them off first means
+    // the message renders on a much steadier rail, and even if we
+    // crash partway through, the marker (above) gets us out next
+    // boot.
+    ble.set_enabled(false);
+    imu_sleep();
+
+    // Brief on-screen warning at a dimmed backlight. lvgl_port_lock
+    // failure is non-fatal — we still power down even if LVGL wedged.
+    if (lvgl_port_lock(0))
+    {
+        lv_obj_t *scr = lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+        lv_obj_t *l = lv_label_create(scr);
+        lv_label_set_text(l, "Battery dead\nplug in to charge");
+        lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(l, lv_color_white(), 0);
+        lv_obj_center(l);
+        lv_screen_load(scr);
+        lv_refr_now(NULL);
+        lvgl_port_unlock();
+    }
+    display.set_backlight(40);   // lower than before (less rail load)
+    vTaskDelay(pdMS_TO_TICKS(1500));
+
+    display.set_backlight(0);
+    display.sleep();
+
+    // Clear ANY wake source left over from prior sleep cycles
+    // (Watch::sleep arms a GPIO5 level-low wake source — if we don't
+    // disarm it, esp_deep_sleep_start can return immediately as soon
+    // as the touch line is low, looking like "the chip woke up
+    // before sleep even finished").
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    esp_sleep_enable_timer_wakeup(LOW_BAT_WAKE_PERIOD_US);
+
+    esp_deep_sleep_start();
+}
+
+extern "C" void battery_early_check_or_sleep_again(void)
+{
+    // Run the check on EITHER a timer wake (the happy path) OR on any
+    // reset where the persistent marker is still set (the brown-out-
+    // mid-shutdown path). POR clears RTC RAM, so a fresh power-up
+    // sees the marker as garbage and falls through to a normal boot.
+    bool from_timer = (esp_sleep_get_wakeup_causes() &
+                       BIT(ESP_SLEEP_WAKEUP_TIMER)) != 0;
+    bool marker_set = (s_low_bat_marker == LOW_BAT_MARKER_MAGIC);
+    if (!from_timer && !marker_set)
+        return;
+
+    uint32_t mv = 0;
+    if (!sample_battery_mv_once(&mv))
+    {
+        // ADC failed — fall through to full boot rather than getting
+        // stuck in a wake-can't-read-sleep loop forever.
+        s_low_bat_marker = 0; // don't keep retrying the early check
+        return;
+    }
+
+    ESP_LOGI("pm", "early battery check: %u mV (need %u)",
+             (unsigned)mv, (unsigned)SAFE_BOOT_MV);
+
+    if (mv >= SAFE_BOOT_MV)
+    {
+        // Rail recovered (USB plugged in, or cell genuinely rebounded
+        // above the safe-boot threshold). Clear the marker so future
+        // resets — including ones unrelated to low battery — don't keep
+        // re-running this early check on every boot.
+        s_low_bat_marker = 0;
+        return; // proceed with normal watch_init
+    }
+
+    // Still flat. Back to sleep. No subsystems were brought up yet,
+    // so the only ongoing draw is RTC + the ADC bring-up we just
+    // ran (which the deinit calls above tore back down).
+    esp_sleep_enable_timer_wakeup(LOW_BAT_WAKE_PERIOD_US);
+    esp_deep_sleep_start();
 }
 
 /** Wrapper for C -> C++ shenanigans */

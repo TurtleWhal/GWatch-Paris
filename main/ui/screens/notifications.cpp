@@ -1,6 +1,14 @@
 #include "ui.hpp"
 #include "ble.hpp"
+#include "images.hpp"  // IMG_PLACEHOLDER as the default notif icon
 #include <inttypes.h>  // PRIu32 in the reply-chip log line
+// lv_hit_test_info_t's field layout lives in the LVGL private header;
+// the public API only forward-declares the typedef. Pulled in so the
+// ADV_HITTEST handler below can read .point and set .res directly.
+// (Don't drop this include — clangd flags it as "unused" because the
+//  struct access goes through a typedef'd pointer, but removing it
+//  breaks the build.)
+#include "core/lv_obj_event_private.h"
 
 static lv_obj_t *notif_list_container = nullptr;
 static lv_obj_t *empty_label = nullptr;
@@ -11,6 +19,54 @@ static uint32_t last_rendered_version = (uint32_t)-1;
 // post-deletion layout adjustments, residual indev tracking) can't
 // cascade into additional dismisses on neighbouring cards.
 static bool dismiss_in_progress = false;
+
+// Point-in-rounded-rect test for the notification card hit-tests.
+// Reads the radius from the obj's own style — `lv_obj_update_layout`
+// is called first so style + size are finalized before the lookup
+// (without it the style read can return 0 if the obj's layout hasn't
+// settled, which collapses the test to a plain bbox check and lets
+// corner-wedge clicks through).
+//
+// Logic recap:
+//   1. Outside bbox → miss.
+//   2. Compute the "inner rect" inset by r on each side.
+//   3. If p is in the inner rect's horizontal OR vertical central
+//      strip → hit. (A point in the central cross is unambiguously
+//      inside the rounded silhouette — no further radius check
+//      needed; those two early returns are intentional and correct.)
+//   4. Otherwise p is in one of the four corner regions; test
+//      distance from the corresponding corner-centre against r.
+static bool point_in_rounded_rect(lv_obj_t *obj, const lv_point_t *p)
+{
+    // Finalize layout so the radius style and coords are current.
+    // Cheap when nothing is dirty.
+    lv_obj_update_layout(obj);
+
+    lv_area_t a;
+    lv_obj_get_coords(obj, &a);
+    if (p->x < a.x1 || p->x > a.x2 || p->y < a.y1 || p->y > a.y2)
+        return false;
+
+    int32_t w = a.x2 - a.x1 + 1;
+    int32_t h = a.y2 - a.y1 + 1;
+    int32_t r = lv_obj_get_style_radius(obj, LV_PART_MAIN);
+    if (r == LV_RADIUS_CIRCLE) r = (w < h ? w : h) / 2;
+    int32_t max_r = (w < h ? w : h) / 2;
+    if (r > max_r) r = max_r;
+    if (r <= 0) return true;
+
+    int32_t inner_x1 = a.x1 + r, inner_x2 = a.x2 - r;
+    int32_t inner_y1 = a.y1 + r, inner_y2 = a.y2 - r;
+
+    if (p->x >= inner_x1 && p->x <= inner_x2) return true;
+    if (p->y >= inner_y1 && p->y <= inner_y2) return true;
+
+    int32_t cx = (p->x < inner_x1) ? inner_x1 : inner_x2;
+    int32_t cy = (p->y < inner_y1) ? inner_y1 : inner_y2;
+    int32_t dx = p->x - cx;
+    int32_t dy = p->y - cy;
+    return (dx * dx + dy * dy) <= (r * r);
+}
 
 // Render `when_ms` (Notification.when_ms — esp_timer_get_time() / 1000 at
 // receipt, monotonic across light sleep) into a short relative-time
@@ -53,7 +109,11 @@ static uint32_t popup_last_shown_id = 0;
 // rewrites popup_last_shown_id to the older id) doesn't make the
 // auto-popup think a fresh notification has arrived and immediately
 // stack the newest one on top.
-static uint32_t popup_seen_latest_id = 0;
+// Highest notification ID we've already popped up for. New arrivals
+// only auto-popup if their id exceeds this. Non-static so the simulator
+// can seed it with a pre-loaded notification's id to suppress the popup
+// for placeholder data — on-device, the BLE rx task is the only writer.
+uint32_t popup_seen_latest_id = 0;
 static bool popup_icon_applied = false;
 
 static void popup_close(bool animate = true)
@@ -110,7 +170,7 @@ static lv_obj_t *popup_build()
 
     popup_src = lv_label_create(card);
     lv_obj_set_style_text_font(popup_src, &ProductSansRegular_14, 0);
-    lv_obj_set_style_text_color(popup_src, lv_color_hex(0x6699ff), 0);
+    lv_obj_add_style(popup_src, &accent_text_style, 0);
     lv_label_set_long_mode(popup_src, LV_LABEL_LONG_DOT);
     lv_obj_set_style_max_width(popup_src, 100, 0);
 
@@ -191,8 +251,16 @@ static void popup_apply_icon(const Notification &n)
     }
     else
     {
-        lv_obj_set_flag(popup_icon_img, LV_OBJ_FLAG_HIDDEN, true);
-        lv_obj_set_style_bg_opa(popup_icon_box, LV_OPA_COVER, 0);
+        // No notify-img has landed yet (or never will). Show the
+        // bundled IMG_PLACEHOLDER instead of an empty grey circle —
+        // same 1.5× scale as the real-icon path so a 48 px source fills
+        // the 72 px container cleanly.
+        lv_image_set_src(popup_icon_img, &IMG_PLACEHOLDER);
+        lv_image_set_pivot(popup_icon_img, 0, 0);
+        lv_image_set_scale(popup_icon_img, 256 * 3 / 2);
+        lv_obj_set_pos(popup_icon_img, 0, 0);
+        lv_obj_remove_flag(popup_icon_img, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_bg_opa(popup_icon_box, 0, 0);
         popup_icon_applied = false;
     }
 }
@@ -219,13 +287,28 @@ static void popup_show(const Notification &n, bool animate = true)
             lv_obj_set_style_border_width(reply, 2, 0);
             lv_obj_set_style_bg_opa(reply, 0, 0);
             lv_obj_set_style_pad_ver(reply, 4, 0);
+            // Strip SCROLLABLE from the chip and its label — without
+            // this, a touch-drag that starts inside the chip can be
+            // captured as a scroll on the chip's internal content
+            // area, leaving the label visibly offset. Reply text is
+            // tiny enough that it never legitimately needs to scroll,
+            // so just disable the behavior outright.
+            lv_obj_remove_flag(reply, LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_set_style_radius(reply, (lv_font_get_line_height(&ProductSansRegular_20_emoji) + lv_obj_get_style_pad_top(reply, LV_PART_MAIN) * 2 + 4) / 2, 0);
-            // lv_obj_set_style_max_width(reply, 200, 0);
-            
+            // Hard cap on the chip's outer width including its 2 px
+            // border on each side. popup_replies is 200 px wide, so a
+            // chip wider than that would push out of the container and
+            // overlap the screen edge (or hit the next row of chips).
+            lv_obj_set_style_max_width(reply, 200, 0);
+
             lv_obj_t *lbl = lv_label_create(reply);
             lv_obj_set_style_text_font(lbl, &ProductSansRegular_20_emoji, 0);
             lv_label_set_text(lbl, n.replies.at(i).c_str());
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_WRAP);
+            // Label max-width = chip max (200) − border (2*2) − chip's
+            // default pad_hor (~10 each side from the lv_obj theme).
+            // Leaves headroom under the chip cap so the label wraps
+            // before the chip itself does.
             lv_obj_set_style_max_width(lbl, 172, 0);
 
             // Stash the notification id on the chip's user_data; the
@@ -251,7 +334,14 @@ static void popup_show(const Notification &n, bool animate = true)
 
     popup_apply_icon(n);
 
+    // Reset the body label's internal scroll AND the popup screen's
+    // own scroll. The screen is LV_DIR_VER scrollable so suggestion
+    // overflow stays reachable, which means a previous notification
+    // could leave it parked partway down — without this snap-to-top,
+    // a fresh popup would appear pre-scrolled instead of starting at
+    // the source/title/body the user expects to see first.
     lv_obj_scroll_to_y(popup_body, 0, LV_ANIM_OFF);
+    if (popup_screen) lv_obj_scroll_to_y(popup_screen, 0, LV_ANIM_OFF);
 
     // Don't trample our own popup as the "previous screen" if a second
     // notification arrives while the first popup is still up.
@@ -352,6 +442,28 @@ static void rebuild_notification_list()
     const auto &list = ble.notifications();
     size_t count = list.size();
 
+    // If the popup is the active screen and the notification it's
+    // showing just got dismissed (notify- from the phone, or local
+    // dismiss while popup is up), drop the popup back to the previous
+    // screen. The version bump fires for adds, dismisses, and image
+    // attaches — we only want to close on the dismiss case, so probe
+    // the list for the displayed id rather than closing unconditionally.
+    if (popup_screen && lv_screen_active() == popup_screen &&
+        popup_last_shown_id != 0)
+    {
+        bool still_present = false;
+        for (const auto &n : list)
+        {
+            if (n.id == popup_last_shown_id)
+            {
+                still_present = true;
+                break;
+            }
+        }
+        if (!still_present)
+            popup_close();
+    }
+
     // Clear the container.
     lv_obj_clean(notif_list_container);
 
@@ -410,6 +522,10 @@ static void rebuild_notification_list()
             lv_obj_set_style_border_width(sp, 0, 0);
             lv_obj_set_style_pad_all(sp, 0, 0);
             lv_obj_set_flag(sp, LV_OBJ_FLAG_SCROLLABLE, false);
+            // Strip CLICKABLE so a press on the spacer doesn't capture
+            // the touch — without this, dragging from the spacer would
+            // still bubble up to snap and start the swipe-to-dismiss.
+            lv_obj_remove_flag(sp, LV_OBJ_FLAG_CLICKABLE);
             return sp;
         };
 
@@ -424,9 +540,40 @@ static void rebuild_notification_list()
         lv_obj_set_style_border_width(center, 0, 0);
         lv_obj_set_style_pad_all(center, 0, 0);
         lv_obj_set_flag(center, LV_OBJ_FLAG_SCROLLABLE, false);
+        // Same reason as the spacers — the 20 px gutter on each side of
+        // the 200 px card would otherwise catch the press and trigger
+        // a swipe-to-dismiss on snap.
+        lv_obj_remove_flag(center, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_flex_flow(center, LV_FLEX_FLOW_ROW);
         lv_obj_set_style_flex_main_place(center, LV_FLEX_ALIGN_CENTER, 0);
         lv_obj_set_style_flex_cross_place(center, LV_FLEX_ALIGN_CENTER, 0);
+
+        // Restrict the snap row's own hit area to the card. With this,
+        // touches that land in the snap's spacer regions or the gutter
+        // around the card miss the snap row entirely → no swipe-to-
+        // dismiss kicks off. The card is at snap → center (child[1]) →
+        // first child; look it up at hit-test time so we don't have to
+        // capture pointers in the lambda.
+        lv_obj_add_flag(snap, LV_OBJ_FLAG_ADV_HITTEST);
+        lv_obj_add_event_cb(
+            snap,
+            [](lv_event_t *e)
+            {
+                lv_hit_test_info_t *info =
+                    (lv_hit_test_info_t *)lv_event_get_param(e);
+                lv_obj_t *row = lv_event_get_target_obj(e);
+                if (lv_obj_get_child_count(row) < 2) { info->res = false; return; }
+                lv_obj_t *c = lv_obj_get_child(row, 1);  // center
+                if (!c || lv_obj_get_child_count(c) == 0) { info->res = false; return; }
+                lv_obj_t *cd = lv_obj_get_child(c, 0);   // card
+                // Rounded-rect test so the four corner wedges outside
+                // the pill (where the card's radius cuts into the
+                // bounding box) don't count as hits. The helper reads
+                // the card's radius from its own style now (with an
+                // lv_obj_update_layout first to make sure it's current).
+                info->res = point_in_rounded_rect(cd, info->point);
+            },
+            LV_EVENT_HIT_TEST, NULL);
 
         lv_obj_t *card = lv_button_create(center);
         lv_obj_set_size(card, 200, LV_SIZE_CONTENT);
@@ -443,6 +590,27 @@ static void rebuild_notification_list()
         lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_row(card, 2, 0);
         lv_obj_set_flag(card, LV_OBJ_FLAG_SCROLL_ON_FOCUS, false);
+
+        // ADV_HITTEST on the card itself. Without this, wedge-region
+        // clicks (inside the card's bounding box but outside its
+        // rounded silhouette) still hit because lv_button's default
+        // hit_test is a plain bbox — and that capture happens at the
+        // card layer, BEFORE the snap-row or list-container hit-tests
+        // get a chance to reject the point. With this in place a wedge
+        // click misses the card, then misses snap (its hit-test also
+        // checks card bounds), then misses the list (same), and is
+        // dropped entirely.
+        lv_obj_add_flag(card, LV_OBJ_FLAG_ADV_HITTEST);
+        lv_obj_add_event_cb(
+            card,
+            [](lv_event_t *e)
+            {
+                lv_hit_test_info_t *info =
+                    (lv_hit_test_info_t *)lv_event_get_param(e);
+                info->res = point_in_rounded_rect(
+                    lv_event_get_target_obj(e), info->point);
+            },
+            LV_EVENT_HIT_TEST, NULL);
 
         // Icon slot: when the matching `notify-img` GB message has arrived,
         // `n.img` holds a decoded RGB565 pixel buffer (sized n.img_w × n.img_h);
@@ -487,6 +655,16 @@ static void rebuild_notification_list()
             lv_image_set_scale(icon_img, 256 * 48 / n.img_w);
             lv_obj_set_style_bg_opa(icon_box, 0, 0);
         }
+        else
+        {
+            // No icon attached — drop in IMG_PLACEHOLDER. The bundled
+            // image is 48×48 to match the container exactly, so no
+            // scaling needed (scale 256 = 1:1).
+            lv_obj_t *icon_img = lv_image_create(icon_box);
+            lv_image_set_src(icon_img, &IMG_PLACEHOLDER);
+            lv_image_set_pivot(icon_img, 0, 0);
+            lv_obj_set_style_bg_opa(icon_box, 0, 0);
+        }
 
         lv_obj_t *src_label = lv_label_create(card);
         // "Source · age" — receipt age is recorded by ble.cpp on notify
@@ -500,7 +678,7 @@ static void rebuild_notification_list()
                  age_buf);
         lv_label_set_text(src_label, src_buf);
         lv_obj_set_style_text_font(src_label, &ProductSansRegular_10, 0);
-        lv_obj_set_style_text_color(src_label, lv_color_hex(0x6699ff), 0);
+        lv_obj_add_style(src_label, &accent_text_style, 0);
 
         if (!n.title.empty())
         {
@@ -632,6 +810,55 @@ lv_obj_t *notifications_screen_create(lv_obj_t *parent)
     lv_obj_set_style_pad_row(scr, 8, 0);
 
     notif_list_container = scr;
+
+    // Restrict the list's hit area to the actual notification cards
+    // (and the small bar at the top). Touches that land in the per-row
+    // snap spacers or in the inter-row flex gaps now miss the list and
+    // don't initiate a vertical scroll — without ADV_HITTEST any pixel
+    // inside the container counts as hittable, so a touch in the gap
+    // between two cards would still scroll the list. The card layout
+    // is row→center→card; we walk three deep on rows that have it and
+    // fall back to "whole row hittable" for the bar / empty placeholder.
+    lv_obj_add_flag(scr, LV_OBJ_FLAG_ADV_HITTEST);
+    lv_obj_add_event_cb(
+        scr,
+        [](lv_event_t *e)
+        {
+            lv_hit_test_info_t *info =
+                (lv_hit_test_info_t *)lv_event_get_param(e);
+            lv_obj_t *list = lv_event_get_target_obj(e);
+
+            uint32_t n = lv_obj_get_child_count(list);
+            for (uint32_t i = 0; i < n; i++)
+            {
+                lv_obj_t *row = lv_obj_get_child(list, i);
+
+                // The bar at the top and the empty-state label aren't
+                // notification rows — they're plain children with no
+                // center/card chain. Treat their whole bounds as hit so
+                // touches that happen to land on them still pass.
+                lv_obj_t *card = nullptr;
+                if (lv_obj_get_child_count(row) >= 2)
+                {
+                    lv_obj_t *center = lv_obj_get_child(row, 1);
+                    if (center && lv_obj_get_child_count(center) > 0)
+                        card = lv_obj_get_child(center, 0);
+                }
+                lv_obj_t *hit_target = card ? card : row;
+
+                // Rounded-rect hit test using whatever style radius the
+                // target was created with; the helper handles 0/no-
+                // radius targets (bar, empty-state label) as plain
+                // bbox tests.
+                if (point_in_rounded_rect(hit_target, info->point))
+                {
+                    info->res = true;
+                    return;
+                }
+            }
+            info->res = false;
+        },
+        LV_EVENT_HIT_TEST, NULL);
 
     // Slow timer that does two things: (1) rebuild the list panel if the
     // notification queue changed (self-skips otherwise), and (2) fire the

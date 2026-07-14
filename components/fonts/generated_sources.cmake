@@ -21,7 +21,8 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_30.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_36.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_42.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_96.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_76.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansBold_92.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_10.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_14.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/ProductSansRegular_16.c

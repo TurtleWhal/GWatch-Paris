@@ -41,7 +41,7 @@ struct Alarm
 };
 
 static constexpr int N_ALARMS = 4;
-static Alarm alarms[N_ALARMS] = {
+Alarm alarms[N_ALARMS] = {
     {12, 0, true, false},
     {12, 0, true, false},
     {12, 0, true, false},
@@ -114,7 +114,7 @@ static lv_obj_t *prev_alarm_screen; // screen to return to from setalarmscr
 static lv_obj_t *alarm_ring_screen = nullptr;
 static lv_obj_t *alarm_ring_time_lbl = nullptr;     // shows the fired alarm's HH:MM AM/PM
 static lv_timer_t *alarm_auto_stop_timer = nullptr; // one-shot, 60s
-static volatile int pending_alarm_idx = -1;
+volatile int pending_alarm_idx = -1;
 static uint32_t last_fired_minute[N_ALARMS] = {};
 
 // FreeRTOS task: poll local time once per second, fire any matching
@@ -341,6 +341,7 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent)
         alarm_create(scr, i);
 
     setalarmscr = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(setalarmscr, lv_color_black(), 0);
 
     alarmarc = lv_arc_create(setalarmscr);
     lv_obj_set_size(alarmarc, 202, 202);

@@ -186,7 +186,8 @@ for size in sizes:
                 os.path.realpath(
                     pathlib.Path(__file__)
                     .parent.resolve()
-                    .joinpath("./FontAwesome6Pro.woff")
+                    # .joinpath("./FontAwesome6Pro.woff")
+                    .joinpath("./Font Awesome 7 Pro.otf")
                 )
             )
             args.append("--range")

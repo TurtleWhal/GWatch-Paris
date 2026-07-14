@@ -201,6 +201,14 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
 
     lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
+    // Force a full draw now: reset the change-guards so the immediate update
+    // below repaints every field. Without this, switching to this face leaves
+    // it blank until the minute/day/battery happens to change.
+    last_sec = last_min = last_hour = last_day = last_month = 255;
+    last_battery_check = 0;
+    last_battery_mv = 0;
+    rotarywatch_update();
+
     return scr;
 }
 

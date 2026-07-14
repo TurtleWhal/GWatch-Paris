@@ -28,6 +28,16 @@ CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
 CONFIG_LV_OS_FREERTOS=y
 # To enable the on-screen FPS overlay, also set CONFIG_LV_USE_SYSMON=y and
 # CONFIG_LV_USE_PERF_MONITOR=y via menuconfig (depends on SYSMON).
+# lv_snapshot: render an object subtree into a caller-provided draw buffer.
+# The weather screen uses it to pre-render itself once per weather update
+# into a PSRAM RGB565 buffer, then blits that flat image while scrolling
+# instead of re-rasterising its arched text / UV gradient / rotated arrow
+# every frame. The snapshot buffer is always allocated in PSRAM (see
+# weather.cpp), so this does NOT add to the internal-SRAM pressure that the
+# BT controller is sensitive to. (An earlier attempt to enable snapshot
+# with an internal-RAM buffer is what caused the ble_init malloc panics
+# noted in ble.cpp.) If BLE ever fails to init again, this is a suspect.
+CONFIG_LV_USE_SNAPSHOT=y
 
 # --- Bluetooth (NimBLE host for Gadgetbridge BLE) ---
 # ESP32-S3 is BLE-only; NimBLE is lighter than Bluedroid and the right pick.
@@ -55,6 +65,13 @@ CONFIG_BT_CTRL_MODEM_SLEEP=y
 CONFIG_BT_CTRL_MODEM_SLEEP_MODE_1=y
 CONFIG_BT_CTRL_LPCLK_SEL_MAIN_XTAL=y
 CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP=y
+
+# Drop default TX power from +9 dBm (the IDF default) to 0 dBm. Cuts
+# per-event radio current on every advertising and connection slot; for
+# a watch-on-wrist + phone-in-pocket pair (≤ 2 m) 0 dBm is plenty of
+# link margin. If you ever take this farther from the phone and the
+# link starts dropping, bump back up to N3 (-3 dBm) or P3 (+3 dBm).
+CONFIG_BT_CTRL_DFT_TX_POWER_LEVEL_N0=y
 
 # Don't power down the CPU domain during light sleep. Saves ~650 µA but
 # the SPI master / esp_lcd state doesn't survive the powerdown — after

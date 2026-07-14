@@ -256,7 +256,7 @@ lv_obj_t *timerscr_create(lv_obj_t *parent)
 
     lv_obj_t *lbl = lv_label_create(alarmscr);
     lv_obj_set_style_text_font(lbl, &ProductSansBold_42, 0);
-    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, -40);
     lv_label_set_text(lbl, "Timer");
 
     lv_obj_t *stopbtn = lv_button_create(alarmscr);

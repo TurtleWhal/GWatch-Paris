@@ -102,6 +102,14 @@ public:
     // calling sleep() directly from the LVGL task would block LVGL for
     // the full backlight-fade window, so we hand off to the pm task.
     void request_sleep();
+
+    // One-shot low-battery shutdown: tears down BLE/IMU/display, shows
+    // a brief on-screen warning, then drops into deep sleep with a
+    // periodic timer wake. Each wake re-runs app_main, which calls
+    // battery_early_check_or_sleep_again() to bail straight back into
+    // deep sleep if the cell is still flat. Recovers to normal boot
+    // automatically when USB is plugged in (rail jumps to ~4.5 V).
+    [[noreturn]] void low_battery_shutdown();
 };
 
 extern Watch watch;
@@ -114,6 +122,14 @@ extern "C"
 #endif
 
     void watch_init();
+
+    // Called from app_main BEFORE watch_init. Reads the battery once
+    // via a minimal ADC bring-up; if the cell rail is still below
+    // SAFE_BOOT_MV (~3.1 V) the function deep-sleeps the chip again
+    // for another 30 s rather than booting the rest of the system.
+    // Returns normally once the rail is healthy (USB plug-in lifts
+    // it to ~4.5 V or the cell genuinely recovered).
+    void battery_early_check_or_sleep_again(void);
 
 #ifdef __cplusplus
 }

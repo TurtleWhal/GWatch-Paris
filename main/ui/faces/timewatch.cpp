@@ -91,6 +91,12 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(steps, &ProductSansRegular_16, 0);
     lv_label_set_text_fmt(steps, "%d", 5678);
 
+    // Force a full draw now: reset the change-guards so the immediate update
+    // below repaints every field. Without this, switching to this face leaves
+    // it blank until the minute/day happens to change.
+    last_sec = last_min = last_hour = last_day = last_month = 255;
+    timescreen_update();
+
     return scr;
 }
 

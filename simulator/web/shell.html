@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GWatch Simulator</title>
+<style>
+  /* Minimal — just zero margins and let the canvas use its native
+   * 240×240 pixels. Style the parent page (or the embedding iframe)
+   * to add backgrounds, shadows, rounded corners, etc. */
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #canvas { display: block; width: 240px; height: 240px; }
+</style>
+</head>
+<body>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <script>
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      print:    function(t) { console.log(t); },
+      printErr: function(t) { console.warn(t); },
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

@@ -61,7 +61,9 @@ const char *Schedule::getText()
             show = true;
 
             char buffer[32];
-            snprintf(buffer, sizeof(buffer), "%s -> %d:%02d", event.text, event.endhour > 12 ? event.endhour - 12 : event.endhour, event.endminute);
+            snprintf(buffer, sizeof(buffer), "%s › %d:%02d", event.text,
+                     event.endhour > 12 ? event.endhour - 12 : event.endhour,
+                     event.endminute);
             // snprintf(buffer, sizeof(buffer), "%s → %d:%02d", event.text, event.endhour > 12 ? event.endhour - 12 : event.endhour, event.endminute);
 
             text = strdup(buffer);
@@ -82,7 +84,7 @@ const char *Schedule::getText()
             show = true;
 
             char buffer[32];
-            snprintf(buffer, sizeof(buffer), "%s @ %d:%02d", event.text, event.starthour > 12 ? event.starthour - 12 : event.starthour, event.startminute);
+            snprintf(buffer, sizeof(buffer), "%s - %d:%02d", event.text, event.starthour > 12 ? event.starthour - 12 : event.starthour, event.startminute);
 
             text = strdup(buffer);
             return text;

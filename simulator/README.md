@@ -74,6 +74,44 @@ simulator/
     esp_lcd_*.h         opaque types for Display member declarations
 ```
 
+## Web build (share with a URL)
+
+The same source builds to a static HTML/JS/WASM bundle via Emscripten.
+
+```sh
+# one-time: install the Emscripten SDK
+git clone https://github.com/emscripten-core/emsdk ~/emsdk
+~/emsdk/emsdk install latest && ~/emsdk/emsdk activate latest
+
+# every shell:
+source ~/emsdk/emsdk_env.sh
+
+# build
+simulator/web/build.sh
+```
+
+Outputs `simulator/build-web/gwatch_sim.{html,js,wasm}` — upload that
+folder to any static host (GitHub Pages, Vercel, Netlify) or preview:
+
+```sh
+cd simulator/build-web && python3 -m http.server 8000
+# open http://localhost:8000/gwatch_sim.html
+```
+
+The web HTML shell (`simulator/web/shell.html`) renders one 240×240
+canvas plus HTML sidebar buttons (Notify / Dismiss / Clear / Charge /
+Battery). Buttons call into `simulator/src/sim_controls_web.cpp` via
+`Module.ccall`.
+
+**Web-specific limitations:**
+
+- **No FreeRTOS tasks.** The web build is single-threaded — `xTaskCreate`
+  is a no-op. The two consumers (`alarm_task`, `timer_task`) build their
+  UI but their countdowns don't tick.
+- **No NVS persistence.** `~/.gwatch_sim_nvs.bin` lands on Emscripten's
+  MEMFS, which is wiped on reload. Easy to switch to IDBFS later.
+- **No window position memory** (one canvas, no windows).
+
 ## Notes
 
 - `LV_USE_ASSERT_OBJ` is left on in `lv_conf.h`. The analog watchface's

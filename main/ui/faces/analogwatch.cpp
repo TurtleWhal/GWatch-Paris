@@ -140,7 +140,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
     lv_line_set_points(minutehand, minute_hand_points, 2);
     lv_obj_set_size(minutehand, 240, 240);
     lv_obj_set_style_line_color(minutehand, lv_color_white(), 0);
-    lv_obj_set_style_line_width(minutehand, 5, 0);
+    lv_obj_set_style_line_width(minutehand, 6, 0);
     lv_obj_set_style_line_rounded(minutehand, true, 0);
 
     // Second hand
@@ -153,11 +153,19 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
 
     // Center cap
     lv_obj_t *c = lv_obj_create(scr);
-    lv_obj_set_size(c, 5, 5);
+    lv_obj_set_size(c, 6, 6);
     lv_obj_set_style_border_width(c, 0, 0);
     lv_obj_set_style_radius(c, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(c, lv_color_hex(0x888888), 0);
     lv_obj_center(c);
+
+    // Force a full draw now: reset the change-guards so the immediate update
+    // below repaints every field. Without this, switching to this face leaves
+    // it blank until the minute/day/battery happens to change.
+    last_sec = last_min = last_hour = last_day = last_month = 255;
+    last_battery_check = 0;
+    last_battery_mv = 0;
+    analogwatch_update();
 
     return scr;
 }

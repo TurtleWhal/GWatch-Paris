@@ -481,6 +481,14 @@ lv_obj_t *divewatch_create(lv_obj_t *parent)
     lv_obj_set_scroll_dir(centerdot, LV_DIR_NONE);
     lv_obj_align(centerdot, LV_ALIGN_CENTER, HAND_TAIL - second_hand_w / 2, 0);
 
+    // Force a full draw now: reset the change-guards so the immediate update
+    // below repaints every field. Without this, switching to this face leaves
+    // it blank until the minute/day/battery happens to change.
+    last_sec = last_min = last_hour = last_day = last_month = 255;
+    last_battery_check = 0;
+    last_battery_mv = 0;
+    divewatch_update();
+
     return scr;
 }
 

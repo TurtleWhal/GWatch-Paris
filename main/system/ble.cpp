@@ -15,7 +15,9 @@
 
 #include "cJSON.h"
 #include "lvgl.h"
+#if LV_USE_SNAPSHOT
 #include "draw/snapshot/lv_snapshot.h"
+#endif
 #include "esp_lvgl_port.h"
 
 #include <atomic>
@@ -596,6 +598,51 @@ void BLE::send_notification_reply(uint32_t id, const char *text)
     cJSON_Delete(root);
 }
 
+void BLE::request_low_power_conn_params()
+{
+    if (!connected())
+        return;
+    // 320–400 ms (units of 1.25 ms). Spec requires supervision_timeout >
+    // (1 + latency) * interval_max * 2 = 800 ms at these values; 6 s
+    // gives the link comfortable headroom over a typical missed-event
+    // burst. Latency stays 0 — at this interval the radio is already
+    // sleeping most of the time, and using latency would mean a missed
+    // event in the worst direction (notification arrives just after a
+    // skipped slot) takes (1+latency) * interval before it's serviced.
+    struct ble_gap_upd_params p = {
+        .itvl_min = 256,            // 320 ms
+        .itvl_max = 320,            // 400 ms
+        .latency = 0,
+        .supervision_timeout = 600, // 6 s
+        .min_ce_len = 0,
+        .max_ce_len = 0,
+    };
+    int rc = ble_gap_update_params(conn_handle, &p);
+    if (rc != 0)
+        ESP_LOGW(TAG, "low-power conn params rc=%d", rc);
+}
+
+void BLE::request_normal_conn_params()
+{
+    if (!connected())
+        return;
+    // Mirrors the post-connect request in ble_gap_event_handler: fast
+    // events for interactive use and image transfer. Re-applied on wake
+    // so the link is responsive again by the time the user is looking
+    // at the screen.
+    struct ble_gap_upd_params p = {
+        .itvl_min = 24,             // 30 ms
+        .itvl_max = 48,             // 60 ms
+        .latency = 0,
+        .supervision_timeout = 400, // 4 s
+        .min_ce_len = 0,
+        .max_ce_len = 0,
+    };
+    int rc = ble_gap_update_params(conn_handle, &p);
+    if (rc != 0)
+        ESP_LOGW(TAG, "normal conn params rc=%d", rc);
+}
+
 void BLE::send_find_phone(bool on)
 {
     char buf[48];
@@ -621,6 +668,14 @@ void BLE::send_find_phone(bool on)
 // user-triggered command, not OK for periodic use.
 void BLE::send_screenshot()
 {
+#if !LV_USE_SNAPSHOT
+    // LV_USE_SNAPSHOT is off (BT controller can't afford the extra IRAM
+    // footprint on this build — re-enabling caused ble_init malloc-fail
+    // panics). Log and bail so a misfired {t:"screenshot"} command from
+    // the phone doesn't look like silent failure.
+    ESP_LOGW(TAG, "screenshot requested but LV_USE_SNAPSHOT is disabled");
+    return;
+#else
     if (!connected())
         return;
 
@@ -823,6 +878,7 @@ void BLE::send_screenshot()
     heap_caps_free(esc);
     heap_caps_free(jsn);
     heap_caps_free(bmp);
+#endif // LV_USE_SNAPSHOT
 }
 
 // ---------- Notification queue ----------
@@ -1104,7 +1160,7 @@ void BLE::handle_gb_json(const char *json, size_t len)
         return;
     }
 
-    ESP_LOGI(TAG, "GB msg: %s\n", json);
+    ESP_LOGI(TAG, "GB msg: %s", json);
 
     if (strcmp(t->valuestring, "notify") == 0)
     {
@@ -1177,6 +1233,7 @@ void BLE::handle_gb_json(const char *json, size_t len)
         cJSON *pos = cJSON_GetObjectItemCaseSensitive(root, "position");
         if (cJSON_IsNumber(pos))
             music_state.position_s = (int32_t)pos->valuedouble;
+        music_state.last_msg_ms = esp_timer_get_time() / 1000;
     }
     else if (strcmp(t->valuestring, "musicinfo") == 0)
     {
@@ -1186,6 +1243,42 @@ void BLE::handle_gb_json(const char *json, size_t len)
         cJSON *dur = cJSON_GetObjectItemCaseSensitive(root, "dur");
         if (cJSON_IsNumber(dur))
             music_state.duration_s = (int32_t)dur->valuedouble;
+        music_state.last_msg_ms = esp_timer_get_time() / 1000;
+    }
+    else if (strcmp(t->valuestring, "weather") == 0)
+    {
+        // {"t":"weather","v":1,"temp":290,"hi":297,"lo":285,"hum":73,
+        //  "rain":4,"uv":1,"code":800,"txt":"Clear Sky","wind":4.67,
+        //  "wdir":321,"loc":"My Location"}
+        // Numeric fields are missing on some senders — guard each lookup
+        // and only overwrite when the field is actually present.
+        auto num_i = [&](const char *k, int32_t def) -> int32_t {
+            cJSON *n = cJSON_GetObjectItemCaseSensitive(root, k);
+            return cJSON_IsNumber(n) ? (int32_t)n->valuedouble : def;
+        };
+        auto num_f = [&](const char *k, float def) -> float {
+            cJSON *n = cJSON_GetObjectItemCaseSensitive(root, k);
+            return cJSON_IsNumber(n) ? (float)n->valuedouble : def;
+        };
+
+        weather_state.txt       = json_str(root, "txt");
+        weather_state.loc       = json_str(root, "loc");
+        weather_state.temp_k    = num_i("temp", weather_state.temp_k);
+        weather_state.hi_k      = num_i("hi",   weather_state.hi_k);
+        weather_state.lo_k      = num_i("lo",   weather_state.lo_k);
+        weather_state.humidity  = (uint8_t)num_i("hum", weather_state.humidity);
+        weather_state.uv        = (uint8_t)num_i("uv",  weather_state.uv);
+        weather_state.code      = (uint16_t)num_i("code", weather_state.code);
+        weather_state.wind_mps  = num_f("wind", weather_state.wind_mps);
+        weather_state.wind_dir  = (uint16_t)num_i("wdir", weather_state.wind_dir);
+        weather_state.version++;
+
+        ESP_LOGI(TAG, "weather: %s @ %s code=%u temp=%dK hum=%u uv=%u wind=%.1fm/s@%u°",
+                 weather_state.txt.c_str(), weather_state.loc.c_str(),
+                 (unsigned)weather_state.code,
+                 (int)weather_state.temp_k,
+                 (unsigned)weather_state.humidity, (unsigned)weather_state.uv,
+                 weather_state.wind_mps, (unsigned)weather_state.wind_dir);
     }
     else if (strcmp(t->valuestring, "screenshot") == 0)
     {
@@ -1533,6 +1626,18 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                  (event->mtu.value > 8u) ? (event->mtu.value - 8u) : 0u);
         return 0;
     case BLE_GAP_EVENT_SUBSCRIBE:
+        // When the central subscribes to our TX characteristic, push a
+        // fresh battery snapshot immediately. send_status's per-percent
+        // dedupe in battery_task means the phone otherwise wouldn't see
+        // a value until the next percent transition — which can be
+        // minutes after a reconnect, leaving Gadgetbridge displaying
+        // stale or unknown battery in the meantime.
+        if (event->subscribe.attr_handle == ble.tx_attr_handle &&
+            event->subscribe.cur_notify)
+        {
+            ble.send_status();
+        }
+        return 0;
     case BLE_GAP_EVENT_NOTIFY_TX:
         return 0;
 

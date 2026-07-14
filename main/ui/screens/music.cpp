@@ -43,6 +43,12 @@ static int32_t s_last_duration_s = -1;
 static std::string s_last_track;
 static std::string s_last_artist;
 static std::string s_last_album;
+
+// 1 Hz position-update timer. Tracked so music_destroy can stop it
+// before the screen is freed — otherwise the next tick would
+// dereference labels that have already been deleted by the parent's
+// cascade-delete.
+static lv_timer_t *s_music_update_timer = nullptr;
 static std::string s_last_state;
 
 // Track which album art is currently bound to the lv_image descriptor.
@@ -383,7 +389,69 @@ lv_obj_t *music_create(lv_obj_t *parent)
     // 1 Hz refresh — drives the position label/slider tick. Slider
     // moves 1 second at a time which matches the resolution Gadgetbridge
     // sends, so a faster timer wouldn't make it look smoother.
-    lv_timer_create(music_update, 1000, scr);
+    s_music_update_timer = lv_timer_create(music_update, 1000, scr);
 
     return scr;
+}
+
+// Tear down the music screen and the 1 Hz updater. Called by ui.cpp's
+// music_visibility_tick when music has been paused long enough that
+// the screen should no longer be reachable. Safe to call multiple
+// times; no-ops if music_create hasn't been called (or its result has
+// already been destroyed).
+void music_destroy(void)
+{
+    if (s_music_update_timer)
+    {
+        lv_timer_delete(s_music_update_timer);
+        s_music_update_timer = nullptr;
+    }
+    if (musicscr)
+    {
+        // Cascade-delete frees all the child labels/buttons/images.
+        // Their global pointers (songlbl etc.) become stale here — that
+        // is OK because music_update is gone and nothing else reads
+        // them; the next music_create() reassigns them all anyway.
+        lv_obj_delete(musicscr);
+        musicscr = nullptr;
+    }
+    // Reset the local-interpolation anchor so the recreated screen
+    // doesn't briefly show a stale position from the previous session.
+    s_last_track.clear();
+    s_last_artist.clear();
+    s_last_album.clear();
+    s_last_reported_position_s = -1;
+    s_last_duration_s = -1;
+}
+
+void music_refresh(void)
+{
+    // No-op when the music screen hasn't been created (or has been
+    // destroyed after the 5-minute idle window). The widget pointers
+    // music_update touches are NULL in that state — calling through
+    // would crash.
+    if (!musicscr) return;
+
+    // Rebase the position-interpolation anchor to NOW. While the
+    // watch was asleep the LVGL task was suspended, so music_update
+    // didn't tick — but esp_timer_get_time() kept advancing. Without
+    // this reset, the next music_update() would compute
+    //   pos = s_base_position_s + (now - pre_sleep_s_base_time)/1e6
+    // and add the entire sleep duration to the displayed position
+    // (showing a song "5 minutes ahead" after a 5-minute sleep).
+    // Anchoring to the latest reported value + now keeps the local
+    // clock honest until the phone's next musicstate update fully
+    // re-syncs us.
+    const MusicState &m = ble.music();
+    s_base_position_s = m.position_s;
+    s_base_time_us = esp_timer_get_time();
+
+    // Run the normal update path immediately so any
+    // track / artist / album / state / album-art changes that
+    // arrived via BLE while asleep are reflected on the screen the
+    // instant the user looks at it, instead of after the next 1 Hz
+    // timer tick (up to a second of stale display otherwise). The
+    // existing s_last_* comparisons inside music_update will detect
+    // a track change and run the album-art clear-and-re-bind path.
+    music_update(nullptr);
 }

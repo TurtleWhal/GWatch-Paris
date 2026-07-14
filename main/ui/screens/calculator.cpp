@@ -11,6 +11,16 @@ static const char *btn_map[] = {
     " ", "C", "=", ".", " ", ""};
 
 static lv_obj_t *output;
+// Calculator haptic-mode state:
+//   false → vibrate only on a completed click (PRESS_LOST + VALUE_CHANGED)
+//   true  → vibrate on PRESS the moment the finger lands
+// The screen boots in click-mode so swiping past during horizontal
+// scroll doesn't pulse the motor with every brush against a button.
+// First successful click in the session flips it to press-mode so
+// subsequent taps feel responsive. Reset back to click-mode when the
+// calculator scrolls out of view (handled by the off-screen timer
+// below).
+static bool press_mode = false;
 
 /* Function prototypes */
 static void btn_event_cb(lv_event_t *e);
@@ -49,8 +59,30 @@ lv_obj_t *calculator_create(lv_obj_t *parent)
 
     lv_obj_add_event_cb(matrix, btn_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    lv_obj_add_event_cb(matrix, [](lv_event_t *e)
-                        { haptic_play(false, 50, 0); }, LV_EVENT_PRESSED, NULL);
+    // Press-time vibration: ONLY fires after the user has completed
+    // at least one click this session (press_mode == true). Until
+    // then, swipes through the calc screen during horizontal scroll
+    // don't pulse the motor.
+    lv_obj_add_event_cb(matrix, [](lv_event_t *)
+                        {
+                            if (press_mode) haptic_play(false, 50, 0);
+                        }, LV_EVENT_PRESSED, NULL);
+
+    // Off-screen watchdog: when the calculator scrolls out of view in
+    // hor_layer, drop back to click-only mode so the next entry to
+    // this screen behaves the same as a fresh boot — no immediate
+    // motor pulse on the inadvertent press that happens during the
+    // approach-swipe.
+    lv_timer_create(
+        [](lv_timer_t *t)
+        {
+            lv_obj_t *scr = (lv_obj_t *)lv_timer_get_user_data(t);
+            lv_obj_t *parent = lv_obj_get_parent(scr);
+            if (!parent) return;
+            if (lv_obj_get_scroll_x(parent) != lv_obj_get_x(scr))
+                press_mode = false;
+        },
+        200, scr);
 
     /* Create output text area */
     output = lv_textarea_create(scr);
@@ -74,6 +106,16 @@ static void btn_event_cb(lv_event_t *e)
 
     if (txt == NULL)
         return;
+
+    // First completed click flips on press-mode for the rest of the
+    // session. Also deliver the click's vibration here, since the
+    // PRESSED handler suppressed it (press_mode was still false when
+    // the finger landed).
+    if (!press_mode)
+    {
+        press_mode = true;
+        haptic_play(false, 50, 0);
+    }
 
     if (strcmp(txt, "C") == 0)
     {

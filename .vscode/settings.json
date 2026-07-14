@@ -20,8 +20,11 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=/Users/garrett/.espressif/tools/xtensa-esp-elf/**/bin/xtensa-esp*-elf-*",
-    "--compile-commands-dir=${workspaceFolder}/build"
+    "--compile-commands-dir=${workspaceFolder}/build",
+    "--header-insertion=never",
+    "--completion-style=detailed"
   ],
+  "editor.suggest.matchOnWordStartOnly": false,
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "idf.flashType": "UART",
   "idf.flashBaudRate": "2000000",
@@ -63,11 +66,30 @@
   "idf.portWin": "COM4",
   "idf.currentSetup": "/Users/garrett/esp/v6.0/esp-idf",
   "actionButtons": {
+    // https://code.visualstudio.com/api/references/icons-in-labels
     "commands": [
       {
         "name": "$(debug-alt) Simulate",
         "color": "lightgray",
-        "command": "sh simulate.sh"
+        "singleInstance": true,
+        "useVsCodeApi": true,
+        "command": "workbench.action.tasks.runTask",
+        "args": [
+          {
+            "type": "shell",
+            "task": "gwatch:simulate"
+          }
+        ]
+      },
+      {
+        "name": "$(text-size)",
+        "color": "lightgray",
+        "command": "py ./components/fonts/fonts.py"
+      },
+      {
+        "name": "$(file-media)",
+        "color": "lightgray",
+        "command": "py ./components/images/images.py"
       }
     ]
   }
