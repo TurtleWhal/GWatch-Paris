@@ -75,9 +75,10 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent) {
   lv_obj_t *schedule = create_setting(
       scr, FA_CALENDAR, [](lv_event_t *) { lv_screen_load(schedule_screen); });
 
-  lv_obj_t *metronome = create_setting(scr, FA_METRONOME, [](lv_event_t *) {
-    lv_screen_load(metronome_screen);
+  lv_obj_t *homeassistant = create_setting(scr, FA_SMARTHOME, [](lv_event_t *) {
+    lv_screen_load(homeassistant_screen);
   });
+  SET_MDI_SYMBOL_28(lv_obj_get_child(homeassistant, 0), MDI_HOME_ASSISTANT);
 
   lv_obj_t *donotdisturb =
       create_setting(scr, FA_DONOTDISTURB, [](lv_event_t *e) {
@@ -360,13 +361,13 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent) {
   lv_obj_align(battery, LV_ALIGN_CENTER,
                POLAR(77, 150) + 77 * 2); // Bottom Left
 
-  lv_obj_align(metronome, LV_ALIGN_CENTER, POLAR(77, -90) + 77 * 1); // Top
+  lv_obj_align(findphone, LV_ALIGN_CENTER, POLAR(77, -90) + 77 * 1); // Top
   lv_obj_align(flashlight, LV_ALIGN_CENTER,
                POLAR(77, -90) + 77 * 2);                 // Top Center
   lv_obj_align(restart, LV_ALIGN_CENTER, 0, 0 + 77 * 2); // Bottom Center
   lv_obj_align(settings, LV_ALIGN_CENTER, POLAR(77, 90) + 77 * 2); // Bottom
 
-  lv_obj_align(findphone, LV_ALIGN_CENTER,
+  lv_obj_align(homeassistant, LV_ALIGN_CENTER,
                POLAR(77, -30) + 77 * 1); // Top Right
   lv_obj_align(calculator, LV_ALIGN_CENTER,
                POLAR(77, -30) + 77 * 2); // Mid Right

@@ -68,8 +68,12 @@ lv_obj_t *watchface_create(lv_obj_t *parent)
     static bool timer_created = false;
     if (!timer_created)
     {
+        // Match LV_DEF_REFR_PERIOD (16 ms) so the sweep-second faces get a
+        // fresh hand position for every refresh cycle instead of every
+        // other one — a 33 ms tick against a 16 ms refresh makes the sweep
+        // visibly step at half rate.
         lv_timer_create([](lv_timer_t *timer)
-                        { watchface_update(); }, 33, NULL);
+                        { watchface_update(); }, 16, NULL);
         timer_created = true;
     }
 

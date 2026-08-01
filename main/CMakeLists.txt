@@ -64,3 +64,12 @@ idf_component_register(
         esp_driver_spi
         esp_driver_gpio
 )
+
+# liblvgl.a references lv_malloc_core / lv_free_core / ... — our
+# LV_USE_CUSTOM_MALLOC hooks in system/lv_mem_psram.c that route LVGL's heap
+# into PSRAM. Because we depend on lvgl (not the reverse), libmain.a is
+# scanned before liblvgl.a at link time, so the linker has already passed our
+# definitions when it hits lvgl's references and won't pull the member on its
+# own. Mark one of the symbols undefined to force-include the whole object
+# (all the hooks live in that one translation unit, so one -u drags them all).
+target_link_options(${COMPONENT_LIB} INTERFACE "SHELL:-u lv_malloc_core")

@@ -31,6 +31,12 @@ struct SystemInfo
 {
     uint16_t sleeptime;
     bool dosleep;
+    // Wrist-raise (tilt) wake enable + haptic-on-wake. Persisted in NVS
+    // ("tiltwake" / "tilt_buzz"); loaded in Watch::init, toggled from the
+    // settings screen. tiltwake=false also disables the gyro fade-cancel
+    // during sleep entry — "no tilt waking" means none anywhere.
+    bool tiltwake;
+    bool tiltwake_buzz;
 };
 
 struct Chronology
@@ -64,7 +70,7 @@ private:
 
 public:
     // struct TimeInfo time;
-    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
+    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true, true, true};
     struct BatteryInfo battery;
     struct IMUInfo imu;
     struct Schedule schedule;

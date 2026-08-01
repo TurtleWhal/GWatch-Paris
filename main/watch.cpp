@@ -26,18 +26,24 @@ static void IRAM_ATTR touch_isr(void *arg)
 }
 
 /** Update power management and sleep logic */
-// Rotation-aware wrist-tilt detector. Returns true if the gyro shows a
-// "lift to look at the watch" rotation strong enough to count. Shared by
-// the fade-cancel path (awake but goingtosleep) and the asleep wake
-// path. The mapping picks the gyro axis + sign whose positive rotation
-// brings the screen's "up" toward the user's face:
+// Rotation-aware wrist-tilt detector — FADE-CANCEL ONLY. Used during the
+// 2 s backlight fade in Watch::sleep(), where the gyro is still powered
+// (imu_sleep runs after the fade) and a single strong rotation reading
+// means "the user moved, don't sleep". The asleep→wake path uses the
+// accel-only wrist-raise state machine in imu.cpp instead — the gyro is
+// fully off during sleep. The mapping picks the gyro axis + sign whose
+// positive rotation brings the screen's "up" toward the user's face:
 //   0°    → -Y
 //   90°   → -X
 //   180°  → +Y
 //   270°  → +X
 static bool tilt_wake_detected(float *out_signed_dps = nullptr)
 {
-    constexpr float TILT_WAKE_DPS = 250.0f;
+    // 150 dps: a deliberate wrist-raise peaks well above this; the cost
+    // of a false cancel is only one more idle-timeout cycle of screen
+    // time, so this can afford to be far more sensitive than the old
+    // 250 dps shared-with-wake threshold that needed exaggerated motion.
+    constexpr float TILT_WAKE_DPS = 150.0f;
     GyroData g = gyro_read();
     float axis_dps = 0;
     switch (lv_display_get_rotation(NULL))
@@ -88,31 +94,41 @@ void Watch::pm_update()
                 touch_interrupt = false;
                 wakeup();
             }
-            else
+            else if (this->system.tiltwake)
             {
-                // Tilt-to-wake while asleep. See tilt_wake_detected for
-                // the rotation-aware axis selection. The IMU stays at
-                // 28 Hz gyro ODR through imu_sleep, so the I²C read is
-                // a 6-byte burst — ~200 µs every 200 ms, well under
-                // 1 % duty cycle. The QMI8658's own WoM is accel-only
-                // and would misfire on bumps (per CLAUDE.md), so we
-                // poll the gyro.
-                float dps;
-                if (tilt_wake_detected(&dps))
+                // Wrist-raise wake. Accel-only orientation state machine
+                // (see imu.cpp) — the end state of a glance persists for
+                // hundreds of ms, so a 10 Hz poll can't miss it, unlike
+                // the old instantaneous-gyro-sample approach that only
+                // caught violent motions. The gyro is fully powered down
+                // during sleep; the QMI8658's own WoM stays unused (it's
+                // broken on this chip revision, per CLAUDE.md). With
+                // tiltwake off the poll (and its I²C read) is skipped
+                // entirely — touch wake still works via the GPIO IRQ.
+                if (imu_wrist_raise_poll())
                 {
-                    ESP_LOGI("pm", "tilt wake (axis=%.0f dps)", dps);
+                    ESP_LOGI("pm", "wrist-raise wake");
+                    // Buzz BEFORE wakeup(): haptic_play just queues to the
+                    // motor task (non-blocking), while wakeup() spends
+                    // ~0.5 s on BLE renegotiation + panel re-init + first
+                    // repaint. Queuing first means the tactile "got it"
+                    // lands at the moment of detection instead of after
+                    // the display pipeline is back up.
+                    if (this->system.tiltwake_buzz)
+                        haptic_play(false, 100, 0);
                     wakeup();
                 }
             }
         }
 
-        // 200 ms while sleeping. Touch wake is GPIO-IRQ driven and
-        // doesn't depend on this poll period — only tilt-wake does,
-        // and 5 Hz is plenty for a wrist-raise gesture (200–500 ms
-        // duration). Each iteration is a wake from light sleep, so
-        // doubling the period roughly halves the contribution this
-        // task makes to the ~12 mA floor.
-        vTaskDelay(pdMS_TO_TICKS(this->sleeping ? 200 : 50));
+        // 100 ms while sleeping. Touch wake is GPIO-IRQ driven and
+        // doesn't depend on this poll period — only the wrist-raise
+        // detector does, and its arm/dwell counts are calibrated for
+        // 10 Hz. Each iteration is a brief wake from light sleep
+        // (~6-byte I²C read at low CPU freq); the ~0.2 mA this adds is
+        // more than paid for by the gyro (~0.6 mA) now being fully off
+        // while asleep.
+        vTaskDelay(pdMS_TO_TICKS(this->sleeping ? 100 : 50));
     }
 }
 
@@ -157,7 +173,7 @@ void Watch::sleep() //! DO NOT TOUCH, IS A CAREFULLY BALANCED PILE OF LOGIC THAT
                 elapsed += step;
 
                 float dps;
-                if (tilt_wake_detected(&dps))
+                if (this->system.tiltwake && tilt_wake_detected(&dps))
                 {
                     ESP_LOGI("pm", "tilt cancel fade (axis=%.0f dps)", dps);
                     this->goingtosleep = false;
@@ -443,6 +459,13 @@ void Watch::init()
 
     pm_init();
     watch.settings.init();
+
+    // Persisted wake preferences. Defaults (both on) apply on first boot
+    // or after an NVS wipe; the settings screen writes these keys back
+    // when toggled.
+    system.tiltwake = settings.readUint8("tiltwake", 1) != 0;
+    system.tiltwake_buzz = settings.readUint8("tilt_buzz", 1) != 0;
+
     iic_init();
 
     // ble.init() FIRST among the heavyweight subsystems. The BT

@@ -1,5 +1,10 @@
 #include "ui.hpp"
 
+// For lv_obj_scroll_by_raw, used by the infinite-scroll wrap below. The
+// public lv_obj_scroll_to/by(..., LV_ANIM_OFF) can't be used there: see
+// the comment on scroll_shift_raw.
+#include "lvgl_private.h"
+
 lv_obj_t *main_screen;
 lv_obj_t *ver_layer;
 lv_obj_t *hor_layer;
@@ -14,6 +19,7 @@ lv_obj_t *settings_screen;
 lv_obj_t *calculator_screen;
 lv_obj_t *schedule_screen;
 lv_obj_t *metronome_screen;
+lv_obj_t *homeassistant_screen;
 
 // RAM wrappers around the generated `const lv_font_t` fonts in flash.
 // LVGL's fallback chain is a per-font field; the generator emits the
@@ -28,6 +34,10 @@ lv_font_t ProductSansBold_16_emoji;
 lv_font_t ProductSansRegular_20_emoji;
 lv_font_t ProductSansRegular_16_emoji;
 lv_font_t ProductSansRegular_14_emoji;
+
+// Text font with FontAwesome fallback so FA_* glyphs can sit inline in a
+// normal text string (see ui.hpp).
+lv_font_t ProductSansRegular_16_fa;
 
 // Shared accent styles. Every widget that wants the theme primary color
 // attaches one of these via lv_obj_add_style instead of capturing the
@@ -103,9 +113,45 @@ lv_obj_t *create_valuearc(lv_obj_t *parent, const char *symbol) {
 }
 
 /* Scroll event callback for row layout */
+
+// True while a pointer is actively dragging `obj`, as opposed to a scroll
+// animation coasting it after release.
+static bool indev_is_dragging(lv_obj_t *obj) {
+  for (lv_indev_t *i = lv_indev_get_next(NULL); i; i = lv_indev_get_next(i))
+    if (lv_indev_get_scroll_obj(i) == obj)
+      return true;
+  return false;
+}
+
+// Shift `cont`'s scroll position by `delta` px silently. The public
+// lv_obj_scroll_to/by(..., LV_ANIM_OFF) is NOT silent: it lv_anim_delete()s
+// any running scroll animation — killing a thrown snap mid-flight and firing
+// the anim's deleted_cb (a spurious LV_EVENT_SCROLL_END) — and its ANIM_OFF
+// path then sends SCROLL_BEGIN + SCROLL_END unconditionally. Those
+// mid-motion SCROLL_ENDs made force_black_at_rest repaint the highlight
+// target black between the SCROLL-event grays: the black/gray flicker seen
+// while a fast flick settled across the wrap point. scroll_by_raw fires one
+// SCROLL event and touches nothing else. Sign: positive x in scroll_by_raw
+// DECREASES scroll_x, hence the negation.
+static void scroll_shift_raw(lv_obj_t *cont, int32_t delta) {
+  lv_obj_scroll_by_raw(cont, -delta, 0);
+}
+
 static void scroll_loop_event_cb(lv_event_t *e) {
   static bool is_adjusting = false;
   lv_obj_t *cont = lv_event_get_current_target_obj(e);
+
+  // While a snap/throw animation is coasting, leave the row alone — the
+  // animation drives ABSOLUTE scroll positions, so a ±240 wrap shift here
+  // would be undone on its next frame (re-triggering the wrap, forever).
+  // Nothing is lost by waiting: with SCROLL_ONE the anim target lands
+  // exactly on the wrap boundary, so the wrap is only actually needed once
+  // the scroll settles — this callback is registered for SCROLL_END too,
+  // which is where the deferred wrap then runs. Finger drags (elastic-off
+  // pins the scroll at the edge until the row is rotated) still wrap
+  // immediately.
+  if (lv_obj_is_scrolling(cont) && !indev_is_dragging(cont))
+    return;
 
   if (!is_adjusting) {
     is_adjusting = true;
@@ -120,12 +166,17 @@ static void scroll_loop_event_cb(lv_event_t *e) {
       lv_obj_t *last_child =
           lv_obj_get_child(cont, (int32_t)(lv_obj_get_child_count(cont) - 1));
       lv_obj_move_to_index(last_child, 0);
-      lv_obj_scroll_to_x(cont, scroll_x + item_width, LV_ANIM_OFF);
+      // Settle the reshuffled children's coords before shifting so the
+      // SCROLL event fired by the shift computes highlight colors from
+      // real positions instead of stale pre-layout ones.
+      lv_obj_update_layout(cont);
+      scroll_shift_raw(cont, item_width);
     } else if (scroll_x >= content_w - cont_w) {
       lv_obj_t *first_child = lv_obj_get_child(cont, 0);
       lv_obj_move_to_index(first_child,
                            (int32_t)(lv_obj_get_child_count(cont) - 1));
-      lv_obj_scroll_to_x(cont, scroll_x - item_width, LV_ANIM_OFF);
+      lv_obj_update_layout(cont);
+      scroll_shift_raw(cont, -item_width);
     }
     is_adjusting = false;
   }
@@ -279,6 +330,9 @@ void Display::ui_init() {
   ProductSansRegular_14_emoji = ProductSansRegular_14;
   ProductSansRegular_14_emoji.fallback = &NotoEmojiRegular_16;
 
+  ProductSansRegular_16_fa = ProductSansRegular_16;
+  ProductSansRegular_16_fa.fallback = &FontAwesome_16;
+
   // Primary color comes from the persisted "theme_color" setting; the
   // palette table lives in screens/debug.cpp so the settings screen
   // and the boot path agree on the index→color mapping.
@@ -355,6 +409,12 @@ void Display::ui_init() {
   lv_obj_set_style_pad_all(hor_layer, 0, 0);
 
   lv_obj_add_event_cb(hor_layer, scroll_loop_event_cb, LV_EVENT_SCROLL, NULL);
+  // SCROLL_END too: the wrap is deferred while a snap animation is coasting
+  // (see scroll_loop_event_cb) and runs here once the scroll has settled.
+  // Registered BEFORE the force_black_at_rest handlers below so the row is
+  // already rotated when they wipe the resting bg.
+  lv_obj_add_event_cb(hor_layer, scroll_loop_event_cb, LV_EVENT_SCROLL_END,
+                      NULL);
 
   // lv_obj_t *notifications = notifications_screen_create(ver_layer);
 
@@ -395,8 +455,22 @@ void Display::ui_init() {
   //     LV_EVENT_SCROLL, &scroll_dataB);
 
   lv_obj_t *notifications = notifications_screen_create(ver_layer);
-  lv_obj_add_event_cb(notifications, scroll_loop_event_cb, LV_EVENT_SCROLL,
-                      NULL);
+
+  // scroll quicksettings and notifications to their ends so they are always in
+  // the right spot when you go back to them
+  // lv_obj_add_event_cb(
+  //     ver_layer,
+  //     [](lv_event_t *e) {
+  //       lv_obj_scroll_to_y(lv_obj_get_child(lv_event_get_target_obj(e), 0),
+  //                          lv_obj_get_scroll_top(
+  //                              lv_obj_get_child(lv_event_get_target_obj(e), 0)),
+  //                          LV_ANIM_OFF);
+  //       lv_obj_scroll_to_y(lv_obj_get_child(lv_event_get_target_obj(e), 2),
+  //                          lv_obj_get_scroll_top(
+  //                              lv_obj_get_child(lv_event_get_target_obj(e), 2)),
+  //                          LV_ANIM_OFF);
+  //     },
+  //     LV_EVENT_SCROLL_END, NULL);
 
   static ScrollEventData scroll_dataB = {notifications, LV_DIR_BOTTOM};
   lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb,
@@ -418,21 +492,27 @@ void Display::ui_init() {
   calculator_screen = calculator_create(NULL);
   lv_obj_t *appsscreen = apps_screen_create(hor_layer);
 
-  lv_obj_t *weather = weather_create(hor_layer);
-  // Music screen is NOT created at boot. The visibility tick below
-  // creates it on demand when the phone reports state == "play" and
-  // tears it back down after 5 min of paused/stopped playback. Until
-  // then the LV_DIR_LEFT highlight target is weather; when music is
-  // alive, the tick repoints the target at music (it's appended as the
-  // last hor_layer child, so it becomes the "wraps around from
-  // watchface to the left" screen — same UX slot weather occupies the
-  // rest of the time).
+  // Neither weather nor music are created at boot. Both are created on
+  // demand by the visibility tick below:
+  //   - weather when ble.weather().version > 0 (the phone has pushed at
+  //     least one weather packet), kept for the rest of the session.
+  //   - music while state=="play", torn down after 5 min silence.
+  // Priority for the LV_DIR_LEFT wrap-target (the "first screen to the
+  // left of the watch face" when the user swipes right past it):
+  //   music if alive > weather if alive > apps as fallback
+  // The layout is kept in that same priority order — music is the last
+  // hor_layer child when it exists, then weather, then apps — so the
+  // wrap-around scroll physically lands on the same screen the
+  // highlight is showing.
 
   static ScrollEventData scroll_dataR = {stopwatch, LV_DIR_RIGHT};
   lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb,
                       LV_EVENT_SCROLL, &scroll_dataR);
 
-  static ScrollEventData scroll_dataL = {weather, LV_DIR_LEFT};
+  // Highlight defaults to appsscreen — the natural last child before
+  // weather / music show up. The tick below repoints it as those
+  // screens come and go.
+  static ScrollEventData scroll_dataL = {appsscreen, LV_DIR_LEFT};
   lv_obj_add_event_cb(hor_layer, screen_scroll_highlight_event_cb,
                       LV_EVENT_SCROLL, &scroll_dataL);
 
@@ -447,14 +527,21 @@ void Display::ui_init() {
   // here guarantees the rest state is unambiguously black, no matter
   // how the snap settled or whether the final SCROLL event fired.
   static auto force_black_at_rest = [](lv_event_t *e) {
+    // SCROLL_END is NOT only "the scroll settled": LVGL also fires it
+    // whenever a scroll animation is deleted mid-flight (e.g. the user
+    // grabs the screen while a snap is still coasting). Painting black on
+    // those would flash against the grays the SCROLL events keep
+    // computing — only treat SCROLL_END as rest once nothing is moving.
+    if (lv_obj_is_scrolling(lv_event_get_current_target_obj(e)))
+      return;
     ScrollEventData *data = (ScrollEventData *)lv_event_get_user_data(e);
     if (data && data->obj)
       lv_obj_set_style_bg_color(data->obj, lv_color_black(), 0);
   };
-  lv_obj_add_event_cb(hor_layer, force_black_at_rest,
-                      LV_EVENT_SCROLL_END, &scroll_dataR);
-  lv_obj_add_event_cb(hor_layer, force_black_at_rest,
-                      LV_EVENT_SCROLL_END, &scroll_dataL);
+  lv_obj_add_event_cb(hor_layer, force_black_at_rest, LV_EVENT_SCROLL_END,
+                      &scroll_dataR);
+  lv_obj_add_event_cb(hor_layer, force_black_at_rest, LV_EVENT_SCROLL_END,
+                      &scroll_dataL);
 
   lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
   // After the initial SCROLL pass, also send a SCROLL_END to lock the
@@ -466,98 +553,120 @@ void Display::ui_init() {
   // the user has touched anything.
   lv_obj_send_event(hor_layer, LV_EVENT_SCROLL_END, NULL);
 
-  // Music visibility state. Captured here so the LVGL-timer callback
-  // below can find weather (to point the highlight back at) and the
-  // scroll-data struct (to flip its target between weather and music).
-  // Lives at function scope as a static so multiple ui_init calls
-  // would reuse the same state — in practice ui_init runs once.
-  static struct MusicVis {
+  // Dynamic-screen visibility state. Both weather and music are
+  // created / destroyed on demand by the 1 s tick below.
+  //   - appsscreen is always alive and acts as the fallback screen
+  //     immediately-left-of-watchface when neither weather nor music
+  //     is present.
+  //   - weather is created the first time ble.weather().version > 0.
+  //     Kept for the rest of the session (weather data doesn't really
+  //     "stop"; unlike music there's no natural expiry).
+  //   - music is created while state=="play", destroyed after 5 min of
+  //     no music-channel traffic AND the user isn't currently viewing it.
+  //
+  // Desired circular order (right-swipe from watchface):
+  //   watchface → music → weather → apps → alarm → timer → stopwatch
+  //
+  // Layout is maintained in that order by inserting each new dynamic
+  // screen IMMEDIATELY LEFT of watchface in the flex row (at
+  // watchscr's current index) — that lands it in the exact slot the
+  // wrap-around scroll physically reveals when the user swipes right
+  // from the watchface, regardless of how the infinite-scroll callback
+  // has rotated children since boot. When both music and weather are
+  // alive, weather is inserted at MUSIC's index (music shifts +1)
+  // so the final order stays [..., weather, music, watchscr, ...].
+  static struct ScreenVis {
+    lv_obj_t *appsscreen;
     lv_obj_t *weather;
     lv_obj_t *music;
     ScrollEventData *scroll_data_L;
-  } music_vis = {};
-  music_vis.weather = weather;
-  music_vis.scroll_data_L = &scroll_dataL;
+  } screen_vis = {};
+  screen_vis.appsscreen = appsscreen;
+  screen_vis.scroll_data_L = &scroll_dataL;
 
-  // 1 s tick. Cheap (one string compare + one int64 subtract most
-  // ticks). Runs on the LVGL task so no lvgl_port_lock needed for the
-  // create/delete calls. ble.music().state is touched without a lock
-  // — same pattern as music_update; the worst race is one missed
-  // tick, which the next pass corrects.
+  // 1 s tick. Cheap (a couple of int compares + one string compare on
+  // typical passes). Runs on the LVGL task so no lvgl_port_lock is
+  // needed for the create/delete calls, and ble.music()/ble.weather()
+  // are touched without a lock — same pattern as music_update /
+  // weather_update; the worst race is one missed tick, which the next
+  // pass corrects.
   lv_timer_create(
       [](lv_timer_t *) {
         const MusicState &m = ble.music();
         bool playing = (m.state == "play");
         int64_t now_ms = esp_timer_get_time() / 1000;
 
-        if (playing) {
-          if (!music_vis.music) {
-            // Capture the user's current view BEFORE mutating the
-            // row. Inserting music at weather+1 pushes everything to
-            // the right of weather by 240 px in the flex layout —
-            // if the user happened to be viewing one of those
-            // screens, scroll_x would still point to the same
-            // numeric position but now show a different (shifted)
-            // screen. Saving the scroll position now lets us bump
-            // it by +240 after the insert so they stay on the same
-            // visible content instead of mysteriously jumping to
-            // the music screen (or to the screen one slot to the
-            // left of where they were).
-            int32_t saved_scroll = lv_obj_get_scroll_x(hor_layer);
-            int32_t weather_x_before = lv_obj_get_x(music_vis.weather);
-
-            // music_create appends as the last child. That position
-            // is meaningful at boot (weather is last, so music ends
-            // up "to the right of weather") but the infinite scroll
-            // in scroll_loop_event_cb reshuffles children as the
-            // user wraps around — by the time music spawns later
-            // in the session, "last child" can be any screen, which
-            // dumps music in a random slot. Force music to sit
-            // immediately after weather regardless of how the row
-            // has rotated since boot.
-            music_vis.music = music_create(hor_layer);
-            int32_t weather_idx = lv_obj_get_index(music_vis.weather);
-            lv_obj_move_to_index(music_vis.music, weather_idx + 1);
-
-            // Restore the user's view. Only screens at indices past
-            // weather were shifted; if scroll_x was <= weather's x
-            // the user was already on weather or to its left and
-            // nothing needs to move.
-            if (saved_scroll > weather_x_before)
-              lv_obj_scroll_to_x(hor_layer, saved_scroll + 240, LV_ANIM_OFF);
-
-            music_vis.scroll_data_L->obj = music_vis.music;
-            // Repaint highlights immediately with the new target.
+        // Helper: repoint the DIR_LEFT highlight to the highest-
+        // priority screen currently alive and repaint immediately so
+        // the highlight follows the new target on the next frame.
+        auto refresh_wrap_target = []() {
+          lv_obj_t *target = screen_vis.music     ? screen_vis.music
+                             : screen_vis.weather ? screen_vis.weather
+                                                  : screen_vis.appsscreen;
+          if (screen_vis.scroll_data_L->obj != target) {
+            screen_vis.scroll_data_L->obj = target;
             lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
           }
-          return;
+        };
+
+        // Helper: after lv_obj_create appended new_screen at the end,
+        // move it to sit immediately BEFORE `anchor` in the flex row.
+        // Everything at anchor's index and beyond shifts right by 240.
+        // If the user's viewport was showing any of those shifted
+        // widgets, bump scroll_x by +240 so the visible screen doesn't
+        // jump. Boundary case: viewing exactly the anchor (scroll_x ==
+        // anchor_x) counts as "past the insertion point" — the anchor
+        // itself shifts +240 so we need the shift to stay on it.
+        auto insert_before = [](lv_obj_t *new_screen, lv_obj_t *anchor) {
+          int32_t target_idx = lv_obj_get_index(anchor);
+          int32_t target_x = target_idx * 240;
+          int32_t saved_scroll = lv_obj_get_scroll_x(hor_layer);
+          lv_obj_move_to_index(new_screen, target_idx);
+          if (saved_scroll >= target_x)
+            lv_obj_scroll_to_x(hor_layer, saved_scroll + 240, LV_ANIM_OFF);
+        };
+
+        // -- Create the weather screen once the phone has pushed data.
+        if (!screen_vis.weather && ble.weather().version > 0) {
+          screen_vis.weather = weather_create(hor_layer);
+          // Insert weather at (music's index if music exists, else
+          // watchscr's index) so the circular order stays
+          //   [..., weather, music, watchscr, ...]  or
+          //   [..., weather, watchscr, ...] when music is absent.
+          lv_obj_t *anchor = screen_vis.music ? screen_vis.music : watchscr;
+          insert_before(screen_vis.weather, anchor);
+          refresh_wrap_target();
         }
 
-        // Not playing. Tear down once the phone has been silent on the
-        // music channel for >= 5 min AND the user isn't currently
-        // looking at the music screen. We key off ble.music().last_msg_ms
-        // (stamped on every musicstate/musicinfo arrival) rather than
-        // pause time — phones often keep pushing musicstate updates
-        // while paused (volume, scrub, etc.), and as long as those
-        // keep arriving the user clearly still cares about media. The
-        // screen retires only when the music app has gone fully
-        // dormant on the phone for the full window.
-        if (!music_vis.music)
-          return;
-        constexpr int64_t IDLE_TIMEOUT_MS = 5LL * 60 * 1000;
-        if (now_ms - m.last_msg_ms < IDLE_TIMEOUT_MS)
-          return;
+        // -- Create the music screen when playback starts. Anchor is
+        // always watchscr — music must be watchscr's immediate left
+        // neighbour to be "the one right-swipe away".
+        if (playing && !screen_vis.music) {
+          screen_vis.music = music_create(hor_layer);
+          insert_before(screen_vis.music, watchscr);
+          refresh_wrap_target();
+        }
 
-        int32_t mx = lv_obj_get_x(music_vis.music) -
-                     lv_obj_get_scroll_x(hor_layer);
-        bool on_music = (mx > -120 && mx < 120);
-        if (on_music)
-          return;
-
-        music_destroy();
-        music_vis.music = nullptr;
-        music_vis.scroll_data_L->obj = music_vis.weather;
-        lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
+        // -- Retire music after a long silence on the music channel.
+        // Keyed off last_msg_ms (stamped on every musicstate /
+        // musicinfo arrival) rather than pause time, so the screen
+        // sticks around while the phone is still updating volume /
+        // scrub position — it only dies once the media app has gone
+        // fully dormant. Never yank the screen out while the user is
+        // looking at it.
+        if (!playing && screen_vis.music) {
+          constexpr int64_t IDLE_TIMEOUT_MS = 5LL * 60 * 1000;
+          if (now_ms - m.last_msg_ms >= IDLE_TIMEOUT_MS) {
+            int32_t mx =
+                lv_obj_get_x(screen_vis.music) - lv_obj_get_scroll_x(hor_layer);
+            bool on_music = (mx > -120 && mx < 120);
+            if (!on_music) {
+              music_destroy();
+              screen_vis.music = nullptr;
+              refresh_wrap_target();
+            }
+          }
+        }
       },
       1000, NULL);
 
@@ -663,6 +772,11 @@ void Display::ui_init() {
 
   schedule_screen = schedule_screen_create(NULL);
   create_app(appsscreen, FA_CALENDAR, "Schedule", schedule_screen, true);
+
+  homeassistant_screen = homeassistant_create(NULL);
+  lv_obj_t *haapp = create_app(appsscreen, FA_SMARTHOME, "Home Assistant",
+                               homeassistant_screen, true);
+  SET_MDI_SYMBOL_22(lv_obj_get_child(haapp, 0), MDI_HOME_ASSISTANT);
 
   create_app(appsscreen, FA_DICE, "Dice", dice_create(NULL), true);
 

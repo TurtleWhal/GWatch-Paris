@@ -26,6 +26,19 @@ CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
 # FreeRTOS-aware OS layer so esp_lvgl_port can drive LVGL from its own task,
 # and lvgl_port_lock/unlock works (required for cross-task LVGL mutation).
 CONFIG_LV_OS_FREERTOS=y
+# 60 Hz refresh (default is 33 ms / 30 Hz). A full frame streams to the panel
+# in ~11.5 ms at 80 MHz SPI and rendering pipelines against the DMA via the
+# ping-pong buffers, so 16 ms is attainable; scroll/animation smoothness and
+# touch-poll latency (indev read period follows this) both double. Frames
+# that miss the window just render late — worst case degrades to the old
+# 30 Hz, so there's no cliff.
+CONFIG_LV_DEF_REFR_PERIOD=16
+# 2x uint32 per lv_obj_t to memoize style-property lookups — render and
+# layout passes hammer lv_obj_get_style_*. Costs ~8 B x obj count of
+# internal SRAM (objs are small mallocs -> SPIRAM_MALLOC_ALWAYSINTERNAL
+# keeps them internal). If ble_init ever hits malloc failures at boot
+# again, this is a (minor) suspect alongside LV_USE_SNAPSHOT above.
+CONFIG_LV_OBJ_STYLE_CACHE=y
 # To enable the on-screen FPS overlay, also set CONFIG_LV_USE_SYSMON=y and
 # CONFIG_LV_USE_PERF_MONITOR=y via menuconfig (depends on SYSMON).
 # lv_snapshot: render an object subtree into a caller-provided draw buffer.
@@ -38,6 +51,23 @@ CONFIG_LV_OS_FREERTOS=y
 # with an internal-RAM buffer is what caused the ble_init malloc panics
 # noted in ble.cpp.) If BLE ever fails to init again, this is a suspect.
 CONFIG_LV_USE_SNAPSHOT=y
+# Route ALL lv_malloc() allocations to PSRAM. LVGL's default CLIB malloc
+# pulled every widget/style/layout allocation from internal SRAM (they're
+# small mallocs, and SPIRAM_MALLOC_ALWAYSINTERNAL=1024 forces sub-1KB
+# allocs internal), so the built screen tree + a full notification list
+# could drive free internal SRAM down to ~3 KB and cause malloc failures.
+# CUSTOM malloc lets us back lv_malloc with heap_caps_malloc(MALLOC_CAP_
+# SPIRAM) — see main/system/lv_mem_psram.c. The ping-pong DMA draw buffers
+# are unaffected: esp_lvgl_port allocates those separately (buff_dma=true),
+# not through lv_malloc, so they stay in internal DMA-capable SRAM.
+# Route LVGL's object heap into PSRAM via a custom allocator
+# (main/system/lv_mem_psram.c). Confirmed root cause of the awake-freeze was
+# internal-SRAM exhaustion: boot baseline was ~9 KB free, so a burst of
+# notifications ran the render path out of memory and it wedged. Objects on
+# PSRAM restore ~30 KB of internal headroom. (The DMA draw buffers stay
+# internal — esp_lvgl_port allocates those separately.)
+# CONFIG_LV_USE_CLIB_MALLOC is not set
+CONFIG_LV_USE_CUSTOM_MALLOC=y
 
 # --- Bluetooth (NimBLE host for Gadgetbridge BLE) ---
 # ESP32-S3 is BLE-only; NimBLE is lighter than Bluedroid and the right pick.
@@ -87,4 +117,3 @@ CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
 # IP networking, and dropping the WiFi stack frees the internal SRAM that
 # the BT controller wanted.
 # CONFIG_ESP_WIFI_ENABLED is not set
-

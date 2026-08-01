@@ -13,7 +13,7 @@ void scroll_reset(lv_event_t *e)
 lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_event_cb_t event_cb)
 {
     lv_obj_t *app = lv_button_create(parent);
-    lv_obj_set_size(app, 180, 44);
+    lv_obj_set_size(app, 200, 44);
     lv_obj_set_style_bg_color(app, lv_color_hex(0x222222), 0);
     lv_obj_set_style_radius(app, LV_RADIUS_CIRCLE, 0);
 
@@ -46,7 +46,7 @@ lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_ev
 lv_obj_t *create_app(lv_obj_t *parent, const char *icon, const char *name, lv_obj_t *obj, bool appsonly)
 {
     lv_obj_t *app = lv_button_create(parent);
-    lv_obj_set_size(app, 180, 44);
+    lv_obj_set_size(app, 200, 44);
     lv_obj_set_style_bg_color(app, lv_color_hex(0x222222), 0);
     lv_obj_set_style_radius(app, LV_RADIUS_CIRCLE, 0);
 

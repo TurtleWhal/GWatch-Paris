@@ -13,7 +13,7 @@
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
   },
-  "clangd.path": "/Users/garrett/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
+  "clangd.path": "/usr/bin/clangd",
   "clangd.inlayHints.enabled": false,
   "cmake.configureOnOpen": false,
   "cmake.configureOnEdit": false,

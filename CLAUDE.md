@@ -26,6 +26,17 @@ idf.py build
 idf.py -p /dev/tty.wchusbserial578E0235041 flash monitor
 ```
 
+If `idf.py build` dies after two lines with "'…/bin/python' is currently
+active … while the project was configured with '…/bin/python3'" (exit 2),
+the build dir was configured by the VS Code extension via the venv's
+`python3` and export.sh activates `python`. Don't fullclean — invoke idf.py
+through the interpreter the cache expects:
+
+```sh
+/Users/garrett/.espressif/python_env/idf6.0_py3.14_env/bin/python3 \
+  /Users/garrett/esp/v6.0/esp-idf/tools/idf.py build
+```
+
 If `idf.py reconfigure` fails after switching IDF versions, wipe
 `build/bootloader build/bootloader-prefix` (the bootloader subproject caches
 the old IDF path).
@@ -89,8 +100,9 @@ busted.
 - **QMI8658 Wake-on-Motion does not work reliably** on this firmware
   revision. `configWakeOnMotion` puts the IMU into a state where after-the-
   fact reconfiguration via `CTRL7` writes is silently ignored — gyro data
-  registers stay at zero. `qmi.reset()` clears it. We don't currently use
-  WoM; tilt-to-wake is gone.
+  registers stay at zero. `qmi.reset()` clears it. We don't use WoM;
+  tilt-to-wake is the polling-based accel wrist-raise detector in imu.cpp
+  (pm_update polls it at 10 Hz while asleep; gyro is fully off in sleep).
 - **GC9A01 panel driver does not implement `disp_sleep`.** `disp_on_off(false)`
   + LEDC backlight = 0 is what blanks the panel. Sending raw SLPIN/SLPOUT
   via `panel_io_tx_param` is also unhelpful — the panel ends up showing
@@ -120,8 +132,9 @@ main/
   display/
     display.cpp/hpp  Display class. SPI + GC9A01 panel via esp_lcd_gc9a01,
                      touch via esp_lcd_touch_cst816s, LVGL pipeline via
-                     esp_lvgl_port (ping-pong DMA buffers, swap_bytes on
-                     the LCD peripheral, LVGL pinned to APP_CPU).
+                     esp_lvgl_port (ping-pong DMA buffers, LVGL renders
+                     RGB565_SWAPPED natively so no flush-time byte-swap
+                     pass runs, LVGL pinned to APP_CPU).
                      Custom indev (lvgl_touch_read) suppresses the wake-
                      press; `gpio_sleep_sel_dis` on the four SPI pins.
                      `set_touch_active(bool)` toggles CST816S DisAutoSleep
@@ -130,7 +143,9 @@ main/
     battery.*    ADC + curve-fitting cal + voltage→percent with learned
                  anchors and awake/asleep load-offset compensation.
                  Anchors persist in NVS (`bat_full`, `bat_empty`).
-    imu.*        QMI8658 6-axis (step counting). WoM removed.
+    imu.*        QMI8658 6-axis (step counting + accel-only wrist-raise
+                 wake detector polled by pm_update during sleep). WoM
+                 removed.
     motor.*      Two-pin haptic motor (S3 GPIOs cap at 40 mA, motor wants
                  100 mA, so it's wired across two pins driven in parallel).
   system/
@@ -169,6 +184,23 @@ LVGL 9 + esp_lvgl_port 2.7. The LVGL task is owned by esp_lvgl_port — you do
 not call `lv_timer_handler()` directly. `Display::refresh()` is just
 `lv_obj_invalidate(active_screen)`.
 
+**LVGL's object heap lives in PSRAM.** `CONFIG_LV_USE_CUSTOM_MALLOC=y` +
+`main/system/lv_mem_psram.c` route every `lv_malloc()` through
+`heap_caps_malloc(MALLOC_CAP_SPIRAM)`. This is load-bearing, not an
+optimization: with the default CLIB malloc LVGL widgets come from internal
+SRAM (small allocs, and `SPIRAM_MALLOC_ALWAYSINTERNAL=1024` pins sub-1 KB
+allocs there), and the screens built at boot dropped free internal SRAM to
+~9 KB — a fast notification burst then ran the render path out of memory and
+it wedged holding `lvgl_port_lock` (silent hang: awake, BLE still up, screen
+frozen). On PSRAM the boot baseline is ~66 KB free internal. The ping-pong
+DMA **draw buffers stay internal** — esp_lvgl_port allocates those separately
+(`buff_dma=true`), not via `lv_malloc`, so they're unaffected. Note
+`main/CMakeLists.txt` has a `-u lv_malloc_core` link flag: libmain is scanned
+before liblvgl, so the linker won't pull our allocator's translation unit on
+its own — don't remove it or the build fails with `undefined reference to
+lv_malloc_core`. (Diagnosed via a `{t:"reboot"}` handler that logs task states
++ free internal heap before restarting — kept in `ble.cpp`.)
+
 ## Conventions and gotchas
 
 - **Cross-task LVGL mutation must hold `lvgl_port_lock`.** Anything that
@@ -178,6 +210,18 @@ not call `lv_timer_handler()` directly. `Display::refresh()` is just
   example pattern is in `Watch::wakeup()`. Event callbacks fired from inside
   LVGL itself (LV_EVENT_CLICKED, LV_EVENT_SCROLL, etc.) are already on the
   LVGL task and do not need the lock.
+- **The notification queue (`ble.notifications()`) is shared across tasks and
+  the writers must hold `lvgl_port_lock`.** The LVGL task iterates it in
+  `rebuild_notification_list` holding a `const Notification &` to each element
+  while it builds that card's labels/image. The BLE-rx-task writers
+  (`push_notification`, `dismiss_notification`, `clear_notifications`,
+  `attach_notification_image`) therefore take `lvgl_port_lock` around every
+  mutation — otherwise a fast `push_back`/`erase` reallocs the vector under the
+  reader and it dereferences freed memory (`LoadProhibited` in
+  `lv_label_set_text` under a notification burst). The reader is covered by the
+  port task's implicit lock; the writers have to opt in. Same rule for any
+  future BLE-owned state the UI reads (see also the two-stage album-art handoff
+  in `ble.cpp`, which dodges this with its own mutex instead).
 - **`lvgl_port_lock(0)` is *not* a try-lock.** The IDF API maps timeout=0
   to `portMAX_DELAY` (infinite wait). If the LVGL task was suspended while
   holding the mutex, the caller deadlocks. `Watch::wakeup()` resumes the
@@ -224,6 +268,18 @@ not call `lv_timer_handler()` directly. `Display::refresh()` is just
 - **Don't `lv_task_handler()` directly anywhere.** It races with the
   esp_lvgl_port task. The old `display.refresh()` did this and would
   intermittently panic.
+- **Don't call invalidating LVGL setters every frame with an unchanged
+  value.** `lv_arc_set_*_angle`, `lv_label_set_text*`, etc. dirty the widget's
+  region unconditionally — a per-tick call re-flushes that area 60×/sec even
+  when nothing changed. This is not just wasteful: a tiny/degenerate flush
+  (e.g. a 1-px arc-knob or line-tip region) queued tight behind a larger async
+  SPI DMA raced the SPI bus-lock release and **intermittently deadlocked the
+  LCD flush** — `spi_device_acquire_bus` never returns, taskLVGL wedges holding
+  `lvgl_port_lock`, and the whole watch freezes (looked like a memory/PSRAM/
+  sleep bug for a long time; it wasn't). The analog face's timer-arc did
+  exactly this at pixel (120,3); the fix is a change-guard (only call the setter
+  when the value differs). The info widgets (battery/steps/glance) already guard
+  their setters — any new per-tick UI must too.
 
 ## Power management
 
@@ -370,7 +426,8 @@ Or swap subtype to a reserved range and use `joltwallet/littlefs`.
 - **No QMI8658 Wake-on-Motion.** Tried multiple approaches; the chip's
   data registers stay zero after `configWakeOnMotion` even after `reset()`,
   and the GPIO INT signaling was unreliable across light sleep transitions.
-  If tilt-to-wake comes back it'll need to be polling-based.
+  Tilt-to-wake is polling-based instead (accel wrist-raise state machine
+  in imu.cpp) — keep it that way.
 - **No raw SLPIN/SLPOUT to the GC9A01.** `disp_on_off(false/true)` paired
   with the `panel_init` re-init in wake is what actually works.
 - No background "wake LVGL on demand" hacks — the existing

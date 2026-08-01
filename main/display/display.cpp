@@ -4,7 +4,10 @@
 //  - 80 MHz SPI pclk to the GC9A01.
 //  - Two DMA-capable buffers in internal SRAM, 1/4 frame each (60 lines), ping-ponged
 //    by esp_lvgl_port: CPU renders one buffer while DMA streams the other.
-//  - swap_bytes is done by the LCD peripheral (free, no CPU cost).
+//  - LVGL renders LV_COLOR_FORMAT_RGB565_SWAPPED (panel byte order) natively, so
+//    no byte-swap pass runs at flush time. (esp_lvgl_port's flags.swap_bytes is
+//    NOT the LCD peripheral swapping — it's lv_draw_sw_rgb565_swap() over every
+//    flushed pixel on the LVGL task; rendering pre-swapped avoids it entirely.)
 //  - LVGL runs in its own FreeRTOS task spawned by esp_lvgl_port, pinned to APP_CPU.
 //    Cross-task LVGL mutation goes through lvgl_port_lock/unlock.
 
@@ -317,7 +320,12 @@ void Display::init_graphics()
     // chunky frame, and the per-icon frames stack up before the
     // recursion unwinds. 16 KB gives comfortable headroom.
     port_cfg.task_stack      = 16384;
-    port_cfg.timer_period_ms = 5;
+    // lv_tick granularity. This is the clock animations sample, so at a 16 ms
+    // refresh a 5 ms tick made scroll animations alternate 15/20 ms steps —
+    // visible micro-jitter. 2 ms keeps steps within ±1 ms of real time; the
+    // esp_timer callback is a single lv_tick_inc, so 500 Hz costs nothing
+    // while awake (pm locks hold max freq anyway) and it's stopped in sleep.
+    port_cfg.timer_period_ms = 2;
     ESP_ERROR_CHECK(lvgl_port_init(&port_cfg));
 
     lvgl_port_display_cfg_t disp_cfg = {};
@@ -331,8 +339,19 @@ void Display::init_graphics()
     disp_cfg.rotation      = { .swap_xy = false, .mirror_x = true, .mirror_y = false };
     disp_cfg.flags.buff_dma    = true;
     disp_cfg.flags.buff_spiram = false;
-    disp_cfg.flags.swap_bytes  = true;  // RGB565 LE -> BE on the LCD peripheral
+    disp_cfg.flags.swap_bytes  = false; // render pre-swapped instead, see below
     disp = lvgl_port_add_disp(&disp_cfg);
+
+    // Render directly in the panel's byte order. LVGL 9.5 treats
+    // RGB565_SWAPPED as a first-class software-render target (fills, fonts,
+    // masks and every image source format blend to it natively), which makes
+    // esp_lvgl_port's swap_bytes pass — a CPU read-modify-write over every
+    // flushed pixel — pure waste. esp_lvgl_port's disp_cfg whitelist predates
+    // the format, so set it directly; same 2 B/px, and set_color_format
+    // re-tags the already-allocated draw buffers' headers.
+    lvgl_port_lock(0);
+    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565_SWAPPED);
+    lvgl_port_unlock();
 
     // Custom indev so we can drop the wake-press; see lvgl_touch_read above.
     s_touch = touch;
@@ -413,15 +432,28 @@ void Display::sleep()
         // enough to blank the panel; the LEDC backlight is what makes it look
         // off, and lvgl_port_stop halts rendering so SPI is idle.
         esp_lcd_panel_disp_on_off(panel, false);
+
+        // Suspend the LVGL task WHILE we still hold the mutex. lvgl_port_stop
+        // only stops the tick timer; the task otherwise keeps looping every
+        // ~501 ms (a vTaskDelay(1) at its tail), pinning core 1 often enough
+        // that tickless-idle never enters light sleep — so it must be
+        // suspended outright for core 1 to stay idle.
+        //
+        // Doing the suspend HERE, under the lock, is load-bearing. Because we
+        // hold the recursive mutex, the LVGL task is guaranteed parked at the
+        // top of its loop (blocked taking the mutex) or in its tail delay —
+        // never the mutex holder, never mid-flush. Suspending AFTER releasing
+        // the lock (the previous order) left a gap in which the task could
+        // re-take the mutex and begin a render, then get frozen still holding
+        // it; the next lvgl_port_lock caller — Watch::wakeup, or a background
+        // path — would then block on it forever (lvgl_port_lock(0) is
+        // portMAX_DELAY, no timeout). The slower PSRAM-backed render widened
+        // that gap enough to hit the deadlock regularly.
+        TaskHandle_t lvgl_task = xTaskGetHandle("taskLVGL");
+        if (lvgl_task) vTaskSuspend(lvgl_task);
+
         lvgl_port_unlock();
     }
-    // lvgl_port_stop() only stops the tick timer; the underlying task still
-    // wakes every ~501 ms with a vTaskDelay(1) at the bottom of its loop,
-    // which pins core 1 just often enough that the tickless-idle decision
-    // never sees a long enough idle window to enter light sleep. Suspend
-    // the task outright so core 1 can stay idle.
-    TaskHandle_t lvgl_task = xTaskGetHandle("taskLVGL");
-    if (lvgl_task) vTaskSuspend(lvgl_task);
 
     suspended = true;
 }

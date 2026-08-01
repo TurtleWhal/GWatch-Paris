@@ -885,9 +885,21 @@ void BLE::send_screenshot()
 
 void BLE::push_notification(Notification &&n)
 {
+    // notifs is read by the LVGL task — rebuild_notification_list iterates it
+    // holding a `const Notification &` to each element while it builds the
+    // card's labels/images. Mutating it here on the BLE rx task without the
+    // lock lets a push_back/erase realloc the vector mid-iteration, so the
+    // reader then dereferences freed memory (the LoadProhibited in
+    // lv_label_set_text seen under a fast notification burst). Serialize with
+    // the LVGL task via lvgl_port_lock. It's a recursive mutex, so this stays
+    // safe even if push were ever reached from the LVGL task.
+    if (!lvgl_port_lock(0))
+        return;
+
     // De-dupe: replace existing entry with same id. Preserve a previously-
     // attached icon across the replace, since the matching `notify-img`
     // message can land before or after the `notify` text on the same id.
+    bool merged = false;
     for (auto &existing : notifs)
     {
         if (existing.id == n.id)
@@ -899,30 +911,44 @@ void BLE::push_notification(Notification &&n)
                 n.img_h = existing.img_h;
             }
             existing = std::move(n);
-            notifs_version++;
-            return;
+            merged = true;
+            break;
         }
     }
-    if (notifs.size() >= 16)
-        notifs.erase(notifs.begin());
-    notifs.push_back(std::move(n));
+    if (!merged)
+    {
+        if (notifs.size() >= 16)
+            notifs.erase(notifs.begin());
+        notifs.push_back(std::move(n));
+    }
     notifs_version++;
+
+    lvgl_port_unlock();
 }
 
 void BLE::dismiss_notification(uint32_t id, bool send_to_phone)
 {
+    // Same reason as push_notification: hold the lock around the erase so the
+    // LVGL task isn't iterating notifs when the vector shifts underneath it.
+    // Recursive mutex → fine that the swipe-to-dismiss path already holds it.
     bool changed = false;
-    for (auto it = notifs.begin(); it != notifs.end(); ++it)
+    if (lvgl_port_lock(0))
     {
-        if (it->id == id)
+        for (auto it = notifs.begin(); it != notifs.end(); ++it)
         {
-            notifs.erase(it);
-            changed = true;
-            break;
+            if (it->id == id)
+            {
+                notifs.erase(it);
+                changed = true;
+                break;
+            }
         }
+        if (changed)
+            notifs_version++;
+        lvgl_port_unlock();
     }
-    if (changed)
-        notifs_version++;
+    // BLE send stays outside the lock — no notifs access, and no need to hold
+    // the LVGL mutex across a GATT write.
     if (send_to_phone)
         send_notification_action(id, "DISMISS");
 }
@@ -968,10 +994,15 @@ bool BLE::promote_pending_album_art()
 
 void BLE::clear_notifications()
 {
-    if (notifs.empty())
-        return;
-    notifs.clear();
-    notifs_version++;
+    if (lvgl_port_lock(0))
+    {
+        if (!notifs.empty())
+        {
+            notifs.clear();
+            notifs_version++;
+        }
+        lvgl_port_unlock();
+    }
 }
 
 // ---------- Incoming command parsing ----------
@@ -1068,6 +1099,13 @@ static void attach_notification_image(uint32_t id,
                                       PsramByteVec &&img,
                                       uint16_t w, uint16_t h)
 {
+    // Runs on the BLE rx task. Hold the lock while walking notifs and swapping
+    // in the pixel buffer: without it we'd race a concurrent push realloc, and
+    // the img move-assign would swap the buffer out from under a render that's
+    // blitting n.img on the LVGL task.
+    if (!lvgl_port_lock(0))
+        return;
+    bool found = false;
     for (auto &n : ble.notifications_mut())
     {
         if (n.id == id)
@@ -1076,12 +1114,17 @@ static void attach_notification_image(uint32_t id,
             n.img_w = w;
             n.img_h = h;
             ble.bump_version();
-            ESP_LOGI(TAG, "attached %ux%u icon to notif id=%" PRIu32,
-                     (unsigned)w, (unsigned)h, id);
-            return;
+            found = true;
+            break;
         }
     }
-    ESP_LOGW(TAG, "notify-img for unknown id=%" PRIu32 " — dropping", id);
+    lvgl_port_unlock();
+
+    if (found)
+        ESP_LOGI(TAG, "attached %ux%u icon to notif id=%" PRIu32,
+                 (unsigned)w, (unsigned)h, id);
+    else
+        ESP_LOGW(TAG, "notify-img for unknown id=%" PRIu32 " — dropping", id);
 }
 
 // Translate JavaScript-style \xHH byte escapes into UTF-8 bytes, in
@@ -1131,6 +1174,32 @@ static size_t fix_js_x_escapes(char *s, size_t len)
         s[w++] = s[r++];
     }
     return w;
+}
+
+// Defined in ui/screens/homeassistant.cpp. Routes a Home Assistant REST
+// state response (the inner JSON of a {t:"http",resp:...} message) to the HA
+// screen. Forward-declared here so the BLE layer needn't pull in the UI header.
+void homeassistant_response_recieved(const char *resp_json);
+
+// Diagnostic printed on the {t:"reboot"} command. Runs on the BLE rx task,
+// which survives even when the LVGL/pm tasks wedge — so rebooting from the
+// phone to recover from a hang also captures whether taskLVGL was Blocked
+// (stuck on a lock, or on an allocation the render path couldn't satisfy) vs
+// Suspended (the wake path never resumed it), the pm task's state, and free
+// internal heap.
+static void log_freeze_diag(const char *ctx)
+{
+    static const char *st[] = {"Running",   "Ready",   "Blocked",
+                               "Suspended", "Deleted", "Invalid"};
+    TaskHandle_t lvgl = xTaskGetHandle("taskLVGL");
+    TaskHandle_t pm = xTaskGetHandle("pm");
+    ESP_LOGW(TAG,
+             "DIAG(%s): sleeping=%d taskLVGL=%s pm=%s internal=%u PSRAM=%u B",
+             ctx, (int)watch.sleeping,
+             lvgl ? st[eTaskGetState(lvgl)] : "none",
+             pm ? st[eTaskGetState(pm)] : "none",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
 void BLE::handle_gb_json(const char *json, size_t len)
@@ -1294,7 +1363,17 @@ void BLE::handle_gb_json(const char *json, size_t len)
     }
     else if (strcmp(t->valuestring, "reboot") == 0)
     {
+        log_freeze_diag("reboot");
         esp_restart();
+    }
+    else if (strcmp(t->valuestring, "http") == 0)
+    {
+        // {"t":"http","resp":"<escaped JSON of the HA REST response>"}.
+        // cJSON has already unescaped the inner string, so resp->valuestring
+        // is the raw HA state JSON — hand it to the HA screen.
+        cJSON *resp = cJSON_GetObjectItemCaseSensitive(root, "resp");
+        if (cJSON_IsString(resp) && resp->valuestring)
+            homeassistant_response_recieved(resp->valuestring);
     }
     else
     {

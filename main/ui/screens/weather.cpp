@@ -45,11 +45,26 @@ static std::string last_loc;
 // onto this screen stutter.
 //
 // When LV_USE_SNAPSHOT is available we snapshot `render_group` once per real
-// weather update into a PSRAM RGB565 buffer and thereafter display that flat
-// image via `cache_img`, hiding `render_group`. A flat 240×240 opaque RGB565
-// image takes LVGL's fast blit path (no glyph rasterisation, no arc draws,
-// no per-pixel rotation/AA), so every subsequent frame — including every
-// frame of a scroll animation — is just one image copy out of PSRAM.
+// weather update into a PSRAM ARGB8888 buffer and thereafter display that
+// flat image via `cache_img`, hiding `render_group`. A flat pre-rendered
+// image skips all the expensive work (no glyph rasterisation, no arc draws,
+// no per-pixel rotation/AA), so every frame of a scroll animation is one
+// alpha-composited image blit out of PSRAM.
+//
+// ARGB8888 (not opaque RGB565) is deliberate: the group's background is
+// TRANSPARENT, so the snapshot holds only the widgets and the screen behind
+// shows through everywhere else. That's what keeps this screen looking like
+// every other one during scrolls — the circular screen bg supplies the round
+// edge (transparent square corners reveal the watchface sliding behind) and
+// the scroll-highlight glow (ui.cpp tints scr's bg, which now composites
+// under the widgets instead of being buried beneath an opaque square).
+// An opaque RGB565(_SWAPPED) cache blits faster (row memcpy), but produced a
+// hard black square edge and swallowed the glow. The alpha blit is per-pixel,
+// yet bounded: when weather fills most of the frame width the neighbouring
+// screen isn't being rendered, so per-chunk render time stays below the SPI
+// DMA time and the flush window stays inside one panel self-refresh (the
+// stationary-tear budget — see display.cpp).
+//
 // `render_group` stays laid out (hidden, so it costs nothing to skip) and is
 // only un-hidden for the duration of the snapshot, keeping updates
 // incremental. If LV_USE_SNAPSHOT is off, render_group is simply left
@@ -61,7 +76,7 @@ static uint8_t *cache_buf;       // reused PSRAM RGB565 snapshot target
 static lv_image_dsc_t cache_dsc; // wraps cache_buf for cache_img
 static constexpr uint32_t CACHE_W = 240;
 static constexpr uint32_t CACHE_H = 240;
-static constexpr uint32_t CACHE_BYTES = CACHE_W * CACHE_H * 2; // RGB565
+static constexpr uint32_t CACHE_BYTES = CACHE_W * CACHE_H * 4; // ARGB8888
 #endif
 
 // Sample message from Gadgetbridge that this screen consumes:
@@ -253,7 +268,21 @@ static void uv_gradient_bake(lv_obj_t *canvas) {
   int32_t a_lo = 180 - W_ARC_POS - W_ARC_SIZE / 2;
   int32_t a_hi = 180 - W_ARC_POS + W_ARC_SIZE / 2;
 
-  for (int i = 0; i < UV_SLICES; i++) {
+  // Paint order: the two rounded end caps first, then interleave inward
+  // (0, 47, 1, 46, …) so each slice is painted on top of its outward
+  // neighbour and the two runs converge at the middle of the strip.
+  // LVGL's `rounded` flag caps BOTH ends of a slice, and a ~0.5°-wide
+  // slice with 3 px caps renders as a solid dot — under the old
+  // sequential green→red order nothing ever painted over the red cap's
+  // inward bulge, which left a solid red dot sitting on the end of the
+  // strip. Painting inward buries each cap's inward bulge under its
+  // neighbour, leaving only the outward-facing semicircle visible, and
+  // the final joint lands mid-strip where adjacent slice colours are
+  // near-identical (no visible seam).
+  for (int k = 0; k < UV_SLICES; k++) {
+    bool from_green = (k & 1) == 0;
+    int i = from_green ? k / 2 : UV_SLICES - 1 - k / 2;
+
     float uv_pos = (float)i * 10.0f / (float)(UV_SLICES - 1);
 
     lv_draw_arc_dsc_t dsc;
@@ -263,19 +292,42 @@ static void uv_gradient_bake(lv_obj_t *canvas) {
     dsc.center.x = cx;
     dsc.center.y = cy;
     dsc.radius = (uint16_t)radius;
-    dsc.start_angle = a_lo + (a_hi - a_lo) * i / UV_SLICES;
-    dsc.end_angle = a_lo + (a_hi - a_lo) * (i + 1) / UV_SLICES;
-    // Overlap into the next slice by 1° so adjacent AA edges blend
-    // instead of showing a thin seam. Skip on the last slice — the
-    // rounded cap is already at a_hi and extending it further past
-    // that produced the "detached red dot" symptom.
-    if (i < UV_SLICES - 1)
-      dsc.end_angle += 1;
+    // Float slice boundaries. The span/UV_SLICES quotient is ~0.5°, so the
+    // old integer math truncated alternate slices to zero width — a zero-
+    // width slice draws nothing, including its rounded caps. That's what
+    // squared off the green tip: cap slice 0 landed on [a_lo, a_lo] and
+    // only ever rendered via its old +1° seam extension, which the
+    // ends-first paint order removed from the cap slices.
+    const float span = (float)(a_hi - a_lo);
+    dsc.start_angle = a_lo + span * (float)i / UV_SLICES;
+    dsc.end_angle = a_lo + span * (float)(i + 1) / UV_SLICES;
     dsc.opa = LV_OPA_COVER;
     // Round only the two outward-facing caps — green start and red
     // end. Middle slices have both ends buried under the overlap so
     // rounding them costs cap-render work for no visible benefit.
     dsc.rounded = (i == 0 || i == UV_SLICES - 1) ? 1 : 0;
+
+    // Overlap 1° into the already-painted outward neighbour so this
+    // slice's AA edge lands on solid colour instead of compounding with
+    // the neighbour's AA edge into a translucent seam. Clamp at the strip
+    // ends: reaching past a_lo/a_hi would paint a flat-ended band over
+    // the outward rounded caps and square them off. The caps' inward
+    // bulges (the "dot" halves poking into the strip) need no special
+    // handling — they lie inside the next few slices' zones, all painted
+    // later, which buries them.
+    if (from_green && i > 0) {
+      dsc.start_angle -= 1;
+      if (dsc.start_angle < a_lo)
+        dsc.start_angle = a_lo;
+    } else if (!from_green && i < UV_SLICES - 1) {
+      dsc.end_angle += 1;
+      if (dsc.end_angle > a_hi)
+        dsc.end_angle = a_hi;
+    }
+    // The last-painted (middle) slice closes the joint on both sides.
+    if (k == UV_SLICES - 1)
+      dsc.start_angle -= 1;
+
     lv_draw_arc(&layer, &dsc);
   }
 
@@ -312,11 +364,16 @@ static void weather_cache_render(void) {
   lv_obj_update_layout(render_group);
 
   lv_draw_buf_t dbuf = {};
-  if (lv_draw_buf_init(&dbuf, CACHE_W, CACHE_H, LV_COLOR_FORMAT_RGB565,
+  if (lv_draw_buf_init(&dbuf, CACHE_W, CACHE_H, LV_COLOR_FORMAT_ARGB8888,
                        /*stride auto*/ 0, cache_buf, CACHE_BYTES) ==
           LV_RESULT_OK &&
-      lv_snapshot_take_to_draw_buf(render_group, LV_COLOR_FORMAT_RGB565,
+      lv_snapshot_take_to_draw_buf(render_group, LV_COLOR_FORMAT_ARGB8888,
                                    &dbuf) == LV_RESULT_OK) {
+    // ARGB8888 with a transparent group bg: the snapshot holds widgets only,
+    // with real anti-aliased alpha at their edges, and the (possibly
+    // scroll-tinted) circular screen bg composites underneath at blit time.
+    // See the "Rendered-once cache" note up top for why this beats an opaque
+    // RGB565 cache despite the slower per-pixel blit.
     lv_obj_remove_flag(cache_img, LV_OBJ_FLAG_HIDDEN);
     lv_obj_invalidate(cache_img);
     lv_obj_add_flag(render_group, LV_OBJ_FLAG_HIDDEN);
@@ -361,7 +418,9 @@ void weather_update(lv_timer_t *) {
   lv_label_set_text(lo, buf);
 
   lv_arc_set_value(hum, w.humidity);
-  snprintf(buf, sizeof(buf), "💧%u%%", (unsigned)w.humidity);
+  // The space is deliberate: ProductSans 16's space advances 3.5 px
+  // (adv_w 56/16), giving the icon breathing room from the digits.
+  snprintf(buf, sizeof(buf), FA_DROPLET " %u%%", (unsigned)w.humidity);
   lv_label_set_text(humval, buf);
 
   uint8_t uv_clamped = w.uv > 10 ? 10 : w.uv;
@@ -370,7 +429,7 @@ void weather_update(lv_timer_t *) {
   // value with lv_arc_get_value and paints the gradient + dims the
   // slices past the knob — no per-update mutation needed here.
   lv_arc_set_value(uv, uv_clamped);
-  snprintf(buf, sizeof(buf), "🔆 %u", (unsigned)w.uv);
+  snprintf(buf, sizeof(buf), FA_BRIGHTNESS " %u", (unsigned)w.uv);
   lv_label_set_text(uvval, buf);
 
   lv_image_set_src(icon, icon_for_code(w.code));
@@ -407,16 +466,16 @@ lv_obj_t *weather_create(lv_obj_t *parent) {
 
   // All weather widgets are built inside render_group rather than directly on
   // the screen so weather_cache_render() can snapshot the whole lot in one
-  // shot. Opaque black bg (so the snapshot is fully painted with no
-  // transparent gaps) and no shadow/outline/transform of its own (so its
-  // ext_draw_size stays 0 and the snapshot is exactly 240×240). See the
-  // "Rendered-once cache" note above.
+  // shot. TRANSPARENT bg — the ARGB8888 snapshot must hold only the widgets
+  // so the circular screen bg (and its scroll-highlight tint) composites
+  // through at blit time; see the "Rendered-once cache" note above. No
+  // shadow/outline/transform of its own (so its ext_draw_size stays 0 and
+  // the snapshot is exactly 240×240).
   render_group = lv_obj_create(scr);
   lv_obj_remove_style_all(render_group);
   lv_obj_set_size(render_group, 240, 240);
   lv_obj_align(render_group, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_style_bg_opa(render_group, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_color(render_group, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(render_group, LV_OPA_TRANSP, 0);
   lv_obj_set_flag(render_group, LV_OBJ_FLAG_CLICKABLE, false);
   lv_obj_set_flag(render_group, LV_OBJ_FLAG_SCROLLABLE, false);
 
@@ -479,11 +538,13 @@ lv_obj_t *weather_create(lv_obj_t *parent) {
   lv_arc_set_range(hum, 0, 100);
   lv_arc_set_value(hum, 0);
 
+  // _fa wrapper font: FontAwesome_16 fallback lets the FA_DROPLET /
+  // FA_BRIGHTNESS glyphs sit inline with the digits in one label.
   humval = lv_label_create(render_group);
-  lv_obj_set_style_text_font(humval, &ProductSansRegular_16_emoji, 0);
+  lv_obj_set_style_text_font(humval, &ProductSansRegular_16_fa, 0);
   lv_obj_set_style_text_align(humval, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(humval, 100);
-  lv_label_set_text(humval, "💧—%");
+  lv_label_set_text(humval, FA_DROPLET " —%");
   lv_obj_align(humval, LV_ALIGN_BOTTOM_MID, 0, -12);
   lv_obj_update_layout(humval);
 
@@ -556,10 +617,10 @@ lv_obj_t *weather_create(lv_obj_t *parent) {
   // — re-enable the arc so the knob shows.
 
   uvval = lv_label_create(render_group);
-  lv_obj_set_style_text_font(uvval, &ProductSansRegular_16_emoji, 0);
+  lv_obj_set_style_text_font(uvval, &ProductSansRegular_16_fa, 0);
   lv_obj_set_style_text_align(uvval, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(uvval, 100);
-  lv_label_set_text(uvval, "🔆 —");
+  lv_label_set_text(uvval, FA_BRIGHTNESS " —");
   lv_obj_align(uvval, LV_ALIGN_BOTTOM_MID, 0, -12);
   lv_obj_update_layout(uvval);
 
@@ -607,13 +668,19 @@ lv_obj_t *weather_create(lv_obj_t *parent) {
   // live-rendering render_group. Buffer is in PSRAM specifically so this
   // caching adds no internal-SRAM pressure (the BT controller is sensitive to
   // it — see ble.cpp / sdkconfig.defaults notes on LV_USE_SNAPSHOT).
-  cache_buf = (uint8_t *)heap_caps_malloc(CACHE_BYTES,
-                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  // Allocated once and reused for the process lifetime — weather_create is
+  // called at most once (guarded by !screen_vis.weather in ui.cpp) and the
+  // screen is never destroyed. Guard the alloc anyway: this is a 225 KB
+  // (240×240×4) buffer, so if a weather_destroy/recreate is ever added, an
+  // unconditional malloc here would leak a quarter-MB of PSRAM per cycle.
+  if (!cache_buf)
+    cache_buf = (uint8_t *)heap_caps_malloc(
+        CACHE_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   cache_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-  cache_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+  cache_dsc.header.cf = LV_COLOR_FORMAT_ARGB8888;
   cache_dsc.header.w = CACHE_W;
   cache_dsc.header.h = CACHE_H;
-  cache_dsc.header.stride = CACHE_W * 2;
+  cache_dsc.header.stride = CACHE_W * 4;
   cache_dsc.data_size = CACHE_BYTES;
   cache_dsc.data = cache_buf;
 

@@ -27,7 +27,7 @@
         {"name": "bug", "char": "",  "sizes": [22] },
         {"name": "calculator", "char": "",  "sizes": [22, 28] },
         {"name": "dice", "char": "",  "sizes": [22] },
-        {"name": "brightness", "char": "",  "sizes": [28] },
+        {"name": "brightness", "char": "",  "sizes": [16, 28] },
         {"name": "brightness_low", "char": "",  "sizes": [28] },
         {"name": "down", "char": "", "hex": "f078",  "sizes": [18] },
         {"name": "play", "char": "",  "sizes": [32, 48] },
@@ -36,10 +36,22 @@
         {"name": "previous", "char": "",  "sizes": [32] },
         {"name": "keyboard", "char": "",  "sizes": [22] },
         {"name": "airplane", "char": "",  "sizes": [28] },
-        {"name": "phone_vibrate", "char": "",  "sizes": [28, 48] }
-    ], 
+        {"name": "phone_vibrate", "char": "",  "sizes": [28, 48] },
+        {"name": "droplet", "char": "",  "sizes": [16] },
+        {"name": "smarthome", "char": "",  "sizes": [22, 28] }
+    ],
+    "mdi-symbols": [
+        {"name": "home-assistant", "hex": "F07D0", "sizes": [22, 28] },
+        {"name": "fan",            "hex": "F0210", "sizes": [22] },
+        {"name": "window",         "hex": "F05B1", "sizes": [22] },
+        {"name": "lightbulb",      "hex": "F0335", "sizes": [22] },
+        {"name": "thermometer",    "hex": "F050F", "sizes": [22] },
+        {"name": "lightning",      "hex": "F0241", "sizes": [22] },
+        {"name": "window_shade",   "hex": "F1A6B", "sizes": [22] },
+        {"name": "desktop_pc",      "hex": "F0AAB", "sizes": [22] }
+    ],
     "fonts": [
-        {"font":"ProductSans-Regular.ttf", "size": [10, 14, 16, 20, 24],             "range":"default,0xA0-0x24F,0x2000-0x21FF", "symbols":"",                          "bpp":8},
+        {"font":"ProductSans-Regular.ttf", "size": [10, 12, 14, 16, 20, 24],         "range":"default,0xA0-0x24F,0x2000-0x21FF", "symbols":"",                          "bpp":8},
         {"font":"ProductSans-Bold.ttf",    "size": [16, 20, 24, 30, 36, 42, 76, 92], "range":"default,0xA0-0x24F,0x2000-0x21FF", "symbols":"−",                         "bpp":8},
         {"font":"GoogleSansCode.ttf",      "size": [46, 28],                         "range":"",                                 "symbols":"1234567890:.+-×÷eErNanIif", "bpp":8},
         {"font":"SirinStencil.ttf",        "size": [92, 32],                         "range":"",                                 "symbols":"1234567890:.APM",           "bpp":8},

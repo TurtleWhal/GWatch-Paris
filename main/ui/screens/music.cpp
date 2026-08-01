@@ -422,6 +422,13 @@ void music_destroy(void)
     s_last_album.clear();
     s_last_reported_position_s = -1;
     s_last_duration_s = -1;
+    // Forget which album-art buffer was bound to the (now deleted) lv_image.
+    // The next music_create() makes a fresh, empty albumart image, so without
+    // this reset music_update would see album_art.data() == s_last_album_art_data
+    // and skip re-binding — the recreated screen would show no art even though
+    // the same art is still in music_state.
+    s_last_album_art_data = nullptr;
+    s_last_album_art_w = 0;
 }
 
 void music_refresh(void)

@@ -116,6 +116,39 @@ for symbol in symbols["symbols"]:
                 sizes[size].append(symbol["hex"] + "\0")
 
 
+# Create mdisymboldefines for fonts.hpp — same shape as the Font Awesome
+# symbols above, but sourced from the "mdi-symbols" section and rendered
+# with the Material Design Icons font. These produce MDI_<NAME> defines and
+# their own MaterialDesignIcons_<size> font files (no "brand" split; MDI is
+# a single font).
+mdisymboldefines = []
+mdi_sizes = []
+for x in range(1000):  # Large array for font sizes
+    mdi_sizes.append([])
+
+mdi_symbols = symbols.get("mdi-symbols", [])
+
+mdi_longest = 0
+for symbol in mdi_symbols:
+    if len(symbol["name"]) > mdi_longest:
+        mdi_longest = len(symbol["name"])
+
+for symbol in mdi_symbols:
+    if "char" in symbol and symbol["char"]:
+        char_value = f'"{symbol["char"]}"'
+        hex_comment = f"// '{symbol['char']}', Sizes: {symbol['sizes']}"
+        code = f"{ord(symbol['char']):04X}"
+    else:
+        char_value = hex_to_utf8(symbol["hex"])
+        hex_comment = f"// U+{symbol['hex'].upper()}, Sizes: {symbol['sizes']}"
+        code = symbol["hex"]
+    mdisymboldefines.append(
+        f"#define MDI_{(symbol['name'].replace('-', '_').replace(' ', '_').upper().ljust(mdi_longest, ' '))} {char_value} {hex_comment}\n"
+    )
+    for size in symbol["sizes"]:
+        mdi_sizes[size].append(code)
+
+
 # Clear generated folder
 folder = os.path.realpath(
     pathlib.Path(__file__).parent.resolve().joinpath("./generated")
@@ -208,7 +241,56 @@ for size in sizes:
         # subprocess.run(["lv_font_conv", "--size", str(sizes.index(size)), "--bpp", str(symbols['symbol-bpp']), "--format", "lvgl", "--font", os.path.abspath("FontAwesome5.woff"), "--range", range, "--output", os.path.abspath("generated") + "/FontAwesome_" + str(sizes.index(size)) + ".c",  "--no-compress"])
         subprocess.run(args)
 
-cmakefiles = fontfiles
+# Create Material Design Icon symbol files. Kept in their own list (not
+# fontfiles) so the FontAwesome-specific SET_SYMBOL naming below doesn't
+# mangle them; they get dedicated MaterialDesignIcons_<size> declares and
+# SET_MDI_SYMBOL_<size> macros. enumerate() rather than .index() because
+# two sizes can share an identical symbol set (index() would return the
+# first match and clobber the later size).
+mdifontfiles = []
+for size_index, size in enumerate(mdi_sizes):
+    if len(size) > 0:
+        dest = "MaterialDesignIcons_" + str(size_index) + ".c"
+        mdifontfiles.append(dest)
+
+        srange = ", ".join("0x" + hex for hex in size)
+
+        print("Generating font: " + dest + " with srange: " + srange)
+
+        args = windows + [
+            "lv_font_conv",
+            "--size",
+            str(size_index),
+            "--bpp",
+            str(symbols["symbol-bpp"]),
+            "--format",
+            "lvgl",
+            "--font",
+            os.path.realpath(
+                pathlib.Path(__file__)
+                .parent.resolve()
+                .joinpath("./MaterialDesignIconsDesktop.ttf")
+            ),
+            "--range",
+            srange,
+            "--output",
+            os.path.realpath(
+                pathlib.Path(__file__).parent.resolve().joinpath("./generated")
+            )
+            + "/"
+            + dest,
+            "--no-compress",
+        ]
+
+        subprocess.run(args)
+
+# Copy, don't alias: cmakefiles collects every .c that needs compiling
+# (symbol fonts + full fonts + MDI), but fontfiles must stay ONLY the
+# FontAwesome symbol fonts. It drives the LV_FONT_DECLARE and SET_SYMBOL_
+# loops below, so appending full-font names here (via cmakefiles.append)
+# would double-declare every full font and emit garbled SET_SYMBOL_ macros
+# from the "FontAwesome_"-prefix slice.
+cmakefiles = list(fontfiles)
 
 # Create Font Files
 for font in symbols["fonts"]:
@@ -284,6 +366,9 @@ hfile.write("\n\n")
 for fontfile in fontfiles:
     hfile.write(f"LV_FONT_DECLARE(" + fontfile[:-2] + ");\n")
 
+for fontfile in mdifontfiles:
+    hfile.write(f"LV_FONT_DECLARE(" + fontfile[:-2] + ");\n")
+
 hfile.write("\n")
 
 for fontfile in fontfiles:
@@ -295,9 +380,24 @@ for fontfile in fontfiles:
         + ", LV_PART_MAIN); lv_label_set_text(obj, sym);\n"
     )
 
+# SET_MDI_SYMBOL_<size> mirrors SET_SYMBOL_<size> but binds the Material
+# Design Icons font. Slice off the "MaterialDesignIcons_" prefix (len 20)
+# to recover the size.
+for fontfile in mdifontfiles:
+    hfile.write(
+        f"#define SET_MDI_SYMBOL_"
+        + str(fontfile[len("MaterialDesignIcons_") : -2])
+        + "(obj, sym) lv_obj_set_style_text_font(obj, &"
+        + fontfile[:-2]
+        + ", LV_PART_MAIN); lv_label_set_text(obj, sym);\n"
+    )
+
 hfile.write("\n")
 
 for define in symboldefines:
+    hfile.write(define)
+
+for define in mdisymboldefines:
     hfile.write(define)
 
 # Create the CMake file with the list of sources
@@ -308,6 +408,6 @@ with open(
     "w",
 ) as cmake_file:
     cmake_file.write("set(GENERATED_SOURCES\n")
-    for name in cmakefiles:
+    for name in cmakefiles + mdifontfiles:
         cmake_file.write(f"    ${{CMAKE_CURRENT_SOURCE_DIR}}/generated/{name}\n")
     cmake_file.write(")\n")
