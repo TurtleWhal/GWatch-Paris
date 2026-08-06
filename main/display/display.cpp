@@ -365,8 +365,11 @@ void Display::init_graphics()
     // the default for first boot. Reads happen before ui_init so the
     // first frame paints at the user's chosen orientation.
     lvgl_port_lock(0);
-    uint8_t saved_rot = watch.settings.readUint8("rotation", (uint8_t)LV_DISPLAY_ROTATION_90);
-    if (saved_rot > 3) saved_rot = LV_DISPLAY_ROTATION_90;
+    // config.json stores rotation as user-facing degrees (0/90/180/270);
+    // LVGL uses the LV_DISPLAY_ROTATION_* enum which maps directly at
+    // degrees/90. Default 90° for a wrist-worn portrait orientation.
+    int saved_deg = watch.settings.readInt("settings", "rotation", 90);
+    int saved_rot = (saved_deg / 90) & 0x3; // clamp any junk to 0..3
     set_rotation((lv_display_rotation_t)saved_rot);
     ui_init();
     lvgl_port_unlock();

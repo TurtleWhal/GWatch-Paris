@@ -337,12 +337,14 @@ void Display::ui_init() {
   ProductSansRegular_24_fa = ProductSansRegular_24;
   ProductSansRegular_24_fa.fallback = &FontAwesome_24;
 
-  // Primary color comes from the persisted "theme_color" setting; the
-  // palette table lives in screens/debug.cpp so the settings screen
-  // and the boot path agree on the index→color mapping.
+  // Primary colour comes from settings.themecolor in config.json; the
+  // palette table lives in screens/settings.cpp so the settings screen
+  // and the boot path agree on the hex→index mapping.
   // https://vuetifyjs.com/en/styles/colors/#material-colors
-  uint8_t saved_color = watch.settings.readUint8("theme_color", 0);
-  lv_color_t accent = settings_color_at(saved_color);
+  std::string saved_hex = watch.settings.readString(
+      "settings", "themecolor", settings_color_hex_at(0));
+  lv_color_t accent = settings_color_at(
+      settings_color_idx_from_hex(saved_hex.c_str()));
   lv_theme_t *th = lv_theme_default_init(
       lv_display_get_default(), accent, lv_color_hex(0x607D8B),
       true, /* Dark theme?  False = light theme. */

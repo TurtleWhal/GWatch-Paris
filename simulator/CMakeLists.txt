@@ -74,6 +74,11 @@ set(SIM_SRCS
     src/stubs.cpp
     src/sim_placeholders.cpp
     ${PROJECT_ROOT}/main/system/schedule.cpp
+    # Settings.cpp is portable: `#ifdef ESP_PLATFORM` guards the SPIFFS
+    # mount, so on the sim it just fopen()s fs/config.json directly
+    # (relative to the launch dir). The sim's NVS stubs still cover
+    # the legacy uint8/uint16 API for alarms + useSchedule.
+    ${PROJECT_ROOT}/main/system/settings.cpp
     ${PROJECT_ROOT}/managed_components/espressif__cjson/cJSON/cJSON.c
 )
 if(EMSCRIPTEN)
@@ -125,6 +130,19 @@ else()
     target_compile_definitions(gwatch_sim PRIVATE SIM_PLACEHOLDERS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/placeholders")
 endif()
 
+# Point Settings at a sim-specific config file so hand-edits made while
+# testing the simulator stay separate from the ESP-bound fs/config.json.
+# Absolute path so the sim finds its config regardless of the working
+# dir it's launched from (build/, project root, wherever).
+#
+# Web build: preloaded into Emscripten's MEMFS below (see --preload-file)
+# and looked up at /config.json inside the virtual filesystem.
+if(EMSCRIPTEN)
+    target_compile_definitions(gwatch_sim PRIVATE GWATCH_CONFIG_PATH="/config.json")
+else()
+    target_compile_definitions(gwatch_sim PRIVATE GWATCH_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/config.json")
+endif()
+
 # The watch UI was written for ESP-IDF's compilers, which are looser about
 # a couple of things than vanilla clang/gcc on the host:
 target_compile_options(gwatch_sim PRIVATE
@@ -157,6 +175,12 @@ if(EMSCRIPTEN)
         # in Emscripten's MEMFS. fopen("/placeholders/album_art.rgb565")
         # inside sim_placeholders.cpp finds it without network fetches.
         "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/placeholders@/placeholders"
+        # Same trick for config.json — preload into MEMFS at /config.json
+        # so Settings::init can fopen it. GWATCH_CONFIG_PATH is defined
+        # to "/config.json" above for the Emscripten branch. Note that
+        # writes back through fopen("w") land in MEMFS (RAM only) and
+        # are lost when the tab closes — that's fine for testing.
+        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/config.json@/config.json"
     )
     set_target_properties(gwatch_sim PROPERTIES SUFFIX ".html")
     # Make CMake re-link when the shell template or any file in placeholders/
@@ -165,7 +189,7 @@ if(EMSCRIPTEN)
     # shell.html edit gets baked in only after a clean build.
     file(GLOB SIM_PRELOAD_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/placeholders/*")
     set_target_properties(gwatch_sim PROPERTIES
-        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html;${SIM_PRELOAD_FILES}"
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html;${CMAKE_CURRENT_SOURCE_DIR}/config.json;${SIM_PRELOAD_FILES}"
     )
 
     # Wrapper page: index.html is the "polished" entry point that just

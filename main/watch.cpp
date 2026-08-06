@@ -460,11 +460,17 @@ void Watch::init()
     pm_init();
     watch.settings.init();
 
+    // Load schedules from config.json into the Schedule class's
+    // in-memory vectors. Must run after Settings::init has mounted
+    // SPIFFS but before anything reads schedule state — the watchface
+    // update timer calls watch.schedule.getText() every tick.
+    watch.schedule.init();
+
     // Persisted wake preferences. Defaults (both on) apply on first boot
-    // or after an NVS wipe; the settings screen writes these keys back
-    // when toggled.
-    system.tiltwake = settings.readUint8("tiltwake", 1) != 0;
-    system.tiltwake_buzz = settings.readUint8("tilt_buzz", 1) != 0;
+    // or after config.json is missing / wiped; the settings screen
+    // writes these keys back when toggled.
+    system.tiltwake = settings.readBool("settings", "tiltwake", true);
+    system.tiltwake_buzz = settings.readBool("settings", "vibrateontilt", true);
 
     iic_init();
 

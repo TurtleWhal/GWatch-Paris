@@ -1,9 +1,14 @@
 #include "ui.hpp"
 
-// Theme color palette. Indexed by the `theme_color` NVS setting; index 0
-// is the boot default. Order is also the order the swatches appear on
-// the settings screen. Kept here (not in ui_init) so ui_init can read
-// settings_color_at(idx) without duplicating the table.
+#include <cstring>
+#include <strings.h>  // strcasecmp
+
+// Theme color palette. Config.json stores the currently-selected colour
+// as a hex string like "#03a9f4" under settings.themecolor; the swatch
+// index and the hex form are two views of the same table. Order is also
+// the order the swatches appear on the settings screen. Kept here so
+// ui_init can call settings_color_at(idx) without duplicating the
+// table.
 static const lv_color_t SETTINGS_PALETTE[] = {
     LV_COLOR_MAKE(0x03, 0xA9, 0xF4), // Blue (default)
     LV_COLOR_MAKE(0xF4, 0x43, 0x36), // Red
@@ -15,14 +20,42 @@ static const lv_color_t SETTINGS_PALETTE[] = {
     // LV_COLOR_MAKE(0xFF, 0xEB, 0x3B), // Yellow
     // LV_COLOR_MAKE(0xFF, 0xFF, 0xFF), // White
 };
+static const char *const SETTINGS_PALETTE_HEX[] = {
+    "#03A9F4",
+    "#F44336",
+    "#FF5000",
+    "#FF9800",
+    "#4CAF50",
+    "#009688",
+    "#E040FB",
+};
 static constexpr uint8_t SETTINGS_PALETTE_N =
     sizeof(SETTINGS_PALETTE) / sizeof(SETTINGS_PALETTE[0]);
+static_assert(sizeof(SETTINGS_PALETTE_HEX) / sizeof(SETTINGS_PALETTE_HEX[0])
+                  == SETTINGS_PALETTE_N,
+              "palette hex table must match SETTINGS_PALETTE length");
 
 uint8_t settings_color_count() { return SETTINGS_PALETTE_N; }
 lv_color_t settings_color_at(uint8_t idx) {
   if (idx >= SETTINGS_PALETTE_N)
     idx = 0;
   return SETTINGS_PALETTE[idx];
+}
+const char *settings_color_hex_at(uint8_t idx) {
+  if (idx >= SETTINGS_PALETTE_N)
+    idx = 0;
+  return SETTINGS_PALETTE_HEX[idx];
+}
+// Case-insensitive so a user-edited config with lowercase like
+// "#03a9f4" still round-trips. Falls back to 0 if the hex doesn't
+// match any palette entry (e.g. an old / unknown colour).
+uint8_t settings_color_idx_from_hex(const char *hex) {
+  if (!hex) return 0;
+  for (uint8_t i = 0; i < SETTINGS_PALETTE_N; i++) {
+    if (strcasecmp(hex, SETTINGS_PALETTE_HEX[i]) == 0)
+      return i;
+  }
+  return 0;
 }
 
 lv_obj_t *create_setting(lv_obj_t *parent, const char *name, bool state,
@@ -103,7 +136,11 @@ static lv_obj_t *build_color_row(lv_obj_t *parent) {
   lv_obj_set_style_pad_row(row, 4, 0);
   lv_obj_set_scroll_dir(row, LV_DIR_NONE);
 
-  uint8_t current = watch.settings.readUint8("theme_color", 0);
+  // Read the persisted colour as a hex string from config.json and
+  // map it back to a palette index for the UI. Unknown hex → index 0.
+  std::string cur_hex = watch.settings.readString("settings", "themecolor",
+                                                  settings_color_hex_at(0));
+  uint8_t current = settings_color_idx_from_hex(cur_hex.c_str());
 
   for (uint8_t i = 0; i < settings_color_count(); i++) {
     lv_obj_t *btn = lv_button_create(row);
@@ -134,7 +171,8 @@ static lv_obj_t *build_color_row(lv_obj_t *parent) {
                 sib, si == picked ? lv_color_white() : lv_color_hex(0x222222),
                 0);
           }
-          watch.settings.writeUint8("theme_color", picked);
+          watch.settings.writeString("settings", "themecolor",
+                                     settings_color_hex_at(picked));
           apply_theme_color(picked);
           haptic_play(false, 30, 0);
         },
@@ -147,12 +185,13 @@ static lv_obj_t *build_color_row(lv_obj_t *parent) {
 // -------------------- Rotation row --------------------
 
 // Apply a rotation and persist. Shared by the settings-screen buttons
-// below and the quick-settings rotate icon. The rotation value is the
-// raw LV_DISPLAY_ROTATION_* enum (0..3) — written through unchanged
-// because lv_display_rotation_t and uint8_t share a fixed mapping.
+// below and the quick-settings rotate icon. LVGL's rotation enum
+// (0..3) maps directly to (0, 90, 180, 270) degrees — write the
+// user-facing degree value into config.json so the file stays
+// intuitive to hand-edit.
 void settings_apply_rotation(lv_display_rotation_t rot) {
   watch.display.set_rotation(rot);
-  watch.settings.writeUint8("rotation", (uint8_t)rot);
+  watch.settings.writeInt("settings", "rotation", (int)rot * 90);
 }
 
 static lv_obj_t *build_rotation_row(lv_obj_t *parent) {
@@ -338,14 +377,14 @@ lv_obj_t *settingsscreen_create() {
   create_setting(scr, "Tilt to Wake", watch.system.tiltwake, [](lv_event_t *e) {
     bool on = lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED);
     watch.system.tiltwake = on;
-    watch.settings.writeUint8("tiltwake", on ? 1 : 0);
+    watch.settings.writeBool("settings", "tiltwake", on);
   });
   create_setting(
       scr, "Vibrate on Wake", watch.system.tiltwake_buzz, [](lv_event_t *e) {
         bool on =
             lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED);
         watch.system.tiltwake_buzz = on;
-        watch.settings.writeUint8("tilt_buzz", on ? 1 : 0);
+        watch.settings.writeBool("settings", "vibrateontilt", on);
       });
 
   section_label(scr, "Rotation");

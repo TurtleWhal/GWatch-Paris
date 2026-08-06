@@ -58,12 +58,24 @@ idf_component_register(
         esp_lcd
         bt
         mbedtls    # for mbedtls_base64_decode in notification image transfer
+        spiffs     # /spiffs/config.json filesystem for user settings/schedule/HA
         # v6.0: driver/* headers split out per-peripheral.
         esp_driver_ledc
         esp_driver_i2c
         esp_driver_spi
         esp_driver_gpio
 )
+
+# The "storage" partition (SPIFFS, mounted at /spiffs by Settings::init
+# — see partitions.csv) is deliberately NOT built or flashed by this
+# project. Auto-flashing config.json every `idf.py flash` wiped any
+# settings the user changed on-watch through the settings screen; the
+# fix is to leave that partition alone entirely and manage config.json
+# out-of-band with a separate tool (mkspiffs + esptool, the ESP-IDF VS
+# Code "Flash SPIFFS to Device" command, an lv_fs-style uploader, or
+# eventually the {t:"cfg-set"} BLE path). The Settings class handles a
+# missing /spiffs/config.json gracefully by returning its in-source
+# defaults, so a virgin device without config still boots cleanly.
 
 # liblvgl.a references lv_malloc_core / lv_free_core / ... — our
 # LV_USE_CUSTOM_MALLOC hooks in system/lv_mem_psram.c that route LVGL's heap

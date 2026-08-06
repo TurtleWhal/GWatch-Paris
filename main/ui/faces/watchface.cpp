@@ -1,10 +1,12 @@
 #include "ui.hpp"
 #include <sys/time.h>
+#include <string.h>
 
 // Registry of watch faces the user can pick between. Index 0 is the boot
-// default; the selected index is persisted in NVS under "watchface". Add a
-// new face by writing a `*_create` / `*_update` pair (signatures must match
-// the existing ones) and dropping an entry here.
+// default; the selected face is persisted by NAME in config.json under
+// settings.watchface (e.g. "Analog") so the file is self-documenting.
+// Add a new face by writing a `*_create` / `*_update` pair (signatures
+// must match the existing ones) and dropping an entry here.
 typedef struct
 {
     const char *name;
@@ -35,15 +37,24 @@ const char *watchface_name_at(uint8_t idx)
 
 uint8_t watchface_active_idx() { return g_active_face_idx; }
 
-// Build the face obj for whatever index NVS says is active. Caller owns the
-// returned obj (it's placed under `parent`). Also caches the index in
-// `g_active_face_idx` so watchface_update() can dispatch to the right
-// `*_update` without re-reading NVS every frame.
+// Build the face obj for whatever face config.json says is active.
+// Caller owns the returned obj (it's placed under `parent`). Also
+// caches the index in `g_active_face_idx` so watchface_update() can
+// dispatch to the right `*_update` without re-reading the config
+// every frame. Config stores the face by its display name ("Analog",
+// "Rotary", …) rather than by index so hand-editing config.json is
+// self-documenting; we resolve the name back to an index here.
 static lv_obj_t *build_active_face(lv_obj_t *parent)
 {
-    uint8_t idx = watch.settings.readUint8("watchface", 0);
-    if (idx >= WATCHFACE_N)
-        idx = 0;
+    std::string name = watch.settings.readString(
+        "settings", "watchface", WATCHFACES[0].name);
+    uint8_t idx = 0;
+    for (uint8_t i = 0; i < WATCHFACE_N; i++) {
+        if (strcmp(name.c_str(), WATCHFACES[i].name) == 0) {
+            idx = i;
+            break;
+        }
+    }
     g_active_face_idx = idx;
     return WATCHFACES[idx].create(parent);
 }
@@ -89,7 +100,7 @@ void watchface_set_active(uint8_t idx)
     if (idx >= WATCHFACE_N || idx == g_active_face_idx)
         return;
 
-    watch.settings.writeUint8("watchface", idx);
+    watch.settings.writeString("settings", "watchface", WATCHFACES[idx].name);
 
     lv_obj_t *parent = lv_obj_get_parent(watchface);
     lv_obj_delete(watchface);

@@ -2,3 +2,4 @@
 /managed_components
 /.vscode
 /.cache
+fs/config.json

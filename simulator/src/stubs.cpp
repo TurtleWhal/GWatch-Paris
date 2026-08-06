@@ -376,40 +376,10 @@ extern "C" esp_err_t nvs_erase_all(nvs_handle_t h)
 // Watch subsystems
 // ===========================================================================
 
-// ---- Settings — pass through to NVS --------------------------------------
-void Settings::init() {}
-
-void Settings::writeUint8(const char *key, uint8_t v)
-{
-    nvs_handle_t h; nvs_open("set", NVS_READWRITE, &h);
-    nvs_set_u8(h, key, v);
-    nvs_close(h);
-}
-
-uint8_t Settings::readUint8(const char *key, uint8_t def)
-{
-    nvs_handle_t h; nvs_open("set", NVS_READONLY, &h);
-    uint8_t v = def;
-    nvs_get_u8(h, key, &v);
-    nvs_close(h);
-    return v;
-}
-
-void Settings::writeUint16(const char *key, uint16_t v)
-{
-    nvs_handle_t h; nvs_open("set", NVS_READWRITE, &h);
-    nvs_set_u16(h, key, v);
-    nvs_close(h);
-}
-
-uint16_t Settings::readUint16(const char *key, uint16_t def)
-{
-    nvs_handle_t h; nvs_open("set", NVS_READONLY, &h);
-    uint16_t v = def;
-    nvs_get_u16(h, key, &v);
-    nvs_close(h);
-    return v;
-}
+// Settings implementation now comes from the real main/system/settings.cpp
+// (added to sim sources). The legacy uint8/uint16 methods route through
+// the nvs_* fakes above; the new JSON methods read/write fs/config.json
+// directly via fopen — same file the ESP flashes into SPIFFS.
 
 // ---- Display -------------------------------------------------------------
 // On the host, set_backlight/set_rotation are the only state we actually
@@ -521,6 +491,12 @@ void Watch::init()
     chrono           = {};
 
     settings.init();
+    // Load schedules from config.json into the Schedule class's
+    // in-memory vectors. Must run after settings.init has surfaced the
+    // config file path but before anything reads schedule state —
+    // watchface_update() calls watch.schedule.getText() every tick
+    // once the sim UI is up.
+    schedule.init();
     display.init(nullptr);
 }
 

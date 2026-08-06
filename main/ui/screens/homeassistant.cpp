@@ -1,4 +1,5 @@
 #include "ble.hpp"
+#include "settings.hpp"
 #include "ui.hpp"
 
 #include "cJSON.h"
@@ -6,12 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
-#define HA_URL "ha.iegs.synology.me"
-#define HA_API_KEY                                                             \
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."                                      \
-  "eyJpc3MiOiI0N2YwMTkxYzU5YWU0YTVjYmQ2NjQ0Y2E0MmNlYzAyYyIsImlhdCI6MTc4NDQ4MD" \
-  "I2MiwiZXhwIjoyMDk5ODQwMjYyfQ.PguRDlPL9GNaGTKmyyRE0UNoqZMyj4mARJUQUkhE8AA"
+#include <string>
+#include <vector>
 
 #define HA_ENDPOINT_LIGHT_ON "api/services/light/turn_on"
 #define HA_ENDPOINT_LIGHT_OFF "api/services/light/turn_off"
@@ -41,53 +38,143 @@ enum EntityType {
 uint8_t cardType[] = {CARD_INFO, CARD_SLIDER, CARD_BUTTON, CARD_SLIDER_3,
                       CARD_SLIDER};
 
+// Loaded once from homeassistant.url / homeassistant.apiKey in
+// config.json at screen-create time. Referenced inline by every
+// send_gb helper below (which used to bake HA_URL / HA_API_KEY into
+// the string literal via preprocessor concat). Kept as std::string so
+// c_str() stays stable for the life of the process — these never get
+// mutated after init.
+static std::string s_ha_url;
+static std::string s_ha_api_key;
+
 struct HAEntity {
-  lv_obj_t *card;
-  EntityType type;
-  char *id;
-  char *name;
-  char *icon;
-  lv_color_t color;
-  char *unit; // suffix shown after an info card's value, e.g. "°F" / "W"
+  lv_obj_t *card = nullptr;
+  EntityType type = HA_INFO;
+  // Owned strings — cJSON tree is deleted after init, so we copy out.
+  // std::string keeps c_str() stable as long as the string isn't
+  // mutated, and the entities vector is reserve()d to prevent
+  // reallocation, so passing c_str() into LVGL callbacks is safe.
+  std::string id;
+  std::string name;
+  std::string icon;
+  std::string unit;
+  lv_color_t color = {};
 };
 
-// HAEntity temp;
-// HAEntity power;
-// HAEntity lights;
-// HAEntity fan;
-// HAEntity window;
-// HAEntity largeshade;
-// HAEntity smallshade;
-// HAEntity pc;
-
-#define NUM_ENTITIES 8
-
-HAEntity entities[NUM_ENTITIES];
+// Dynamic entity list. Populated from homeassistant.entities[] in
+// config.json. Reserve()d up-front to the count read from the JSON so
+// subsequent emplace_backs don't move existing HAEntities — the
+// LVGL event callbacks stash `entity.id.c_str()` as user_data and
+// would dangle on a realloc.
+static std::vector<HAEntity> entities;
 
 void homeassistant_update(lv_event_t *e);
 void update_cards();
 
-HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
-                        const char *name, const char *symbol,
-                        lv_color_t color, const char *unit = "%") {
-  lv_obj_t *card = lv_obj_create(parent);
+// Type-name string from config.json ("info" / "light" / "fan" /
+// "cover" / "button") to the internal EntityType enum. Unknown /
+// missing types fall through to HA_INFO so at worst you get a read-
+// only card that never mutates HA state.
+static EntityType type_from_string(const char *s) {
+  if (!s)                        return HA_INFO;
+  if (strcmp(s, "light")  == 0)  return HA_LIGHT;
+  if (strcmp(s, "fan")    == 0)  return HA_FAN;
+  if (strcmp(s, "cover")  == 0)  return HA_COVER;
+  if (strcmp(s, "button") == 0)  return HA_BUTTON;
+  return HA_INFO;
+}
 
-  uint8_t cardtype = cardType[type];
+// The accent colour for a card is derived from its type rather than
+// stored per-entity in config.json — keeps the config schema minimal
+// and enforces visual consistency across similar entities. Numbers
+// carry over from the original hardcoded call sites so this migration
+// is a no-op visually.
+static lv_color_t color_for_type(EntityType t) {
+  switch (t) {
+    case HA_INFO:   return lv_color_make(255, 120, 0);   // orange
+    case HA_LIGHT:  return lv_color_make(255, 160, 0);   // amber
+    case HA_FAN:    return lv_color_make( 76, 200, 80);  // green
+    case HA_COVER:  return lv_color_make( 33, 150, 243); // blue
+    case HA_BUTTON: return lv_color_make( 68, 115, 158); // slate
+  }
+  return lv_color_white();
+}
+
+// Read entities + url + apiKey out of config.json's "homeassistant"
+// section into the static vectors above. Called once from
+// homeassistant_create. Uses its own file open + cJSON parse rather
+// than reaching into Settings' locked tree — same pattern schedule.cpp
+// uses, and the extra small I/O at boot is fine.
+static void ha_load_config() {
+  s_ha_url.clear();
+  s_ha_api_key.clear();
+  entities.clear();
+
+  FILE *f = fopen(GWATCH_CONFIG_PATH, "r");
+  if (!f) return;
+  fseek(f, 0, SEEK_END);
+  long sz = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if (sz <= 0 || sz > 128 * 1024) { fclose(f); return; }
+  char *buf = (char *)malloc((size_t)sz + 1);
+  if (!buf) { fclose(f); return; }
+  size_t got = fread(buf, 1, (size_t)sz, f);
+  buf[got] = '\0';
+  fclose(f);
+
+  cJSON *root = cJSON_Parse(buf);
+  free(buf);
+  if (!root) return;
+
+  cJSON *ha = cJSON_GetObjectItemCaseSensitive(root, "homeassistant");
+  if (!cJSON_IsObject(ha)) { cJSON_Delete(root); return; }
+
+  cJSON *url    = cJSON_GetObjectItemCaseSensitive(ha, "url");
+  cJSON *apikey = cJSON_GetObjectItemCaseSensitive(ha, "apiKey");
+  if (cJSON_IsString(url)    && url->valuestring)    s_ha_url     = url->valuestring;
+  if (cJSON_IsString(apikey) && apikey->valuestring) s_ha_api_key = apikey->valuestring;
+
+  cJSON *arr = cJSON_GetObjectItemCaseSensitive(ha, "entities");
+  if (cJSON_IsArray(arr)) {
+    // Reserve so subsequent emplace_backs don't reallocate — see
+    // comment on `entities` above for why that matters.
+    entities.reserve((size_t)cJSON_GetArraySize(arr));
+    cJSON *ent;
+    cJSON_ArrayForEach(ent, arr) {
+      if (!cJSON_IsObject(ent)) continue;
+      HAEntity e;
+      cJSON *n  = cJSON_GetObjectItemCaseSensitive(ent, "name");
+      cJSON *id = cJSON_GetObjectItemCaseSensitive(ent, "entity_id");
+      cJSON *t  = cJSON_GetObjectItemCaseSensitive(ent, "type");
+      cJSON *ic = cJSON_GetObjectItemCaseSensitive(ent, "icon");
+      cJSON *u  = cJSON_GetObjectItemCaseSensitive(ent, "unit");
+      if (cJSON_IsString(n)  && n->valuestring)  e.name = n->valuestring;
+      if (cJSON_IsString(id) && id->valuestring) e.id   = id->valuestring;
+      if (cJSON_IsString(ic) && ic->valuestring) e.icon = ic->valuestring;
+      if (cJSON_IsString(u)  && u->valuestring)  e.unit = u->valuestring;
+      e.type  = type_from_string(cJSON_IsString(t) ? t->valuestring : nullptr);
+      e.color = color_for_type(e.type);
+      entities.push_back(std::move(e));
+    }
+  }
+  cJSON_Delete(root);
+}
+
+// Build the card widget tree for one entity. Same layout the previous
+// hardcoded caller produced — only the source of the params changed.
+static void build_card(lv_obj_t *parent, HAEntity &entity) {
+  lv_obj_t *card = lv_obj_create(parent);
+  entity.card = card;
+
+  uint8_t cardtype = cardType[entity.type];
+  lv_color_t color = entity.color;
 
 // HA: 242x110
 #define SF 110 / 110
 
   uint8_t width = 200;
-
-  // if (type == CARD_INFO) {
-  //   width = 96;
-  // }
-
   uint8_t height = 56;
-
-  if (cardtype == CARD_SLIDER || cardtype == CARD_SLIDER_3) {
-    height = 110;
-  }
+  if (cardtype == CARD_SLIDER || cardtype == CARD_SLIDER_3) height = 110;
 
   lv_obj_set_size(card, width * SF, height * SF);
   lv_obj_set_style_bg_color(card, lv_color_make(28, 28, 28), 0);
@@ -107,14 +194,14 @@ HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
   lv_obj_set_pos(iconbg, 10 * SF, 10 * SF);
 
   lv_obj_t *icon = lv_label_create(iconbg);
-  SET_MDI_SYMBOL_22(icon, symbol);
+  SET_MDI_SYMBOL_22(icon, entity.icon.c_str());
   lv_obj_set_style_text_color(icon, color, 0);
   lv_obj_center(icon);
 
   lv_obj_t *namelbl = lv_label_create(card);
   lv_obj_set_style_text_font(namelbl, &ProductSansRegular_14, 0);
   lv_obj_set_pos(namelbl, 56 * SF, 10 * SF);
-  lv_label_set_text(namelbl, name);
+  lv_label_set_text(namelbl, entity.name.c_str());
 
   if (cardtype != CARD_BUTTON) {
     lv_obj_t *valuelbl = lv_label_create(card);
@@ -145,21 +232,22 @@ HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
       lv_slider_set_value(slider, 100, 0);
     }
 
+    // Pass the entity's id via user_data. entities.reserve() before the
+    // load loop guarantees c_str() stays stable for the process lifetime.
+    const char *id_ptr = entity.id.c_str();
+
     // All three send on LV_EVENT_RELEASED (finger lifted) rather than
     // LV_EVENT_VALUE_CHANGED, so a single command goes out when the drag
-    // finishes instead of one per intermediate value. The value label and
-    // accent color still track live off VALUE_CHANGED (see the cb below).
-    // Bonus: the response handler's synthetic VALUE_CHANGED (used to refresh
-    // the label from an incoming state) no longer echoes a command back to HA.
-    if (type == HA_LIGHT) {
+    // finishes instead of one per intermediate value.
+    if (entity.type == HA_LIGHT) {
       lv_obj_add_event_cb(
           slider,
           [](lv_event_t *e) {
             std::string message =
-                std::string("{t:\"http\", url:\"https://" HA_URL
-                            "/" HA_ENDPOINT_LIGHT_ON "\", method:\"post\", "
-                            "headers:{\"Authorization\":\"Bearer " HA_API_KEY
-                            "\", \"Content-Type\":\"application/json\"}, "
+                std::string("{t:\"http\", url:\"https://") + s_ha_url +
+                std::string("/" HA_ENDPOINT_LIGHT_ON "\", method:\"post\", "
+                            "headers:{\"Authorization\":\"Bearer ") + s_ha_api_key +
+                std::string("\", \"Content-Type\":\"application/json\"}, "
                             "body:{\"entity_id\":\"") +
                 std::string((const char *)lv_event_get_user_data(e)) +
                 std::string("\", \"brightness\":") +
@@ -168,17 +256,17 @@ HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
                 std::string("}}");
             ble.send_gb(message.c_str());
           },
-          LV_EVENT_RELEASED, (void *)id);
-    } else if (type == HA_COVER) {
+          LV_EVENT_RELEASED, (void *)id_ptr);
+    } else if (entity.type == HA_COVER) {
       lv_obj_add_event_cb(
           slider,
           [](lv_event_t *e) {
             std::string message =
-                std::string("{t:\"http\", url:\"https://" HA_URL
-                            "/" HA_ENDPOINT_COVER_POSITION
+                std::string("{t:\"http\", url:\"https://") + s_ha_url +
+                std::string("/" HA_ENDPOINT_COVER_POSITION
                             "\", method:\"post\", "
-                            "headers:{\"Authorization\":\"Bearer " HA_API_KEY
-                            "\", \"Content-Type\":\"application/json\"}, "
+                            "headers:{\"Authorization\":\"Bearer ") + s_ha_api_key +
+                std::string("\", \"Content-Type\":\"application/json\"}, "
                             "body:{\"entity_id\":\"") +
                 std::string((const char *)lv_event_get_user_data(e)) +
                 std::string("\", \"position\":") +
@@ -187,30 +275,28 @@ HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
                 std::string("}}");
             ble.send_gb(message.c_str());
           },
-          LV_EVENT_RELEASED, (void *)id);
-    } else if (type == HA_FAN) {
+          LV_EVENT_RELEASED, (void *)id_ptr);
+    } else if (entity.type == HA_FAN) {
       lv_obj_add_event_cb(
           slider,
           [](lv_event_t *e) {
             uint32_t value = lv_slider_get_value(lv_event_get_target_obj(e));
             value = 33.3f * value;
-
-            if (value == 99)
-              value = 100;
+            if (value == 99) value = 100;
 
             std::string message =
-                std::string("{t:\"http\", url:\"https://" HA_URL
-                            "/" HA_ENDPOINT_FAN_PERCENTAGE
+                std::string("{t:\"http\", url:\"https://") + s_ha_url +
+                std::string("/" HA_ENDPOINT_FAN_PERCENTAGE
                             "\", method:\"post\", "
-                            "headers:{\"Authorization\":\"Bearer " HA_API_KEY
-                            "\", \"Content-Type\":\"application/json\"}, "
+                            "headers:{\"Authorization\":\"Bearer ") + s_ha_api_key +
+                std::string("\", \"Content-Type\":\"application/json\"}, "
                             "body:{\"entity_id\":\"") +
                 std::string((const char *)lv_event_get_user_data(e)) +
                 std::string("\", \"percentage\":") + std::to_string(value) +
                 std::string("}}");
             ble.send_gb(message.c_str());
           },
-          LV_EVENT_RELEASED, (void *)id);
+          LV_EVENT_RELEASED, (void *)id_ptr);
     }
 
     lv_obj_add_event_cb(
@@ -222,17 +308,10 @@ HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
 
           if (lv_slider_get_max_value(slider) == 3) {
             value = 33.3f * value;
-
-            if (value == 99)
-              value = 100;
+            if (value == 99) value = 100;
           }
 
-          // ESP_LOGI("homeassistant", "Slider changed to %li\n", value);
-
           // Card child order: 0=iconbg, 1=namelbl, 2=valuelbl, 3=slider.
-          // (icon is a child of iconbg, not the card.) Index 3 is the slider
-          // itself — writing label text onto it corrupts the slider and snaps
-          // its value to 0.
           lv_obj_t *valuelbl = lv_obj_get_child(card, 2);
           lv_label_set_text_fmt(valuelbl, "%li%%", value);
 
@@ -240,74 +319,25 @@ HAEntity create_ha_card(lv_obj_t *parent, EntityType type, const char *id,
           lv_obj_t *icon = lv_obj_get_child(iconbg, 0);
 
           // The accent color is packed into the event user_data as a 32-bit
-          // RGB value (see the add_event_cb below). Passing &color directly
-          // would be a dangling pointer — `color` is ha_card's stack
-          // parameter, gone by the time this fires.
+          // RGB value (see the add_event_cb below).
           lv_color_t color =
               lv_color_hex((uint32_t)(uintptr_t)lv_event_get_user_data(e));
 
-          if (value == 0) {
-            color = lv_color_make(189, 189, 189);
-          }
+          if (value == 0) color = lv_color_make(189, 189, 189);
 
           lv_obj_set_style_bg_color(iconbg, color, 0);
           lv_obj_set_style_text_color(icon, color, 0);
-
           lv_obj_set_style_bg_color(slider, color, LV_PART_MAIN);
           lv_obj_set_style_bg_color(slider, color, LV_PART_INDICATOR);
         },
         LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)lv_color_to_u32(color));
   }
-
-  HAEntity entity = HAEntity{card,         type,  (char *)id,   (char *)name,
-                             (char *)icon, color, (char *)unit};
-
-  // lv_obj_add_event_cb(
-  //     card,
-  //     [](lv_event_t *e) {
-  //       HAEntity *entity = (HAEntity *)lv_event_get_user_data(e);
-  //       char *endpoint = NULL;
-
-  //       switch (entity->type) {
-  //       case HA_BUTTON:
-  //         endpoint = HA_ENDPOINT_BUTTON_PRESS;
-  //         break;
-  //       case HA_LIGHT:
-  //         endpoint = HA_ENDPOINT_LIGHT_TOGGLE;
-  //         break;
-  //       case HA_FAN:
-  //         endpoint = HA_ENDPOINT_FAN_TOGGLE;
-  //         break;
-  //       case HA_COVER:
-  //         endpoint = HA_ENDPOINT_COVER_TOGGLE;
-  //         break;
-  //       case HA_INFO:
-  //         break;
-  //       }
-
-  //       if (endpoint != NULL) {
-  //         std::string message =
-  //             std::string("{t:\"http\", url:\"https://" HA_URL
-  //                         "/") + endpoint + "\", method:\"post\", "
-  //                         "headers:{\"Authorization\":\"Bearer " HA_API_KEY
-  //                         "\", \"Content-Type\":\"application/json\"}, "
-  //                         "body:{\"entity_id\":\"" +
-  //             std::string((const char *)lv_event_get_user_data(e)) +
-  //             std::string("\"}}");
-  //         ble.send_gb(message.c_str());
-  //       }
-
-  //       update_cards();
-  //     },
-  //     LV_EVENT_CLICKED, (void *)&entity);
-
-  return entity;
 }
 
 lv_obj_t *homeassistant_create(lv_obj_t *parent) {
   lv_obj_t *scr = create_screen(parent);
 
-  // return scr;
+  ha_load_config();
 
   lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_flex_track_place(scr, LV_FLEX_ALIGN_CENTER, 0);
@@ -315,44 +345,12 @@ lv_obj_t *homeassistant_create(lv_obj_t *parent) {
   lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_set_style_pad_row(scr, 8, 0);
-
   lv_obj_set_style_pad_bottom(scr, 50, 0);
-
-  // lv_obj_t *scrlabel = lv_label_create(scr);
-  // lv_label_set_text(scrlabel, "Home Assistant");
-  // lv_obj_set_style_text_font(scrlabel, &ProductSansRegular_20, 0);
-  // lv_obj_set_style_text_color(scrlabel, lv_color_white(), 0);
-  // // lv_obj_set_style_text_align(appslabel, LV_TEXT_ALIGN_CENTER, 0);
-
-  // lv_obj_set_style_pad_top(scrlabel, 12, 0);
-  // lv_obj_set_style_pad_bottom(scrlabel, 8, 0);
-
   lv_obj_set_style_pad_top(scr, 50, 0);
 
-  entities[0] =
-      create_ha_card(scr, HA_INFO, "sensor.garrett_temperature", "Garrett Temp",
-                     MDI_THERMOMETER, lv_color_make(255, 120, 0), "°F");
-  entities[1] = create_ha_card(scr, HA_INFO, "sensor.garrett_stairs_3_1min",
-                               "Garrett Power", MDI_LIGHTNING,
-                               lv_color_make(255, 120, 0), "W");
-
-  entities[2] =
-      create_ha_card(scr, HA_LIGHT, "light.main_lights", "Family Room Main",
-                     MDI_LIGHTBULB, lv_color_make(255, 160, 0));
-  entities[3] = create_ha_card(scr, HA_FAN, "fan.garrett_fan", "Garrett Fan",
-                               MDI_FAN, lv_color_make(76, 200, 80));
-  entities[4] =
-      create_ha_card(scr, HA_COVER, "cover.garrett_window", "Garrett Window",
-                     MDI_WINDOW, lv_color_make(28, 150, 255));
-  entities[5] = create_ha_card(
-      scr, HA_COVER, "cover.garrett_large_shades_cover", "Garrett Large Shades",
-      MDI_WINDOW_SHADE, lv_color_make(33, 150, 243));
-  entities[6] = create_ha_card(
-      scr, HA_COVER, "cover.garrett_small_shades_cover", "Garrett Small Shades",
-      MDI_WINDOW_SHADE, lv_color_make(33, 150, 243));
-  entities[7] = create_ha_card(scr, HA_BUTTON, "input_button.wake_garrett_pc",
-                               "Garrett Wake PC", MDI_DESKTOP_PC,
-                               lv_color_make(68, 115, 158));
+  for (HAEntity &entity : entities) {
+    build_card(scr, entity);
+  }
 
   lv_obj_add_event_cb(scr, homeassistant_update, LV_EVENT_SCREEN_LOADED, NULL);
 
@@ -360,32 +358,20 @@ lv_obj_t *homeassistant_create(lv_obj_t *parent) {
 }
 
 void update_cards() {
-  for (uint8_t i = 0; i < NUM_ENTITIES; i++) {
-    // Info-only cards (HA_INFO) have no backing entity — skip them so we
-    // don't GET /api/states/ with an empty id.
-    if (!entities[i].id || entities[i].id[0] == '\0')
-      continue;
+  for (HAEntity &entity : entities) {
+    if (entity.id.empty()) continue;
 
-    // The id is a runtime value, so the URL must be built at runtime:
-    // `"literal" + char* + "literal"` is pointer arithmetic, not
-    // concatenation, and send_gb() wants a C string. std::string handles it.
     std::string msg =
-        std::string("{t:\"http\", url:\"https://" HA_URL "/api/states/") +
-        entities[i].id +
-        "\", method:\"get\", headers:{\"Authorization\":\"Bearer " HA_API_KEY
-        "\", \"Content-Type\":\"application/json\"}}";
+        std::string("{t:\"http\", url:\"https://") + s_ha_url +
+        std::string("/api/states/") + entity.id +
+        std::string("\", method:\"get\", headers:{\"Authorization\":\"Bearer ") + s_ha_api_key +
+        std::string("\", \"Content-Type\":\"application/json\"}}");
     ble.send_gb(msg.c_str());
   }
 }
 
 void homeassistant_update(lv_event_t *e) {
   update_cards();
-  // ble.send_gb(
-  //     "{t:\"http\",
-  //     url:\"https://ha.iegs.synology.me/api/services/light/turn_off\",
-  //     method:\"post\", headers:{\"Authorization\":\"Bearer " HA_API_KEY "\",
-  //     \"Content-Type\":\"application/json\"},
-  //     body:{\"entity_id\":\"light.main_lights\"}}");
 }
 
 // Map a Home Assistant entity's state + attributes onto a 0..100 level for
@@ -396,29 +382,25 @@ static int ha_level_from_state(EntityType type, const char *state,
   bool on = state && (strcmp(state, "on") == 0 || strcmp(state, "open") == 0);
   switch (type) {
   case HA_LIGHT: {
-    if (!on)
-      return 0;
+    if (!on) return 0;
     cJSON *b =
         attrs ? cJSON_GetObjectItemCaseSensitive(attrs, "brightness") : nullptr;
     if (cJSON_IsNumber(b))
-      return (int)(b->valuedouble * 100.0 / 255.0 + 0.5); // 0..255 -> 0..100
+      return (int)(b->valuedouble * 100.0 / 255.0 + 0.5);
     return 100;
   }
   case HA_FAN: {
-    if (!on)
-      return 0;
+    if (!on) return 0;
     cJSON *p =
         attrs ? cJSON_GetObjectItemCaseSensitive(attrs, "percentage") : nullptr;
-    if (cJSON_IsNumber(p))
-      return (int)p->valuedouble;
+    if (cJSON_IsNumber(p)) return (int)p->valuedouble;
     return 100;
   }
   case HA_COVER: {
     cJSON *pos =
         attrs ? cJSON_GetObjectItemCaseSensitive(attrs, "current_position")
               : nullptr;
-    if (cJSON_IsNumber(pos))
-      return (int)pos->valuedouble;
+    if (cJSON_IsNumber(pos)) return (int)pos->valuedouble;
     return on ? 100 : 0;
   }
   default:
@@ -432,40 +414,31 @@ static int ha_level_from_state(EntityType type, const char *state,
 // Matches entity_id to a card and updates its slider + value label.
 void homeassistant_response_recieved(const char *resp_json) {
   cJSON *root = cJSON_Parse(resp_json);
-  if (!root)
-    return;
+  if (!root) return;
 
   cJSON *idj = cJSON_GetObjectItemCaseSensitive(root, "entity_id");
   if (cJSON_IsString(idj) && idj->valuestring) {
-    int idx = -1;
-    for (uint8_t i = 0; i < NUM_ENTITIES; i++) {
-      if (entities[i].id && strcmp(entities[i].id, idj->valuestring) == 0) {
-        idx = i;
-        break;
-      }
+    HAEntity *hit = nullptr;
+    for (HAEntity &e : entities) {
+      if (e.id == idj->valuestring) { hit = &e; break; }
     }
 
-    if (idx >= 0) {
+    if (hit) {
       cJSON *statej = cJSON_GetObjectItemCaseSensitive(root, "state");
       const char *state = cJSON_IsString(statej) ? statej->valuestring : "";
       cJSON *attrs = cJSON_GetObjectItemCaseSensitive(root, "attributes");
-      int level = ha_level_from_state(entities[idx].type, state, attrs);
+      int level = ha_level_from_state(hit->type, state, attrs);
 
-      uint8_t ct = cardType[entities[idx].type];
+      uint8_t ct = cardType[hit->type];
 
       // Runs on the BLE rx task, not the LVGL task — hold the port lock
       // around the widget mutation.
       if ((ct == CARD_SLIDER || ct == CARD_SLIDER_3 || ct == CARD_INFO) &&
           lvgl_port_lock(0)) {
-        lv_obj_t *card = entities[idx].card;
+        lv_obj_t *card = hit->card;
         if (ct == CARD_INFO) {
-          // Info card: show the sensor state followed by its unit. The value
-          // label is child 2 (iconbg=0, namelbl=1, valuelbl=2; no slider), and
-          // the unit string carries any spacing it needs. Numeric states are
-          // trimmed to a single decimal (whole numbers show none); non-numeric
-          // states (e.g. "unavailable") pass through verbatim.
           lv_obj_t *valuelbl = lv_obj_get_child(card, 2);
-          const char *unit = entities[idx].unit ? entities[idx].unit : "";
+          const char *unit = hit->unit.c_str();
           char buf[48];
           char *endp = nullptr;
           double v = strtod(state, &endp);
@@ -483,8 +456,6 @@ void homeassistant_response_recieved(const char *resp_json) {
               lv_obj_get_child(card, lv_obj_get_child_count(card) - 1);
           int32_t sval = (ct == CARD_SLIDER_3) ? (level * 3 + 50) / 100 : level;
           lv_slider_set_value(slider, sval, LV_ANIM_OFF);
-          // Reuse the slider's own VALUE_CHANGED handler to refresh the value
-          // label and accent color from the new position.
           lv_obj_send_event(slider, LV_EVENT_VALUE_CHANGED, NULL);
         }
         lvgl_port_unlock();

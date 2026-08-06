@@ -158,6 +158,13 @@ lv_obj_t *settingsscreen_create();
 // saved primary color.
 uint8_t settings_color_count();
 lv_color_t settings_color_at(uint8_t idx);
+// Hex form ("#RRGGBB") of the palette entry at idx — matches what
+// gets written into config.json under settings.themecolor. Out-of-
+// range idx clamps to 0.
+const char *settings_color_hex_at(uint8_t idx);
+// Reverse mapping: hex string → palette index. Case-insensitive.
+// Unknown / malformed hex falls back to index 0.
+uint8_t settings_color_idx_from_hex(const char *hex);
 
 // Rotation setter that also persists the value to NVS. Quick-settings
 // rotate icon calls this so the choice survives reboots.

@@ -31,10 +31,11 @@ struct SystemInfo
 {
     uint16_t sleeptime;
     bool dosleep;
-    // Wrist-raise (tilt) wake enable + haptic-on-wake. Persisted in NVS
-    // ("tiltwake" / "tilt_buzz"); loaded in Watch::init, toggled from the
-    // settings screen. tiltwake=false also disables the gyro fade-cancel
-    // during sleep entry — "no tilt waking" means none anywhere.
+    // Wrist-raise (tilt) wake enable + haptic-on-wake. Persisted in
+    // config.json (settings.tiltwake / settings.vibrateontilt); loaded
+    // in Watch::init, toggled from the settings screen. tiltwake=false
+    // also disables the gyro fade-cancel during sleep entry — "no tilt
+    // waking" means none anywhere.
     bool tiltwake;
     bool tiltwake_buzz;
 };
