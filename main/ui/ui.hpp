@@ -24,6 +24,7 @@ extern lv_obj_t *calculator_screen;
 extern lv_obj_t *schedule_screen;
 extern lv_obj_t *metronome_screen;
 extern lv_obj_t *homeassistant_screen;
+extern lv_obj_t *units_screen;
 
 // RAM-resident copies of the generated const flash fonts with NotoEmoji
 // installed as the fallback. Initialized at the top of Display::ui_init.
@@ -43,6 +44,7 @@ extern lv_font_t ProductSansRegular_14_emoji;
 // labels that mix regular text with FA icon glyphs in one string
 // (weather humidity / UV values).
 extern lv_font_t ProductSansRegular_16_fa;
+extern lv_font_t ProductSansRegular_24_fa;
 
 lv_obj_t *create_screen(lv_obj_t *parent);
 lv_obj_t *create_valuearc(lv_obj_t *parent, const char *symbol);
@@ -108,6 +110,8 @@ lv_obj_t *schedule_screen_create(lv_obj_t *parent);
 lv_obj_t *notifications_screen_create(lv_obj_t *parent);
 lv_obj_t *music_create(lv_obj_t *parent);
 lv_obj_t *homeassistant_create(lv_obj_t *parent);
+lv_obj_t *units_create(lv_obj_t *parent);
+
 void homeassistant_response_recieved(const char *resp_json);
 // Tear down the music screen + its 1 Hz updater. Pairs with
 // music_create. Used by ui_init's music-visibility tick to remove the

@@ -5,7 +5,7 @@
 #include <math.h>
 
 static const char *btn_map[] = {
-    "+", "-", "×", "÷", "<", "\n",
+    "+", "-", "×", "÷", "", "\n",
     "1", "2", "3", "4", "5", "\n",
     "6", "7", "8", "9", "0", "\n",
     " ", "C", "=", ".", " ", ""};
@@ -38,7 +38,7 @@ lv_obj_t *calculator_create(lv_obj_t *parent)
     lv_obj_set_size(matrix, 236, 180);
     lv_obj_align(matrix, LV_ALIGN_CENTER, 0, 30);
 
-    lv_obj_set_style_text_font(matrix, &ProductSansRegular_24, LV_PART_ITEMS);
+    lv_obj_set_style_text_font(matrix, &ProductSansRegular_24_fa, LV_PART_ITEMS);
     lv_obj_set_style_radius(matrix, LV_RADIUS_CIRCLE, LV_PART_ITEMS);
     lv_obj_set_style_pad_gap(matrix, 2, 0);
     lv_obj_set_style_bg_opa(matrix, 0, 0);
@@ -121,7 +121,7 @@ static void btn_event_cb(lv_event_t *e)
     {
         lv_textarea_set_text(output, "");
     }
-    else if (strcmp(txt, "<") == 0)
+    else if (strcmp(txt, "") == 0)
     {
         lv_textarea_delete_char(output);
     }

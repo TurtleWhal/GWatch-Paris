@@ -38,7 +38,14 @@
         {"name": "airplane", "char": "",  "sizes": [28] },
         {"name": "phone_vibrate", "char": "",  "sizes": [28, 48] },
         {"name": "droplet", "char": "",  "sizes": [16] },
-        {"name": "smarthome", "char": "",  "sizes": [22, 28] }
+        {"name": "smarthome", "char": "",  "sizes": [22, 28] },
+        {"name": "ruler", "char": "",  "sizes": [22, 28] },
+        {"name": "chevron_up", "char": "",  "sizes": [22] },
+        {"name": "chevron_down", "char": "",  "sizes": [22] },
+        {"name": "chevron_right", "char": "",  "sizes": [22] },
+        {"name": "chevron_left", "char": "",  "sizes": [22] },
+        {"name": "backspace", "char": "",  "sizes": [24] },
+        {"name": "plusminus", "char": "",  "sizes": [24] }
     ],
     "mdi-symbols": [
         {"name": "home-assistant", "hex": "F07D0", "sizes": [22, 28] },

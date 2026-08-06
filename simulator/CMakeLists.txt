@@ -35,6 +35,7 @@ FetchContent_Declare(lvgl
 FetchContent_MakeAvailable(lvgl)
 target_include_directories(lvgl PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_ROOT}/managed_components/espressif__cjson/cJSON
 )
 target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
 
@@ -73,6 +74,7 @@ set(SIM_SRCS
     src/stubs.cpp
     src/sim_placeholders.cpp
     ${PROJECT_ROOT}/main/system/schedule.cpp
+    ${PROJECT_ROOT}/managed_components/espressif__cjson/cJSON/cJSON.c
 )
 if(EMSCRIPTEN)
     list(APPEND SIM_SRCS src/sim_controls_web.cpp src/sim_tasks_web.cpp)

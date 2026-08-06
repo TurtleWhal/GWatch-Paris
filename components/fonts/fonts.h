@@ -30,6 +30,7 @@ LV_FONT_DECLARE(FontAwesome_14);
 LV_FONT_DECLARE(FontAwesome_16);
 LV_FONT_DECLARE(FontAwesome_18);
 LV_FONT_DECLARE(FontAwesome_22);
+LV_FONT_DECLARE(FontAwesome_24);
 LV_FONT_DECLARE(FontAwesome_28);
 LV_FONT_DECLARE(FontAwesome_32);
 LV_FONT_DECLARE(FontAwesome_48);
@@ -40,6 +41,7 @@ LV_FONT_DECLARE(MaterialDesignIcons_28);
 #define SET_SYMBOL_16(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_16, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_18(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_18, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_22(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_22, LV_PART_MAIN); lv_label_set_text(obj, sym);
+#define SET_SYMBOL_24(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_24, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_28(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_28, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_32(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_32, LV_PART_MAIN); lv_label_set_text(obj, sym);
 #define SET_SYMBOL_48(obj, sym) lv_obj_set_style_text_font(obj, &FontAwesome_48, LV_PART_MAIN); lv_label_set_text(obj, sym);
@@ -84,6 +86,13 @@ LV_FONT_DECLARE(MaterialDesignIcons_28);
 #define FA_PHONE_VIBRATE  "" // '', Sizes: [28, 48]
 #define FA_DROPLET        "" // '', Sizes: [16]
 #define FA_SMARTHOME      "" // '', Sizes: [22, 28]
+#define FA_RULER          "" // '', Sizes: [22, 28]
+#define FA_CHEVRON_UP     "" // '', Sizes: [22]
+#define FA_CHEVRON_DOWN   "" // '', Sizes: [22]
+#define FA_CHEVRON_RIGHT  "" // '', Sizes: [22]
+#define FA_CHEVRON_LEFT   "" // '', Sizes: [22]
+#define FA_BACKSPACE      "" // '', Sizes: [24]
+#define FA_PLUSMINUS      "" // '', Sizes: [24]
 #define MDI_HOME_ASSISTANT "\xF3\xB0\x9F\x90" // U+F07D0, Sizes: [22, 28]
 #define MDI_FAN            "\xF3\xB0\x88\x90" // U+F0210, Sizes: [22]
 #define MDI_WINDOW         "\xF3\xB0\x96\xB1" // U+F05B1, Sizes: [22]

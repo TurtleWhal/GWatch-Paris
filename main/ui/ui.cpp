@@ -20,6 +20,7 @@ lv_obj_t *calculator_screen;
 lv_obj_t *schedule_screen;
 lv_obj_t *metronome_screen;
 lv_obj_t *homeassistant_screen;
+lv_obj_t *units_screen;
 
 // RAM wrappers around the generated `const lv_font_t` fonts in flash.
 // LVGL's fallback chain is a per-font field; the generator emits the
@@ -38,6 +39,7 @@ lv_font_t ProductSansRegular_14_emoji;
 // Text font with FontAwesome fallback so FA_* glyphs can sit inline in a
 // normal text string (see ui.hpp).
 lv_font_t ProductSansRegular_16_fa;
+lv_font_t ProductSansRegular_24_fa;
 
 // Shared accent styles. Every widget that wants the theme primary color
 // attaches one of these via lv_obj_add_style instead of capturing the
@@ -332,6 +334,8 @@ void Display::ui_init() {
 
   ProductSansRegular_16_fa = ProductSansRegular_16;
   ProductSansRegular_16_fa.fallback = &FontAwesome_16;
+  ProductSansRegular_24_fa = ProductSansRegular_24;
+  ProductSansRegular_24_fa.fallback = &FontAwesome_24;
 
   // Primary color comes from the persisted "theme_color" setting; the
   // palette table lives in screens/debug.cpp so the settings screen
@@ -463,11 +467,13 @@ void Display::ui_init() {
   //     [](lv_event_t *e) {
   //       lv_obj_scroll_to_y(lv_obj_get_child(lv_event_get_target_obj(e), 0),
   //                          lv_obj_get_scroll_top(
-  //                              lv_obj_get_child(lv_event_get_target_obj(e), 0)),
+  //                              lv_obj_get_child(lv_event_get_target_obj(e),
+  //                              0)),
   //                          LV_ANIM_OFF);
   //       lv_obj_scroll_to_y(lv_obj_get_child(lv_event_get_target_obj(e), 2),
   //                          lv_obj_get_scroll_top(
-  //                              lv_obj_get_child(lv_event_get_target_obj(e), 2)),
+  //                              lv_obj_get_child(lv_event_get_target_obj(e),
+  //                              2)),
   //                          LV_ANIM_OFF);
   //     },
   //     LV_EVENT_SCROLL_END, NULL);
@@ -734,6 +740,10 @@ void Display::ui_init() {
   create_app(appsscreen, FA_ALARM, "Alarm", alarm);
   create_app(appsscreen, FA_CALCULATOR, "Calculator", calculator_screen, true);
 
+  units_screen = units_create(NULL);
+  create_app(appsscreen, FA_RULER, "Unit Conversion", units_screen,
+             true);
+
   // Unistroke's app entry is registered post-BLE-init from watch.cpp.
   // Even just adding the button widget here was enough to push LVGL's
   // internal-SRAM use past the threshold the BT controller's malloc
@@ -742,32 +752,6 @@ void Display::ui_init() {
   // lazy-built on first tap (no boot cost at all).
   g_appsscreen = appsscreen;
 
-  // create_app(appsscreen, FA_FLASHLIGHT, "Flashlight", [](lv_event_t *)
-  //            {
-  //                static uint16_t flashlight_prev;
-
-  //                static lv_obj_t *flashlight_screen = lv_obj_create(NULL);
-  //                lv_obj_set_style_bg_color(flashlight_screen,
-  //                lv_color_white(), 0);
-
-  //                flashlight_prev = watch.display.get_brightness();
-
-  //                lv_screen_load_anim(flashlight_screen,
-  //                LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
-
-  //                watch.display.set_backlight(100);
-
-  //                lv_obj_add_event_cb(flashlight_screen, [](lv_event_t *e)
-  //                                    {
-  //                                        watch.display.set_backlight(*(uint16_t
-  //                                        *)lv_event_get_user_data(e));
-  //                                        lv_screen_load_anim(main_screen,
-  //                                        LV_SCREEN_LOAD_ANIM_FADE_OUT, 100,
-  //                                        0, false);
-  //                                    },
-  //                                    LV_EVENT_CLICKED, &flashlight_prev); });
-
-  // create_app(appsscreen, FA_IMU, "IMU", imuscreen);
   create_app(appsscreen, FA_IMU, "IMU", imu_screen_create(NULL), true);
 
   schedule_screen = schedule_screen_create(NULL);
@@ -789,5 +773,6 @@ void Display::ui_init() {
   lv_screen_load(main_screen);
 
   lv_obj_scroll_to_view_recursive(watchscr, LV_ANIM_OFF);
-  // lv_obj_scroll_to_view_recursive(weather, LV_ANIM_OFF);
+
+  // lv_screen_load_anim(units_screen, LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
 }

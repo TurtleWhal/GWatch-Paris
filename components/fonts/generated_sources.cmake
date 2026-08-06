@@ -3,6 +3,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_18.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_22.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_24.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_28.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_32.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/FontAwesome_48.c

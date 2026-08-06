@@ -41,7 +41,7 @@ lv_obj_t *schedule_screen_create(lv_obj_t *parent)
     // lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -4, 0);
 
     lv_obj_t *dropdown = lv_dropdown_create(scr);
-    lv_obj_set_size(dropdown, 180, 44);
+    lv_obj_set_size(dropdown, 200, 44);
     lv_obj_set_style_bg_color(dropdown, lv_color_hex(0x222222), 0);
     lv_obj_set_style_border_width(dropdown, 0, 0);
     lv_obj_set_style_radius(dropdown, LV_RADIUS_CIRCLE, 0);

@@ -20,15 +20,13 @@ lv_display_t *sdl_hal_init(int32_t w, int32_t h)
     lv_display_t *disp = create_window_with_mouse(w, h);
     lv_display_set_default(disp);
 
-    /* Mouse-wheel + keyboard indevs only attached to the primary window —
-     * sidebar doesn't need scroll-by-wheel or key input. */
-    lv_indev_t *mw = lv_sdl_mousewheel_create();
-    lv_indev_set_display(mw, disp);
-    lv_indev_set_group(mw, lv_group_get_default());
-
-    lv_indev_t *kb = lv_sdl_keyboard_create();
-    lv_indev_set_display(kb, disp);
-    lv_indev_set_group(kb, lv_group_get_default());
+    /* The real watch has only a capacitive touchscreen — no scroll wheel,
+     * no keyboard. Emulate that faithfully by binding *only* the pointer
+     * (mouse) indev in create_window_with_mouse(): clicks and drags map to
+     * touch. Mouse-wheel and keyboard indevs are intentionally NOT created,
+     * so scrolling and typing are no-ops in the UI. (LVGL's scroll-snap on
+     * the horizontal layer is driven by pointer drag, so dragging still
+     * scrolls between screens exactly like a finger would.) */
 
     return disp;
 }

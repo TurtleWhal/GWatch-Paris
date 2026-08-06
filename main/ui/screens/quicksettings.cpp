@@ -72,8 +72,8 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent) {
     lv_screen_load(calculator_screen);
   });
 
-  lv_obj_t *schedule = create_setting(
-      scr, FA_CALENDAR, [](lv_event_t *) { lv_screen_load(schedule_screen); });
+  lv_obj_t *units = create_setting(
+      scr, FA_RULER, [](lv_event_t *) { lv_screen_load(units_screen); });
 
   lv_obj_t *homeassistant = create_setting(scr, FA_SMARTHOME, [](lv_event_t *) {
     lv_screen_load(homeassistant_screen);
@@ -353,7 +353,7 @@ lv_obj_t *quicksettings_create(lv_obj_t *parent) {
       },
       LV_EVENT_VALUE_CHANGED, knob);
 
-  lv_obj_align(schedule, LV_ALIGN_CENTER, POLAR(77, -150) + 77 * 1); // Top Left
+  lv_obj_align(units, LV_ALIGN_CENTER, POLAR(77, -150) + 77 * 1); // Top Left
 
   lv_obj_align(airplanemode, LV_ALIGN_CENTER,
                POLAR(77, -150) + 77 * 2); // Mid Left
