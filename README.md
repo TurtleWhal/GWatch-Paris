@@ -1,5 +1,8 @@
 # G-Watch Paris
 
+<img src="assets/Dive%20CAD.png" style="width: 25%;"></img>&emsp;
+<img src="assets/Dive%20Wireframe.png" style="width: 25%;"></img>
+
 This watch is a personal project that I have worked on for fun over the last few years. The goal is to build a bluetooth smartwatch that has all the features that I would ever want on a watch, all in a compact format that I can actually wear around all day.
 
 This is the third major code "refactor" (full code rewrite), named Paris because I was in Paris when I started working on it (I'm trying to do a cool version name thing). The goal of this version is to be more careful as I add features. I started with a solid base that fetched the time using wifi, and then used ESP32-S3 light sleep to turn off the cpu while asleep, which allowed for a three day battery life, but without being able to receive notifications over Bluetooth from my phone. Since then, I have been careful about optimizing all processes for efficiency, and eventually added Bluetooth Low Energy connectivity to my phone, using modem sleep on the ESP32-S3 to maintain a bluetooth connection while still using very low power.
