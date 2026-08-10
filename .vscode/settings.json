@@ -1,5 +1,8 @@
 {
-  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.autocomplete": "disabled",
+  "C_Cpp.codeAnalysis.runAutomatically": false,
+  "C_Cpp.formatting": "disabled",
   "idf.espIdfPath": "/Users/garrett/esp/v5.5/esp-idf",
   "idf.pythonInstallPath": "/usr/local/bin/python",
   "idf.openOcdConfigs": [
@@ -10,14 +13,21 @@
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
   },
-  "clangd.path": "/Users/garrett/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
+  "clangd.path": "/usr/bin/clangd",
+  "clangd.inlayHints.enabled": false,
+  "cmake.configureOnOpen": false,
+  "cmake.configureOnEdit": false,
   "clangd.arguments": [
     "--background-index",
-    "--query-driver=/Users/garrett/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc",
-    "--compile-commands-dir=${workspaceFolder}/build"
+    "--query-driver=/Users/garrett/.espressif/tools/xtensa-esp-elf/**/bin/xtensa-esp*-elf-*",
+    "--compile-commands-dir=${workspaceFolder}/build",
+    "--header-insertion=never",
+    "--completion-style=detailed"
   ],
+  "editor.suggest.matchOnWordStartOnly": false,
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "idf.flashType": "UART",
+  "idf.flashBaudRate": "2000000",
   "files.associations": {
     "cstdint": "c",
     "spi_master.h": "c",
@@ -52,6 +62,35 @@
     "chrono": "cpp",
     "bitset": "cpp"
   },
-  "C_Cpp.errorSquiggles": "enabled",
-  "idf.portWin": "COM4"
+  "C_Cpp.errorSquiggles": "disabled",
+  "idf.portWin": "COM4",
+  "idf.currentSetup": "/Users/garrett/esp/v6.0/esp-idf",
+  "actionButtons": {
+    // https://code.visualstudio.com/api/references/icons-in-labels
+    "commands": [
+      {
+        "name": "$(debug-alt) Simulate",
+        "color": "lightgray",
+        "singleInstance": true,
+        "useVsCodeApi": true,
+        "command": "workbench.action.tasks.runTask",
+        "args": [
+          {
+            "type": "shell",
+            "task": "gwatch:simulate"
+          }
+        ]
+      },
+      {
+        "name": "$(text-size)",
+        "color": "lightgray",
+        "command": "py ./components/fonts/fonts.py"
+      },
+      {
+        "name": "$(file-media)",
+        "color": "lightgray",
+        "command": "py ./components/images/images.py"
+      }
+    ]
+  }
 }

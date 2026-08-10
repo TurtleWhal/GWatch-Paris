@@ -21,32 +21,36 @@ lv_obj_t *schedule_screen_create(lv_obj_t *parent)
     lv_obj_set_style_pad_top(appslabel, 12, 0);
     lv_obj_set_style_pad_bottom(appslabel, 8, 0);
 
-    watch.schedule.useSchedule = watch.settings.readUint8("useschedule", 1);
+    // Sync from config.json — schedule.enabled is the source of truth
+    // now. Re-read on each screen build so a `{t:"cfg-set"}` push over
+    // BLE (or a hand-edit of the sim's config.json between opens)
+    // reflects on the toggle.
+    watch.schedule.useSchedule =
+        watch.settings.readBool("schedule", "enabled", true);
 
     create_setting(scr, "Use Schedule", watch.schedule.useSchedule, [](lv_event_t *e)
-                   { watch.schedule.useSchedule = lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED); 
-                     watch.settings.writeUint8("useschedule", watch.schedule.useSchedule ? 1 : 0); });
-
-    // lv_obj_t *setting = lv_button_create(parent);
-    // lv_obj_set_size(setting, 180, 44);
-    // lv_obj_set_style_bg_color(setting, lv_color_hex(0x222222), 0);
-    // lv_obj_set_style_radius(setting, LV_RADIUS_CIRCLE, 0);
-
-    // lv_obj_t *label = lv_label_create(setting);
-    // lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
-    // lv_label_set_text(label, name);
-    // lv_obj_set_style_text_font(label, &ProductSansRegular_16, 0);
-
-    // lv_obj_t *sw = lv_switch_create(setting);
-    // lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -4, 0);
+                   { watch.schedule.useSchedule = lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED);
+                     watch.settings.writeBool("schedule", "enabled", watch.schedule.useSchedule); });
 
     lv_obj_t *dropdown = lv_dropdown_create(scr);
-    lv_obj_set_size(dropdown, 180, 44);
+    lv_obj_set_size(dropdown, 200, 44);
     lv_obj_set_style_bg_color(dropdown, lv_color_hex(0x222222), 0);
     lv_obj_set_style_border_width(dropdown, 0, 0);
     lv_obj_set_style_radius(dropdown, LV_RADIUS_CIRCLE, 0);
 
-    lv_dropdown_set_options(dropdown, "O Day\nE Day\nA Day\nY Day\nMorning Assembly");
+    // Dropdown options come straight from the loaded schedule names
+    // instead of a hardcoded "O Day\nE Day\n…" string. Build once at
+    // screen-create time — reloading config.json requires a reboot
+    // for now, so the dropdown doesn't need to update live.
+    {
+        std::string opts;
+        for (int i = 0; i < watch.schedule.scheduleCount(); i++) {
+            if (i) opts += "\n";
+            opts += watch.schedule.scheduleName(i);
+        }
+        if (opts.empty()) opts = "(none)";  // dropdown needs at least one line
+        lv_dropdown_set_options(dropdown, opts.c_str());
+    }
 
     lv_obj_set_style_text_font(dropdown, &FontAwesome_18, LV_PART_INDICATOR);
 

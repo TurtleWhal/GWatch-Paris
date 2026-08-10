@@ -14,20 +14,23 @@ lv_obj_t *circle;
 
 void imuscreen_update(lv_timer_t *timer)
 {
-    static bool displayed = false;
     static float prev_x = 0.0f;
     static float prev_y = 0.0f;
 
     lv_obj_t *scr = (lv_obj_t *)lv_timer_get_user_data(timer);
-    lv_obj_t *parent = lv_obj_get_parent(scr);
 
-    if (lv_obj_get_scroll_x(parent) == lv_obj_get_x(scr))
+    // IMU screen is a top-level screen launched via lv_screen_load_anim
+    // from the apps grid (not a child of hor_layer), so the only correct
+    // "am I visible?" check is against the active screen.
+    if (scr == lv_screen_active())
     {
-        if (!displayed)
-        {
-            displayed = true;
-            watch.system.sleeptime = 60000;
-        }
+        // Push the no-sleep deadline 500 ms into the future each tick
+        // so the watch never idles to sleep while this debug screen is
+        // active. The timer fires every 50 ms (20 Hz), so the deadline
+        // stays well ahead. As soon as the user gestures back to the
+        // main screen this branch stops running, the deadline expires
+        // within 500 ms, and the normal idle timer kicks back in.
+        watch.prevent_sleep_until_ms = esp_timer_get_time() / 1000 + 500;
 
         Acceleration a = accel_read();
 
@@ -113,16 +116,10 @@ void imuscreen_update(lv_timer_t *timer)
         lv_obj_align(imudot, LV_ALIGN_CENTER, a.x * (100 / maxmagnitude), a.y * (100 / maxmagnitude));
         lv_obj_set_size(imudot, 4 + abs(a.z) * 16, 4 + abs(a.z) * 16);
     }
-    else if (displayed)
-    {
-        displayed = false;
-        watch.system.sleeptime = DEFAULT_SLEEP_TIME;
-    }
 }
 
 lv_obj_t *imu_screen_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
@@ -165,7 +162,7 @@ lv_obj_t *imu_screen_create(lv_obj_t *parent)
 
     maxline = lv_line_create(scr);
     lv_line_set_points_mutable(maxline, maxpoints, NUM_POINTS + 1);
-    lv_obj_set_style_line_color(maxline, accent, 0);
+    lv_obj_add_style(maxline, &accent_line_style, 0);
     lv_obj_set_style_line_width(maxline, 4, 0);
     lv_obj_set_style_line_rounded(maxline, true, 0);
 

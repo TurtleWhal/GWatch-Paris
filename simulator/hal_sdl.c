@@ -1,0 +1,39 @@
+#include "hal_sdl.h"
+
+static lv_display_t *create_window_with_mouse(int32_t w, int32_t h)
+{
+    lv_display_t *disp = lv_sdl_window_create(w, h);
+
+    /* The SDL mouse driver routes events to whichever indev is bound to
+     * the display whose SDL window has focus, so we need one indev per
+     * window. lv_indev_set_display is the binding. */
+    lv_indev_t *mouse = lv_sdl_mouse_create();
+    lv_indev_set_display(mouse, disp);
+
+    return disp;
+}
+
+lv_display_t *sdl_hal_init(int32_t w, int32_t h)
+{
+    lv_group_set_default(lv_group_create());
+
+    lv_display_t *disp = create_window_with_mouse(w, h);
+    lv_display_set_default(disp);
+
+    /* The real watch has only a capacitive touchscreen — no scroll wheel,
+     * no keyboard. Emulate that faithfully by binding *only* the pointer
+     * (mouse) indev in create_window_with_mouse(): clicks and drags map to
+     * touch. Mouse-wheel and keyboard indevs are intentionally NOT created,
+     * so scrolling and typing are no-ops in the UI. (LVGL's scroll-snap on
+     * the horizontal layer is driven by pointer drag, so dragging still
+     * scrolls between screens exactly like a finger would.) */
+
+    return disp;
+}
+
+lv_display_t *sdl_hal_create_window(int32_t w, int32_t h, const char *title)
+{
+    lv_display_t *disp = create_window_with_mouse(w, h);
+    if (title) lv_sdl_window_set_title(disp, title);
+    return disp;
+}

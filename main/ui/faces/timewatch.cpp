@@ -1,26 +1,27 @@
 #include "ui.hpp"
 #include <sys/time.h>
 
-const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+// File-scope statics so widget pointer names don't collide with the
+// identically-named ones in the other face .cpp files.
+static const char *months[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+static const char *wdays[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
 static uint8_t last_sec = 255, last_min = 255, last_hour = 255;
 static uint8_t last_day = 255, last_month = 255;
 
-lv_obj_t *timelabel;
-lv_obj_t *datelabel;
+static lv_obj_t *timelabel;
+static lv_obj_t *datelabel;
 // lv_obj_t *secondscale;
-lv_obj_t *secondslabel;
+static lv_obj_t *secondslabel;
 
-lv_obj_t *baticon;
-lv_obj_t *battery;
-lv_obj_t *steps;
+static lv_obj_t *baticon;
+static lv_obj_t *battery;
+static lv_obj_t *steps;
 
-lv_obj_t *wifiicon;
+static lv_obj_t *wifiicon;
 
 lv_obj_t *timescreen_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
     lv_color_t gray = lv_theme_get_color_secondary(parent);
 
     lv_obj_t *scr = create_screen(parent);
@@ -29,7 +30,7 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
     datelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(datelabel, &ProductSansBold_20, 0);
     lv_obj_align(datelabel, LV_ALIGN_CENTER, 0, -48);
-    lv_obj_set_style_text_color(datelabel, accent, 0);
+    lv_obj_add_style(datelabel, &accent_text_style, 0);
 
     lv_obj_t *timebox = lv_obj_create(scr);
     lv_obj_set_style_bg_opa(timebox, 0, 0);
@@ -51,7 +52,9 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
 
     secondslabel = lv_label_create(timebox);
     lv_obj_set_style_text_font(secondslabel, &SirinStencil_32, 0);
-    lv_obj_set_style_text_color(secondslabel, accent, 0);
+    // (Accent assignment lived here originally but was immediately
+    // overridden by the gray below — the secondslabel is effectively
+    // always gray. Keeping just the gray.)
     lv_obj_set_style_text_color(secondslabel, lv_color_hex(0x999999), 0);
     lv_obj_set_style_text_line_space(secondslabel, 6, 0);
 
@@ -75,11 +78,11 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
     lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
 
     baticon = lv_label_create(infobox);
-    SET_SYMBOL_16(baticon, FA_BATTERY);
+    SET_SYMBOL_16(baticon, getbaticon(watch.battery.charging, watch.battery.percent));
 
     battery = lv_label_create(infobox);
     lv_obj_set_style_text_font(battery, &ProductSansRegular_16, 0);
-    lv_label_set_text_fmt(battery, "%1.3fV", 1.234);
+    lv_label_set_text_fmt(battery, "%d%%", 100);
 
     lv_obj_t *stepicon = lv_label_create(infobox);
     SET_SYMBOL_16(stepicon, FA_STEPS);
@@ -87,6 +90,12 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
     steps = lv_label_create(infobox);
     lv_obj_set_style_text_font(steps, &ProductSansRegular_16, 0);
     lv_label_set_text_fmt(steps, "%d", 5678);
+
+    // Force a full draw now: reset the change-guards so the immediate update
+    // below repaints every field. Without this, switching to this face leaves
+    // it blank until the minute/day happens to change.
+    last_sec = last_min = last_hour = last_day = last_month = 255;
+    timescreen_update();
 
     return scr;
 }
@@ -143,25 +152,20 @@ void timescreen_update()
     }
 
     /* Battery (assume sysinfo.bat is still valid) */
-    lv_label_set_text_fmt(battery, "%1.3fV", watch.battery.voltage / 1000.0);
+    lv_label_set_text_fmt(battery, "%d%%", watch.battery.percent);
 
     lv_label_set_text_fmt(steps, "%ld", watch.imu.steps);
 
-    switch (watch.wifi.status)
+    if (ble.connected())
     {
-    case WIFI_CONNECTED:
-        SET_SYMBOL_14(wifiicon, FA_WIFI);
+        SET_SYMBOL_14(wifiicon, FA_BLUETOOTH);
         lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
-    case WIFI_CONNECTING:
-        SET_SYMBOL_14(wifiicon, FA_CONNECTING);
-        lv_obj_remove_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
-    case WIFI_DISCONNECTED:
+    }
+    else
+    {
         lv_obj_add_flag(wifiicon, LV_OBJ_FLAG_HIDDEN);
-        break;
     }
 
     SET_SYMBOL_16(baticon,
-                  watch.battery.charging ? FA_LIGHTNING : FA_BATTERY);
+                  getbaticon(watch.battery.charging, watch.battery.percent));
 }

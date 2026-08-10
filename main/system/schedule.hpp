@@ -1,125 +1,97 @@
+#pragma once
 
 #ifdef __cplusplus
 
+#include <string>
+#include <vector>
+
+// One time-boxed entry within a day's schedule. Times are stored as
+// integer hour + integer minute; the config-file encoding uses a
+// "H.MM" float where MM is the literal minute count (so 7.43 → 7:43,
+// NOT 7 hours 25.8 minutes). See parse_time in schedule.cpp.
 struct ScheduleEvent
 {
-    uint8_t starthour;
-    uint8_t startminute;
-    uint8_t endhour;
-    uint8_t endminute;
-    const char *text;
+    uint8_t     starthour;
+    uint8_t     startminute;
+    uint8_t     endhour;
+    uint8_t     endminute;
+    std::string text;
 };
 
+// A named day-schedule. Users hand-edit these in config.json under
+// schedule.schedules[]; the class holds them in memory as vectors so
+// there's no fixed cap on event count.
+struct ScheduleDay
+{
+    std::string                name;
+    std::vector<ScheduleEvent> events;
+};
+
+// Sentinel values for `currentSchedule`. Everything ≥ AUTO is a
+// sentinel; anything less is an index into `loaded[]`.
 enum class ClassSchedule
 {
-    O,
-    E,
-    A,
-    Y,
-    MA,
-    AUTO = 254,
-    NONE = 255
+    AUTO = 254, // follow weekday_map + current wday
+    NONE = 255, // never show a schedule (manual "hide")
 };
 
 class Schedule
 {
 private:
-#define MAX_EVENTS 8
+    // Loaded from schedule.schedules[] in config.json at init.
+    std::vector<ScheduleDay> loaded;
 
-    const ClassSchedule defaultschedules[7] = {
-        ClassSchedule::NONE,
-        ClassSchedule::O,
-        ClassSchedule::E,
-        ClassSchedule::A,
-        ClassSchedule::O,
-        ClassSchedule::E,
-        ClassSchedule::NONE};
+    // Which loaded[] index to use for each weekday, indexed
+    // 0=Sun..6=Sat. -1 means "no schedule for this day". Populated
+    // from schedule.weekdays[] in config.json (an array of schedule
+    // names, mapped to indices during load); absent config = all -1.
+    int8_t weekday_map[7];
 
-    const struct ScheduleEvent schedules[5][MAX_EVENTS] = {
-        {
-            // O
-            {7, 0, 7, 43, "Jazz Band"},
-            {7, 50, 9, 30, "Calculus"},
-            {9, 40, 10, 15, "HiHo"},
-            {10, 30, 12, 10, "History"},
-            {12, 10, 12, 45, "Lunch"},
-            {12, 55, 14, 35, "English"},
-        },
-        {
-            // E
-            {7, 0, 7, 43, "Jazz Band"},
-            {7, 50, 9, 30, "Band"},
-            {9, 40, 10, 15, "HiHo"},
-            {10, 30, 12, 10, "Physics"},
-            {12, 10, 12, 45, "Lunch"},
-            {12, 55, 14, 35, "Cooking"},
-        },
-        {
-            // A
-            {7, 0, 7, 43, "Jazz Band"},
-            {7, 50, 8, 25, "Calculus"},
-            {8, 30, 9, 05, "Band"},
-            {9, 25, 10, 10, "History"},
-            {10, 20, 10, 55, "Physics"},
-            {10, 55, 11, 30, "Lunch"},
-            {11, 40, 12, 15, "English"},
-            {12, 20, 12, 55, "Cooking"},
-        },
-        {
-            // Y
-            {7, 0, 7, 43, "Jazz Band"},
-            {7, 50, 8, 16, "Calculus"},
-            {8, 21, 8, 47, "Band"},
-            {8, 52, 9, 18, "History"},
-            {9, 23, 9, 49, "Physics"},
-            {9, 54, 10, 20, "English"},
-            {10, 25, 10, 50, "Cooking"},
-        },
-        {
-            // MA (Morning Assembly)
-            {7, 0, 7, 43, "Jazz Band"},
-            {7, 50, 9, 20, "P1/P2"},
-            {9, 30, 10, 30, "Assembly"},
-            {10, 50, 12, 20, "P3/P4"},
-            {12, 30, 12, 55, "Lunch"},
-            {13, 05, 14, 35, "P5/P6"},
-        },
-    };
+    // Current manual selection. AUTO = follow weekday_map; NONE =
+    // never show; anything else is an index into loaded.
+    ClassSchedule currentSchedule;
 
-    // const struct ScheduleEvent schedules[5][MAX_EVENTS] = {
-    //     {
-    //         // O
-    //         {12, 0, 23, 59, "O Day"},
-    //     },
-    //     {
-    //         // E
-    //         {12, 0, 23, 59, "E Day"},
-    //     },
-    //     {
-    //         // A
-    //         {12, 0, 23, 59, "A Day"},
-    //     },
-    //     {
-    //         // Y
-    //         {12, 0, 23, 59, "Y Day"},
-    //     },
-    //     {
-    //         // MA (Morning Assembly)
-    //         {12, 0, 23, 59, "MA Day"},
-    //     },
-    // };
+    // Parse a single "H.MM" float from config.json into split hour /
+    // minute bytes. See header comment on ScheduleEvent.
+    static void parse_time(double v, uint8_t &hour, uint8_t &minute);
 
 public:
+    // schedule.enabled bool from config.json. Persisted via
+    // Settings::writeBool from the schedule screen toggle. Read on
+    // init(); the screen also refreshes it on each screen build.
     bool useSchedule = true;
     bool show;
     char *text;
 
-    // void init();
+    // Load schedules + weekday map + `enabled` from config.json. Safe
+    // to call before Settings::init in principle (schedule loads its
+    // own copy of the config file), but conventionally called right
+    // after Settings::init so both classes read the same on-disk
+    // state at the same instant.
+    void init();
+
+    // Currently-active day (based on AUTO/manual selection). Returns
+    // nullptr if there's no schedule for the day, or the config was
+    // missing/empty.
+    const ScheduleDay *getCurrentSchedule();
+
+    // Human-readable "next event" line for the watchface glance.
     const char *getText();
+    // Full multi-line list of today's events, for the schedule screen.
     const char *getFullSchedule();
-    const struct ScheduleEvent *getCurrentSchedule();
-    void setCurrentSchedule(ClassSchedule schedule);
+
+    // Manual override. Pass AUTO to return to weekday-driven picking,
+    // NONE to hide, or an integer-cast ClassSchedule(idx) to force a
+    // specific loaded schedule.
+    void setCurrentSchedule(ClassSchedule s);
+    // Returns AUTO's resolved index (for the dropdown current-value
+    // display) when in AUTO, otherwise the manual selection.
     ClassSchedule getSelectedSchedule();
+
+    // Introspection helpers for the schedule screen's dropdown. Names
+    // come straight from schedule.schedules[].name in config.json.
+    int         scheduleCount() const { return (int)loaded.size(); }
+    const char *scheduleName(int idx) const;
 };
 
 #endif // __cplusplus

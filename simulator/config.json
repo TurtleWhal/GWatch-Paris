@@ -1,0 +1,46 @@
+{
+	"settings": {
+		"watchface": "Analog",
+		"themecolor": "#03a9f4",
+		"tiltwake": true,
+		"vibrateontilt": false,
+		"rotation": 90
+	},
+	"schedule": {
+		"enabled": false,
+		"weekdays": [
+			"Schedule 1",
+			"",
+			"",
+			"",
+			"",
+			"",
+			"Schedule 1"
+		],
+		"schedules": [
+			{
+				"name": "Schedule 1",
+				"events": [
+					{
+						"name": "Event 1",
+						"start": 9.00,
+						"end": 17.00
+					}
+				]
+			}
+		]
+	},
+	"homeassistant": {
+		"url": "homeassistantip:8123",
+		"apiKey": "<API_KEY>",
+		"entities": [
+			{
+				"name": "Entity 1",
+				"entity_id": "sensor.name",
+				"type": "info",
+				"icon": "󰔏",
+				"unit": "°F"
+			}
+		]
+	}
+}

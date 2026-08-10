@@ -1,55 +1,116 @@
 #include "ui.hpp"
 #include <sys/time.h>
+#include <string.h>
 
-lv_obj_t *canvas;
+// Registry of watch faces the user can pick between. Index 0 is the boot
+// default; the selected face is persisted by NAME in config.json under
+// settings.watchface (e.g. "Analog") so the file is self-documenting.
+// Add a new face by writing a `*_create` / `*_update` pair (signatures
+// must match the existing ones) and dropping an entry here.
+typedef struct
+{
+    const char *name;
+    lv_obj_t *(*create)(lv_obj_t *);
+    void (*update)();
+} watchface_def_t;
 
-// LV_DRAW_BUF_DEFINE_STATIC(draw_buf_16bpp, 240, 240, LV_COLOR_FORMAT_RGB565);
+static const watchface_def_t WATCHFACES[] = {
+    {"Analog", analogwatch_create, analogwatch_update},
+    {"Rotary", rotarywatch_create, rotarywatch_update},
+    {"Dive", divewatch_create, divewatch_update},
+    {"Time", timescreen_create, timescreen_update},
+    {"Words", wordwatch_create, wordwatch_update},
+};
+static constexpr uint8_t WATCHFACE_N =
+    sizeof(WATCHFACES) / sizeof(WATCHFACES[0]);
+
+static uint8_t g_active_face_idx = 0;
+
+uint8_t watchface_count() { return WATCHFACE_N; }
+
+const char *watchface_name_at(uint8_t idx)
+{
+    if (idx >= WATCHFACE_N)
+        idx = 0;
+    return WATCHFACES[idx].name;
+}
+
+uint8_t watchface_active_idx() { return g_active_face_idx; }
+
+// Build the face obj for whatever face config.json says is active.
+// Caller owns the returned obj (it's placed under `parent`). Also
+// caches the index in `g_active_face_idx` so watchface_update() can
+// dispatch to the right `*_update` without re-reading the config
+// every frame. Config stores the face by its display name ("Analog",
+// "Rotary", …) rather than by index so hand-editing config.json is
+// self-documenting; we resolve the name back to an index here.
+static lv_obj_t *build_active_face(lv_obj_t *parent)
+{
+    std::string name = watch.settings.readString(
+        "settings", "watchface", WATCHFACES[0].name);
+    uint8_t idx = 0;
+    for (uint8_t i = 0; i < WATCHFACE_N; i++) {
+        if (strcmp(name.c_str(), WATCHFACES[i].name) == 0) {
+            idx = i;
+            break;
+        }
+    }
+    g_active_face_idx = idx;
+    return WATCHFACES[idx].create(parent);
+}
 
 void watchface_update()
 {
     if (lv_obj_get_scroll_y(ver_layer) > lv_obj_get_y(hor_layer) - 240 && lv_obj_get_scroll_y(ver_layer) < lv_obj_get_y(hor_layer) + 240)
         if (lv_obj_get_scroll_x(hor_layer) > lv_obj_get_x(watchscr) - 240 && lv_obj_get_scroll_x(hor_layer) < lv_obj_get_x(watchscr) + 240)
         {
-            // /* Fill the canvas with white color */
-            // lv_canvas_fill_bg(canvas, lv_color_white(), LV_OPA_COVER);
-
-            // lv_layer_t layer;
-            // lv_canvas_init_layer(canvas, &layer);
-
-            // /* Draw a line */
-            // lv_draw_line_dsc_t line_dsc;
-            // lv_draw_line_dsc_init(&line_dsc);
-            // line_dsc.color = lv_color_black();
-            // line_dsc.width = 2;
-
-            // /* Define the line points */
-            // lv_point_t line_points[] = {{120, 120}, {170, 70}};
-
-            // /* Draw the line to the canvas */
-            // lv_draw_line(&layer, &line_dsc);
-            analogwatch_update();
+            WATCHFACES[g_active_face_idx].update();
         }
 }
 
 lv_obj_t *watchface_create(lv_obj_t *parent)
 {
-    lv_color_t accent = lv_theme_get_color_primary(parent);
-    lv_color_t gray = lv_theme_get_color_secondary(parent);
+    lv_obj_t *scr = build_active_face(parent);
 
-    // lv_obj_t *scr = create_screen(parent);
-    // lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
-
-    // canvas = lv_canvas_create(parent);
-
-    // LV_DRAW_BUF_INIT_STATIC(draw_buf_16bpp);
-
-    // lv_obj_set_size(canvas, 240, 240);
-    // lv_obj_align(canvas, LV_ALIGN_CENTER, 0, 0);
-
-    lv_obj_t *scr = analogwatch_create(parent);
-
-    lv_timer_create([](lv_timer_t *timer)
-                    { watchface_update(); }, 33, NULL);
+    // Tick timer is created once even if watchface_create is called again
+    // (it isn't currently, but watchface_set_active() rebuilds the face by
+    // calling build_active_face directly, not this function — keeping the
+    // guard makes the contract explicit in case that changes).
+    static bool timer_created = false;
+    if (!timer_created)
+    {
+        // Match LV_DEF_REFR_PERIOD (16 ms) so the sweep-second faces get a
+        // fresh hand position for every refresh cycle instead of every
+        // other one — a 33 ms tick against a 16 ms refresh makes the sweep
+        // visibly step at half rate.
+        lv_timer_create([](lv_timer_t *timer)
+                        { watchface_update(); }, 16, NULL);
+        timer_created = true;
+    }
 
     return scr;
+}
+
+// Persist a new face index and swap the live face obj. Safe to call at any
+// time — the new obj replaces `watchface` under the same parent, and the
+// scroll-driven visibility code in ui.cpp picks it up on the next scroll
+// event. No-ops if idx is out of range or already active.
+void watchface_set_active(uint8_t idx)
+{
+    if (idx >= WATCHFACE_N || idx == g_active_face_idx)
+        return;
+
+    watch.settings.writeString("settings", "watchface", WATCHFACES[idx].name);
+
+    lv_obj_t *parent = lv_obj_get_parent(watchface);
+    lv_obj_delete(watchface);
+    watchface = build_active_face(parent);
+
+    // At boot, watchface is the first child of main_screen so ver_layer /
+    // hor_layer (created after it in ui_init) render on top. Re-creating
+    // here appends the new obj at the END of main_screen's child list,
+    // which would put it in front of those layers — that traps touches on
+    // the face, breaks the scroll-driven visibility gate, and stalls
+    // watchface_update. Drop it back to the bottom to restore z-order.
+    lv_obj_move_background(watchface);
 }

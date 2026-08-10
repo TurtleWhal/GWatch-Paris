@@ -11,6 +11,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/idf_additions.h"  // xTaskCreateWithCaps for PSRAM stacks
 
 #include <driver/i2c_master.h>
 
@@ -20,7 +21,7 @@
 #include "battery.hpp"
 #include "motor.hpp"
 #include "imu.hpp"
-#include "wifi.hpp"
+#include "ble.hpp"
 #include "display.hpp"
 #include "schedule.hpp"
 
@@ -30,6 +31,13 @@ struct SystemInfo
 {
     uint16_t sleeptime;
     bool dosleep;
+    // Wrist-raise (tilt) wake enable + haptic-on-wake. Persisted in
+    // config.json (settings.tiltwake / settings.vibrateontilt); loaded
+    // in Watch::init, toggled from the settings screen. tiltwake=false
+    // also disables the gyro fade-cancel during sleep entry — "no tilt
+    // waking" means none anywhere.
+    bool tiltwake;
+    bool tiltwake_buzz;
 };
 
 struct Chronology
@@ -55,8 +63,6 @@ private:
 
     uint32_t sleep_time;
 
-    bool goingtosleep;
-
     void pm_init();
     void iic_init();
     void i2c_scan();
@@ -65,9 +71,8 @@ private:
 
 public:
     // struct TimeInfo time;
-    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true};
+    struct SystemInfo system = {DEFAULT_SLEEP_TIME, true, true, true};
     struct BatteryInfo battery;
-    struct WiFi wifi;
     struct IMUInfo imu;
     struct Schedule schedule;
     struct Chronology chrono;
@@ -77,13 +82,41 @@ public:
     Display display;
 
     bool sleeping;
+    bool goingtosleep;
 
     bool donotdisturb = false;
+
+    // While `esp_timer_get_time()/1000 < prevent_sleep_until_ms` the pm
+    // task skips its idle-sleep check. Set this as a deadline (e.g. a
+    // 60-second hold from "now") to keep the watch awake regardless of
+    // touch activity.
+    int64_t prevent_sleep_until_ms = 0;
+
+    // When true, Watch::sleep() leaves lv_screen_active() alone
+    // instead of swapping it back to main_screen. Used by the alarm /
+    // timer ring screens so that after they auto-stop the watch goes
+    // to sleep but stays *on* the ring screen — when the user wakes
+    // it they see the alarm/timer that fired.
+    bool preserve_screen_on_sleep = false;
 
     void init();
 
     void sleep();
     void wakeup();
+
+    // Trip the pm idle check on the next pm_task iteration. Used by the
+    // alarm/timer ring screens once their stay-awake hold has elapsed —
+    // calling sleep() directly from the LVGL task would block LVGL for
+    // the full backlight-fade window, so we hand off to the pm task.
+    void request_sleep();
+
+    // One-shot low-battery shutdown: tears down BLE/IMU/display, shows
+    // a brief on-screen warning, then drops into deep sleep with a
+    // periodic timer wake. Each wake re-runs app_main, which calls
+    // battery_early_check_or_sleep_again() to bail straight back into
+    // deep sleep if the cell is still flat. Recovers to normal boot
+    // automatically when USB is plugged in (rail jumps to ~4.5 V).
+    [[noreturn]] void low_battery_shutdown();
 };
 
 extern Watch watch;
@@ -96,6 +129,14 @@ extern "C"
 #endif
 
     void watch_init();
+
+    // Called from app_main BEFORE watch_init. Reads the battery once
+    // via a minimal ADC bring-up; if the cell rail is still below
+    // SAFE_BOOT_MV (~3.1 V) the function deep-sleeps the chip again
+    // for another 30 s rather than booting the rest of the system.
+    // Returns normally once the rail is healthy (USB plug-in lifts
+    // it to ~4.5 V or the cell genuinely recovered).
+    void battery_early_check_or_sleep_again(void);
 
 #ifdef __cplusplus
 }

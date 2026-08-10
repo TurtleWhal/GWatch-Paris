@@ -1,5 +1,11 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "driver/i2c_master.h"
 #include "lvgl.h"
+
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_touch.h"
 
 #include "fonts.h"
 
@@ -11,9 +17,6 @@
 #define LCD_HEIGHT 240
 
 #ifdef __cplusplus
-
-void lvgl_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map);
-void lvgl_touch_read(lv_indev_t *indev, lv_indev_data_t *touch);
 
 class Display
 {
@@ -33,11 +36,15 @@ private:
     bool adjust = false;
 
     lv_display_t *disp;
-    TaskHandle_t lv_task_handle = NULL;
 
-    bool goingtosleep = false;
+    // Owned by esp_lvgl_port; we keep the handles so we can drive sleep/rotation
+    // directly without going back through it.
+    esp_lcd_panel_io_handle_t  panel_io = NULL;
+    esp_lcd_panel_handle_t     panel    = NULL;
+    esp_lcd_panel_io_handle_t  tp_io    = NULL;
+    esp_lcd_touch_handle_t     touch    = NULL;
 
-    // bool wakeup_touch = false;
+    bool suspended = false;
 
 public:
     void init(i2c_master_bus_handle_t bus);
@@ -58,6 +65,13 @@ public:
     uint16_t get_brightness();
 
     void set_wakeup_touch(bool enable);
+
+    // Toggle the CST816S between active polling (DisAutoSleep=1, used while
+    // the watch is awake — needed to keep is_touching() polls from NACKing)
+    // and its auto-sleep mode (DisAutoSleep=0, used during light sleep so
+    // the INT line stops pulsing periodically and GPIO5 becomes a clean
+    // wake source).
+    void set_touch_active(bool active);
 
     void lvgl_done();
 };

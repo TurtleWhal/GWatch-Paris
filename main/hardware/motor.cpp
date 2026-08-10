@@ -127,6 +127,17 @@ static void haptic_task(void *pvParameters)
                 stop_pattern = true;
                 vTaskDelay(pdMS_TO_TICKS(50)); // Give time to stop
             }
+            else
+            {
+                // haptic_stop() flips stop_pattern unconditionally —
+                // including when the motor task is idle, in which case
+                // the flag is never cleared by haptic_play_pattern's
+                // end-of-pattern reset. Without this we'd start the
+                // new pattern with stop_pattern==true and abort on the
+                // first iteration of the inner for-loop. Clearing here
+                // gives a fresh slate every time a normal play arrives.
+                stop_pattern = false;
+            }
 
             // Play the pattern
             haptic_play_pattern(&cmd.pattern);
@@ -148,14 +159,17 @@ esp_err_t haptic_init(void)
         return ESP_FAIL;
     }
 
-    // Create haptic task
-    BaseType_t ret = xTaskCreate(
+    // Create haptic task — stack in PSRAM. Task body is just GPIO toggles
+    // and vTaskDelay, no DMA / ISR work, so internal SRAM doesn't have to
+    // back the stack.
+    BaseType_t ret = xTaskCreateWithCaps(
         haptic_task,
         "haptic_task",
         HAPTIC_TASK_STACK_SIZE,
         NULL,
         HAPTIC_TASK_PRIORITY,
-        &haptic_task_handle);
+        &haptic_task_handle,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     if (ret != pdPASS)
     {
