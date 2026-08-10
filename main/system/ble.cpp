@@ -1,5 +1,7 @@
 #include "ble.hpp"
 #include "watch.hpp"
+#include "ui.hpp"       // accent_bg_style + SET_SYMBOL_* + font decls for
+                        // the find-watch ring screen built below.
 
 #include <sys/time.h>
 #include <string.h>
@@ -458,6 +460,60 @@ static const struct ble_gatt_svc_def nus_svcs[] = {
 
 // ---------- Outgoing ----------
 
+// Push one MTU-sized frame with retry-until-success-or-give-up. Broken
+// out of send_gb because we also need it standalone for the parser-
+// reset flush on failure. Returns true iff the notify was accepted by
+// the controller. `budget` bounds how many retries we're willing to
+// spend before giving up (each retry is a ~20 ms yield).
+static bool notify_with_backoff(uint16_t conn_handle, uint16_t attr_handle,
+                                const uint8_t *data, size_t n, int budget)
+{
+    int retries = 0;
+    int rc = 0;
+    for (;;) {
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(data, n);
+        if (om) {
+            rc = ble_gatts_notify_custom(conn_handle, attr_handle, om);
+            // ble_gatts_notify_custom consumes the mbuf on success and
+            // on most error paths — don't double-free.
+            if (rc == 0) return true;
+        } else {
+            rc = -1; // mbuf pool exhausted
+        }
+        if (++retries > budget) {
+            ESP_LOGW("ble", "notify gave up after %d retries (rc=%d, n=%zu)",
+                     retries, rc, n);
+            return false;
+        }
+        // 20 ms yield gives the NimBLE host task ~1 conn event's worth
+        // of time to drain the mbuf pool and free packet slots.
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+// Push a bare Record Separator to force Gadgetbridge's UART line
+// buffer to flush whatever partial bytes it has and start fresh. Used
+// after a mid-message send failure to keep the next send_gb from
+// being concatenated onto garbage on the phone side. Best-effort:
+// tries with a huge retry budget (mbuf pool has to have drained by
+// the time we call this, we just waited), gives up quietly if the
+// link is genuinely dead.
+static void send_parser_reset(uint16_t conn_handle, uint16_t attr_handle)
+{
+    static const uint8_t RS = 0x1E;
+    // Wait for the mbuf pool to drain before trying — send_gb failed
+    // because the pool was empty, and immediately re-trying would
+    // just fail again with less budget. One BLE supervision timeout
+    // (~4 s) is way more than needed; 500 ms is comfortably one
+    // conn-event round trip on a healthy link.
+    vTaskDelay(pdMS_TO_TICKS(500));
+    if (notify_with_backoff(conn_handle, attr_handle, &RS, 1, /*budget*/ 100))
+        ESP_LOGI("ble", "parser reset (\\x1e) sent after failed send_gb");
+    else
+        ESP_LOGW("ble", "parser reset failed — Gadgetbridge line buffer "
+                        "may still contain partial bytes");
+}
+
 bool BLE::send_gb(const char *json_payload)
 {
     if (!connected() || tx_attr_handle == 0)
@@ -493,49 +549,37 @@ bool BLE::send_gb(const char *json_payload)
     ESP_LOGI(TAG, "TX %zu bytes (mtu=%u chunk=%zu): %.*s",
              total, mtu, chunk, (int)json_len, json_payload);
 
+    // Per-frame retry budget. Was 15 (150 ms of ~10 ms yields) —
+    // bumped to 40 (~800 ms of 20 ms yields) after screenshot
+    // transfers were failing partway on the mbuf-pool exhaustion
+    // path. A real link failure blows past this easily via the
+    // supervision timeout, so a longer budget only helps recover
+    // from transient back-pressure, it doesn't mask dead links.
+    constexpr int PER_FRAME_RETRY_BUDGET = 40;
+
     size_t off = 0;
     bool ok = true;
-    while (off < total)
-    {
+    // Whether any frame of this message has already gone out — if so, a
+    // subsequent failure has left partial bytes on the wire and we
+    // need to send a parser-reset so the phone flushes them before the
+    // next send_gb call is glued onto the garbage.
+    bool sent_any = false;
+    while (off < total) {
         size_t n = (total - off > chunk) ? chunk : (total - off);
-
-        // Backpressure-tolerant notify. NimBLE's mbuf pool is small and
-        // a bulk sender (screenshot, image transfer) easily out-runs the
-        // radio's drain rate — mbuf alloc returns NULL or notify returns
-        // BLE_HS_ENOMEM/EAGAIN under back-pressure. Retry with a short
-        // yield so the host task can drain TX completions; if it still
-        // fails after ~150 ms the link is probably broken, give up.
-        constexpr int MAX_RETRIES = 15;
-        int retries = 0;
-        struct os_mbuf *om = nullptr;
-        int rc = 0;
-        for (;;)
-        {
-            om = ble_hs_mbuf_from_flat(buf + off, n);
-            if (om)
-            {
-                rc = ble_gatts_notify_custom(conn_handle, tx_attr_handle, om);
-                // ble_gatts_notify_custom consumes the mbuf on success
-                // and on most error paths; don't double-free.
-                if (rc == 0) break;
-            }
-            else
-            {
-                rc = -1;
-            }
-            if (++retries > MAX_RETRIES)
-            {
-                ESP_LOGW(TAG, "notify gave up after %d retries (rc=%d)", retries, rc);
-                ok = false;
-                break;
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
+        if (!notify_with_backoff(conn_handle, tx_attr_handle,
+                                 buf + off, n, PER_FRAME_RETRY_BUDGET)) {
+            ok = false;
+            break;
         }
-        if (!ok) break;
+        sent_any = true;
         off += n;
     }
 
     free(buf);
+
+    if (!ok && sent_any)
+        send_parser_reset(conn_handle, tx_attr_handle);
+
     return ok;
 }
 
@@ -648,6 +692,139 @@ void BLE::send_find_phone(bool on)
     char buf[48];
     snprintf(buf, sizeof(buf), "{\"t\":\"findPhone\",\"n\":%s}", on ? "true" : "false");
     send_gb(buf);
+}
+
+// ---------- Find-watch (incoming {t:"find"}) ----------
+// State + helpers for the "phone asks watch to ring so user can find
+// it" flow. Mirrors the alarm ring pattern: a dedicated full-screen
+// prompt, a repeating haptic loop, and a 60 s auto-stop timer. Any of
+// three things silence it — the on-screen Stop button, an incoming
+// {t:"find",n:false} from the phone, or the 60 s timeout.
+
+static lv_obj_t   *find_ring_screen    = nullptr;
+static lv_obj_t   *find_ring_prev_scr  = nullptr;
+static lv_timer_t *find_auto_stop_timer = nullptr;
+
+static void find_ring_stop();
+
+static void find_auto_stop_cb(lv_timer_t *t)
+{
+    find_auto_stop_timer = nullptr;
+    lv_timer_delete(t);
+    find_ring_stop();
+    watch.request_sleep();
+}
+
+// Build (once) the ring screen. Fullscreen black with a "Watch
+// Ringing" title, a phone icon, and a big Stop button. Reused across
+// firings — lazy-init so we don't pay the widget-tree cost on boot
+// for a feature the user might never trigger.
+static lv_obj_t *build_find_ring_screen()
+{
+    lv_obj_t *scr = lv_obj_create(NULL);
+    lv_obj_set_size(scr, 240, 240);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+    lv_obj_set_style_pad_all(scr, 0, 0);
+    lv_obj_set_style_border_width(scr, 0, 0);
+    lv_obj_set_style_radius(scr, 0, 0);
+    lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *icon = lv_label_create(scr);
+    SET_SYMBOL_48(icon, FA_PHONE_VIBRATE);
+    lv_obj_set_style_text_color(icon, lv_color_white(), 0);
+    lv_obj_align(icon, LV_ALIGN_CENTER, 0, -60);
+
+    lv_obj_t *title = lv_label_create(scr);
+    lv_label_set_text(title, "Watch ringing");
+    lv_obj_set_style_text_font(title, &ProductSansRegular_20, 0);
+    lv_obj_set_style_text_color(title, lv_color_white(), 0);
+    lv_obj_align(title, LV_ALIGN_CENTER, 0, -10);
+
+    lv_obj_t *stop_btn = lv_button_create(scr);
+    lv_obj_set_size(stop_btn, 130, 50);
+    lv_obj_align(stop_btn, LV_ALIGN_CENTER, 0, 55);
+    lv_obj_set_style_radius(stop_btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_add_style(stop_btn, &accent_bg_style, 0);
+    lv_obj_t *stop_lbl = lv_label_create(stop_btn);
+    lv_obj_center(stop_lbl);
+    lv_label_set_text(stop_lbl, "Stop");
+    lv_obj_set_style_text_color(stop_lbl, lv_color_white(), 0);
+    lv_obj_set_style_text_font(stop_lbl, &ProductSansRegular_20, 0);
+    lv_obj_add_event_cb(
+        stop_btn,
+        [](lv_event_t *) {
+            haptic_play(false, 30, 0);
+            find_ring_stop();
+        },
+        LV_EVENT_CLICKED, NULL);
+
+    return scr;
+}
+
+static void find_ring_start()
+{
+    // Wake the watch if asleep, so the ring screen actually renders
+    // and the user sees where the noise is coming from.
+    if (watch.sleeping)
+        watch.wakeup();
+
+    if (lvgl_port_lock(0)) {
+        if (!find_ring_screen)
+            find_ring_screen = build_find_ring_screen();
+        // Remember where the user was so the Stop path can return
+        // them there rather than dumping them on the watch face.
+        if (lv_screen_active() != find_ring_screen)
+            find_ring_prev_scr = lv_screen_active();
+        lv_screen_load_anim(find_ring_screen,
+                            LV_SCREEN_LOAD_ANIM_FADE_IN, 100, 0, false);
+
+        // Re-arm the 60 s auto-stop even if a previous ring is still
+        // active — a fresh {t:"find",n:true} should reset the clock.
+        if (find_auto_stop_timer)
+            lv_timer_delete(find_auto_stop_timer);
+        find_auto_stop_timer =
+            lv_timer_create(find_auto_stop_cb, 60000, NULL);
+        lv_timer_set_repeat_count(find_auto_stop_timer, 1);
+        lvgl_port_unlock();
+    }
+
+    // Short-buzz burst + gap, repeating. haptic_play(true, ...) loops
+    // until haptic_stop().
+    haptic_play(true, 250, 150, 250, 150, 250, 1500, 0);
+
+    // Keep the watch awake for the ring window + let sleep entry
+    // preserve the ring screen so it's still visible on wake if the
+    // user took a while to notice.
+    watch.prevent_sleep_until_ms = esp_timer_get_time() / 1000 + 60000;
+    watch.preserve_screen_on_sleep = true;
+}
+
+static void find_ring_stop()
+{
+    haptic_stop();
+
+    if (find_auto_stop_timer) {
+        lv_timer_delete(find_auto_stop_timer);
+        find_auto_stop_timer = nullptr;
+    }
+
+    // Drop back to whichever screen was active before the ring
+    // took over. lvgl_port_lock check because this can be called
+    // from either the LVGL task (Stop button) or the BLE rx task
+    // (incoming {t:"find",n:false}).
+    if (lvgl_port_lock(0)) {
+        if (find_ring_screen && lv_screen_active() == find_ring_screen) {
+            lv_obj_t *target = find_ring_prev_scr ? find_ring_prev_scr
+                                                  : lv_screen_active();
+            if (target && target != find_ring_screen)
+                lv_screen_load_anim(target, LV_SCREEN_LOAD_ANIM_FADE_OUT,
+                                    100, 0, false);
+        }
+        lvgl_port_unlock();
+    }
+
+    watch.prevent_sleep_until_ms = 0;
+    watch.preserve_screen_on_sleep = false;
 }
 
 // Capture lv_screen_active() and stream it to the phone as a 24-bit BMP
@@ -1291,10 +1468,26 @@ void BLE::handle_gb_json(const char *json, size_t len)
     else if (strcmp(t->valuestring, "find") == 0)
     {
         // Phone is asking us to ring (find watch).
+        // {t:"find", n:true}  → start alarm-style repeating buzz +
+        //                       show the Stop screen for 60 s
+        // {t:"find", n:false} → silence immediately (phone found)
         cJSON *n = cJSON_GetObjectItemCaseSensitive(root, "n");
         bool on = cJSON_IsTrue(n);
-        if (on)
-            haptic_play(false, 200, 100, 200, 100, 200, 100, 200, 0);
+        if (on) find_ring_start();
+        else    find_ring_stop();
+    }
+    else if (strcmp(t->valuestring, "alarm") == 0)
+    {
+        // Gadgetbridge alarm sync:
+        //   {"t":"alarm","d":[{"h":6,"m":30,"rep":51,"on":true}, …]}
+        // We overwrite our local N_ALARMS slots with the incoming
+        // list. `rep` (weekday bitmask) is ignored for now — the local
+        // alarm_task fires by wall-clock hour+minute regardless of
+        // day. All the h→12h conversion, NVS persist, and row-widget
+        // refresh happens inside alarm_apply_from_gb.
+        cJSON *d = cJSON_GetObjectItemCaseSensitive(root, "d");
+        if (cJSON_IsArray(d))
+            alarm_apply_from_gb(d);
     }
     else if (strcmp(t->valuestring, "musicstate") == 0)
     {
@@ -1361,7 +1554,7 @@ void BLE::handle_gb_json(const char *json, size_t len)
     {
         send_gb("{t:\"gps_power\", status: false}");
     }
-    else if (strcmp(t->valuestring, "reboot") == 0)
+    else if (strcmp(t->valuestring, "poweroff") == 0)
     {
         log_freeze_diag("reboot");
         esp_restart();

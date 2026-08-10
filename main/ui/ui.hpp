@@ -103,6 +103,14 @@ lv_obj_t *apps_screen_create(lv_obj_t *parent);
 lv_obj_t *stopwatch_create(lv_obj_t *parent);
 lv_obj_t *timerscr_create(lv_obj_t *parent);
 lv_obj_t *alarmscr_create(lv_obj_t *parent);
+// Overwrite the local N_ALARMS slots with a Gadgetbridge alarm array
+// (the "d" field of {t:"alarm"}). Handles h→12h conversion, NVS
+// persist, and refreshes any live row widgets under lvgl_port_lock.
+// `arr` must be a cJSON array; caller is responsible for the outer
+// message parse and the type check. Extra entries past N_ALARMS are
+// dropped; short arrays leave trailing slots disabled.
+struct cJSON;
+extern "C" void alarm_apply_from_gb(struct cJSON *arr);
 lv_obj_t *imu_screen_create(lv_obj_t *parent);
 lv_obj_t *calculator_create(lv_obj_t *parent);
 lv_obj_t *dice_create(lv_obj_t *parent);

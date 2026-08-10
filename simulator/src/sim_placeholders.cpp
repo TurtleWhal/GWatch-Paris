@@ -33,7 +33,7 @@ namespace sim_data {
 // ----- Weather --------------------------------------------------------------
 // `temp_k` is integer Kelvin. Conversion is °F = (k - 273) * 9/5 + 32.
 //   273 = 32°F   283 = 50°F   293 = 68°F   303 = 86°F
-constexpr const char *kWeatherLocation    = "Lake Forest Park";
+constexpr const char *kWeatherLocation    = "My Location";
 constexpr const char *kWeatherDescription = "Partly Cloudy";
 constexpr int32_t     kWeatherTempKelvin  = 297;
 constexpr int32_t     kWeatherHighKelvin  = 301;

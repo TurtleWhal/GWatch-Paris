@@ -462,23 +462,46 @@ void Display::ui_init() {
 
   lv_obj_t *notifications = notifications_screen_create(ver_layer);
 
-  // scroll quicksettings and notifications to their ends so they are always in
-  // the right spot when you go back to them
-  // lv_obj_add_event_cb(
-  //     ver_layer,
-  //     [](lv_event_t *e) {
-  //       lv_obj_scroll_to_y(lv_obj_get_child(lv_event_get_target_obj(e), 0),
-  //                          lv_obj_get_scroll_top(
-  //                              lv_obj_get_child(lv_event_get_target_obj(e),
-  //                              0)),
-  //                          LV_ANIM_OFF);
-  //       lv_obj_scroll_to_y(lv_obj_get_child(lv_event_get_target_obj(e), 2),
-  //                          lv_obj_get_scroll_top(
-  //                              lv_obj_get_child(lv_event_get_target_obj(e),
-  //                              2)),
-  //                          LV_ANIM_OFF);
-  //     },
-  //     LV_EVENT_SCROLL_END, NULL);
+  // Rest-state internal scroll positions.
+  //   - Quicksettings should always open scrolled to the BOTTOM.
+  //   - Notifications should always open scrolled to the TOP.
+  // Resetting these whenever the user scrolls AWAY on ver_layer means
+  // they can never come back to a mid-list state. Runs on SCROLL_END
+  // (after the snap animation has settled) so the reset happens on
+  // the OTHER page while the user is centered on their target — the
+  // scroll they just left invisibly rewinds before the next visit.
+  static struct VerPages {
+    lv_obj_t *quicksettings;
+    lv_obj_t *notifications;
+  } ver_pages = {quicksettings, notifications};
+
+  lv_obj_add_event_cb(
+      ver_layer,
+      [](lv_event_t *e) {
+        lv_obj_t *layer = lv_event_get_current_target_obj(e);
+        // Skip while a snap is still coasting — SCROLL_END also fires
+        // when a scroll anim is canceled mid-flight (user grabs the
+        // screen). Real rest-state means nothing is moving.
+        if (lv_obj_is_scrolling(layer))
+          return;
+
+        int32_t scroll_y = lv_obj_get_scroll_y(layer);
+        int32_t qs_y     = lv_obj_get_y(ver_pages.quicksettings);
+        int32_t notif_y  = lv_obj_get_y(ver_pages.notifications);
+
+        // Reset quicksettings to the bottom unless the user is
+        // currently viewing it. Snap on ver_layer lands exactly at
+        // the child's y so equality is a safe check. INT32_MAX gets
+        // clamped by LVGL to the widget's max scroll position — no
+        // need to compute it here.
+        if (scroll_y != qs_y)
+          lv_obj_scroll_to_y(ver_pages.quicksettings, INT32_MAX, LV_ANIM_OFF);
+
+        // Reset notifications to the top unless it's the active page.
+        if (scroll_y != notif_y)
+          lv_obj_scroll_to_y(ver_pages.notifications, 0, LV_ANIM_OFF);
+      },
+      LV_EVENT_SCROLL_END, NULL);
 
   static ScrollEventData scroll_dataB = {notifications, LV_DIR_BOTTOM};
   lv_obj_add_event_cb(ver_layer, screen_scroll_highlight_event_cb,
@@ -607,6 +630,19 @@ void Display::ui_init() {
         // Helper: repoint the DIR_LEFT highlight to the highest-
         // priority screen currently alive and repaint immediately so
         // the highlight follows the new target on the next frame.
+        //
+        // Also unconditionally wipes the apps + weather bgs back to
+        // black. The SCROLL handler that paints the highlight
+        // gradient can leave one of these two screens frozen with a
+        // mid-gradient gray if the previous highlight target got
+        // swapped out mid-transition: an in-flight SCROLL callback
+        // set apps' (or weather's) bg to a highlight tint, then
+        // scroll_data_L->obj flips before the next SCROLL fires, so
+        // the old target's else-branch never runs to clear it.
+        // Wiping both to black on every music/weather add-or-remove
+        // guarantees a clean rest state — cheap since
+        // lv_obj_set_style_bg_color is a no-op when the color hasn't
+        // changed.
         auto refresh_wrap_target = []() {
           lv_obj_t *target = screen_vis.music     ? screen_vis.music
                              : screen_vis.weather ? screen_vis.weather
@@ -615,6 +651,12 @@ void Display::ui_init() {
             screen_vis.scroll_data_L->obj = target;
             lv_obj_send_event(hor_layer, LV_EVENT_SCROLL, NULL);
           }
+          if (screen_vis.appsscreen)
+            lv_obj_set_style_bg_color(screen_vis.appsscreen,
+                                      lv_color_black(), 0);
+          if (screen_vis.weather)
+            lv_obj_set_style_bg_color(screen_vis.weather,
+                                      lv_color_black(), 0);
         };
 
         // Helper: after lv_obj_create appended new_screen at the end,

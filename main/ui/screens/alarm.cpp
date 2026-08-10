@@ -1,5 +1,6 @@
 #include "ui.hpp"
 
+#include "cJSON.h"
 #include <sys/time.h>
 #include <time.h>
 
@@ -226,6 +227,75 @@ static void refresh_alarm_row(int idx)
         lv_obj_add_state(alarm_row_switches[idx], LV_STATE_CHECKED);
     else
         lv_obj_remove_state(alarm_row_switches[idx], LV_STATE_CHECKED);
+}
+
+// Receive a Gadgetbridge {t:"alarm","d":[…]} array and overwrite our
+// N_ALARMS slots with it. Each incoming entry looks like:
+//   { "h": 6, "m": 30, "rep": 51, "on": true }
+// where h is 24-hour (0..23), m is minute, on is enabled, and rep is
+// a weekday-mask for repeats (ignored for now — the local alarm task
+// fires by wall-clock hour+minute regardless of day). Extra entries
+// past N_ALARMS are dropped; short arrays leave trailing slots
+// disabled. Called from the BLE rx task, so we grab lvgl_port_lock
+// before touching row widgets.
+extern "C" void alarm_apply_from_gb(cJSON *arr)
+{
+    if (!cJSON_IsArray(arr))
+        return;
+
+    // Reset every slot first so a shorter incoming array cleanly
+    // disables the tail rather than leaving stale local alarms armed.
+    for (int i = 0; i < N_ALARMS; i++) {
+        alarms[i] = {12, 0, true, false};
+    }
+
+    int i = 0;
+    cJSON *ent;
+    cJSON_ArrayForEach(ent, arr) {
+        if (i >= N_ALARMS) break;
+        if (!cJSON_IsObject(ent)) { i++; continue; }
+
+        cJSON *h  = cJSON_GetObjectItemCaseSensitive(ent, "h");
+        cJSON *m  = cJSON_GetObjectItemCaseSensitive(ent, "m");
+        cJSON *on = cJSON_GetObjectItemCaseSensitive(ent, "on");
+
+        int h24 = cJSON_IsNumber(h) ? (int)h->valuedouble : 0;
+        int mm  = cJSON_IsNumber(m) ? (int)m->valuedouble : 0;
+        if (h24 < 0 || h24 > 23) h24 = 0;
+        if (mm  < 0 || mm  > 59) mm  = 0;
+
+        // 24h → 12h + am/pm. 0 = 12 AM, 12 = 12 PM.
+        bool am    = h24 < 12;
+        int  h12   = h24 % 12;
+        if (h12 == 0) h12 = 12;
+
+        alarms[i].hour    = (uint8_t)h12;
+        alarms[i].minute  = (uint8_t)mm;
+        alarms[i].am      = am;
+        alarms[i].enabled = cJSON_IsBool(on) ? cJSON_IsTrue(on) : false;
+        i++;
+    }
+
+    // Persist + refresh any live row labels — but NOT here on the
+    // caller's task. The BLE-rx task's stack lives in PSRAM (see
+    // ble_init in ble.cpp: internal SRAM is too tight for a 6 KB
+    // contiguous chunk after the BT controller + LVGL take theirs),
+    // and NVS writes go through the SPI flash driver which disables
+    // the flash cache mid-write. A PSRAM-backed stack disappears
+    // from the CPU's view the moment the cache goes off, and
+    // esp_task_stack_is_sane_cache_disabled() asserts on entry to
+    // the flash op — panic during any {t:"alarm"} sync. Defer to
+    // lv_async_call, which fires on the LVGL task; that task's stack
+    // is in internal SRAM (see display.cpp's lvgl_port_init — no
+    // task_stack_caps override → default heap = internal).
+    lv_async_call(
+        [](void *) {
+            for (int j = 0; j < N_ALARMS; j++) {
+                save_alarm(j);
+                refresh_alarm_row(j);
+            }
+        },
+        nullptr);
 }
 
 // Pre-load setalarmscr with alarms[idx] and switch to it.
