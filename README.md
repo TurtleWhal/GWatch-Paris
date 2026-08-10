@@ -28,8 +28,8 @@ This is the third major code "refactor" (full code rewrite), named Paris because
 * Music Control (from phone, only visible while media is playing)
 * Calculator
 * IMU G-Force visualization
-* Schedule (my current hardcoded class schedule, shows on compatible watch faces)
-* Home assistant controls (also hardcoded)
+* Schedule (daily repeating schedules set in config.json, shows on compatible watch faces)
+* Home assistant controls (also configured in config.json)
 * Dice (shake wrist to toss dice)
 * Metronome
 * Flashlight (White screen with max brightness)
@@ -51,6 +51,7 @@ Initially, the G-Watch just emulated a Bangle.js watch, but now it is it's own d
   - Notification icons (app icon or contact profile picture)
   - Music album art/cover
   - G-Watch device type
+  - Config editor (view and edit config.json file)
 
 
 # Hardware
