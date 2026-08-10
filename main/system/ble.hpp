@@ -144,6 +144,14 @@ public:
     // user-triggered `screenshot` command, not periodically.
     void send_screenshot();
 
+    // Stream the current /spiffs/config.json file to the phone using
+    // the `{t:"file"}` chunked-write protocol. Payload rides in the
+    // `d` field as base64 (pure ASCII on the wire), which sidesteps
+    // both the phone's byte-wise JSON escaping of raw UTF-8 and its
+    // cJSON parser refusing 4-byte-UTF-8 sequences from the MDI PUA
+    // range. Runs on the caller's task; blocks until send completes.
+    void send_config();
+
     // Notification queue. Mutated from the BLE task only — UI reads from
     // LVGL task. Callers must hold lvgl_port_lock OR be on the LVGL task
     // when iterating.

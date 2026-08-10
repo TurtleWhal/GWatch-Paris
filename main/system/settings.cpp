@@ -121,7 +121,12 @@ static void load_config()
     buf[got] = '\0';
     fclose(f);
 
-    g_config = cJSON_Parse(buf);
+    // require_null_terminated=1 so a truncated / headless file (e.g.
+    // one left behind by a mid-transfer BLE post that we mistakenly
+    // committed) gets rejected — cJSON_Parse without this happily
+    // returns success on the first parseable token and ignores any
+    // trailing garbage.
+    g_config = cJSON_ParseWithOpts(buf, NULL, 1);
     free(buf);
     if (!g_config)
         ESP_LOGE(TAG_SETTINGS, "config.json parse failed");
@@ -159,6 +164,15 @@ void Settings::init()
         ESP_LOGE(TAG_SETTINGS, "spiffs mount failed: %s", esp_err_to_name(spi_err));
 #endif
 
+    load_config();
+}
+
+void Settings::reload()
+{
+    // Just re-run load_config — SPIFFS is already mounted, NVS init
+    // was one-shot. load_config takes the g_json_mutex and swaps the
+    // parsed tree atomically, so readers on other tasks see either
+    // the old tree or the new tree, never a torn read.
     load_config();
 }
 

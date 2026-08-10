@@ -4,6 +4,7 @@
 
 #include "cJSON.h"
 #include "esp_lvgl_port.h"
+#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -84,6 +85,67 @@ static EntityType type_from_string(const char *s) {
   return HA_INFO;
 }
 
+// Decode an MDI icon reference from config.json to its UTF-8 bytes.
+// Accepts three interchangeable forms:
+//   "F050F"    — bare hex codepoint (materialdesignicons.com style)
+//   "0xF050F"  — C-style hex prefix
+//   "U+F050F"  — Unicode standard notation
+// Anything else (raw UTF-8 character, empty, malformed) passes through
+// as-is — keeps hand-typed icons and legacy configs working.
+//
+// MDI icons live in the Unicode PUA (U+F0000..U+F1FFF) so they need a
+// 4-byte UTF-8 encoding. We do it inline here rather than pulling in
+// a full ICU / utf8proc dependency for one code path.
+static std::string mdi_icon_from_config(const char *s) {
+  if (!s || !*s) return std::string();
+  std::string in(s);
+
+  // Skip optional "0x" / "0X" / "U+" / "u+" prefix.
+  size_t p = 0;
+  if (in.size() >= 2 &&
+      ((in[0] == '0' && (in[1] == 'x' || in[1] == 'X')) ||
+       ((in[0] == 'U' || in[0] == 'u') && in[1] == '+'))) {
+    p = 2;
+  }
+
+  // Parse remaining chars as hex. Any non-hex byte → bail and use
+  // the original string verbatim.
+  uint32_t cp = 0;
+  size_t hex_chars = 0;
+  for (size_t i = p; i < in.size(); i++) {
+    char c = in[i];
+    uint32_t d;
+    if (c >= '0' && c <= '9')      d = c - '0';
+    else if (c >= 'a' && c <= 'f') d = 10 + (c - 'a');
+    else if (c >= 'A' && c <= 'F') d = 10 + (c - 'A');
+    else return in;
+    cp = (cp << 4) | d;
+    hex_chars++;
+  }
+  // Empty hex, or a codepoint outside Unicode range — treat as raw.
+  if (hex_chars == 0 || cp > 0x10FFFF) return in;
+  // Sub-ASCII "hex" is more likely a single character the user typed
+  // that happens to look like hex (e.g. "5" or "AB") — pass through.
+  if (cp < 0x80) return in;
+
+  // Encode codepoint as UTF-8.
+  std::string out;
+  if (cp < 0x800) {
+    out += (char)(0xC0 | (cp >> 6));
+    out += (char)(0x80 | (cp & 0x3F));
+  } else if (cp < 0x10000) {
+    out += (char)(0xE0 | (cp >> 12));
+    out += (char)(0x80 | ((cp >> 6) & 0x3F));
+    out += (char)(0x80 | (cp & 0x3F));
+  } else {
+    out += (char)(0xF0 | (cp >> 18));
+    out += (char)(0x80 | ((cp >> 12) & 0x3F));
+    out += (char)(0x80 | ((cp >> 6) & 0x3F));
+    out += (char)(0x80 | (cp & 0x3F));
+  }
+  return out;
+}
+
 // The accent colour for a card is derived from its type rather than
 // stored per-entity in config.json — keeps the config schema minimal
 // and enforces visual consistency across similar entities. Numbers
@@ -150,7 +212,8 @@ static void ha_load_config() {
       cJSON *u  = cJSON_GetObjectItemCaseSensitive(ent, "unit");
       if (cJSON_IsString(n)  && n->valuestring)  e.name = n->valuestring;
       if (cJSON_IsString(id) && id->valuestring) e.id   = id->valuestring;
-      if (cJSON_IsString(ic) && ic->valuestring) e.icon = ic->valuestring;
+      if (cJSON_IsString(ic) && ic->valuestring)
+        e.icon = mdi_icon_from_config(ic->valuestring);
       if (cJSON_IsString(u)  && u->valuestring)  e.unit = u->valuestring;
       e.type  = type_from_string(cJSON_IsString(t) ? t->valuestring : nullptr);
       e.color = color_for_type(e.type);
@@ -313,7 +376,7 @@ static void build_card(lv_obj_t *parent, HAEntity &entity) {
 
           // Card child order: 0=iconbg, 1=namelbl, 2=valuelbl, 3=slider.
           lv_obj_t *valuelbl = lv_obj_get_child(card, 2);
-          lv_label_set_text_fmt(valuelbl, "%li%%", value);
+          lv_label_set_text_fmt(valuelbl, "%" PRId32 "%%", value);
 
           lv_obj_t *iconbg = lv_obj_get_child(card, 0);
           lv_obj_t *icon = lv_obj_get_child(iconbg, 0);

@@ -32,6 +32,12 @@ private:
 public:
     void init();
 
+    // Re-read config.json from disk into the in-memory cJSON tree.
+    // Called after the {t:"config","n":"post"} BLE flow writes a new
+    // config file, so subsequent read* calls see the new values
+    // without needing a reboot.
+    void reload();
+
     // -- Legacy NVS-backed API. Kept for the settings that don't fit
     // the JSON model yet (alarm blobs, useSchedule bool, battery-anchor
     // uint16s, etc.). New settings should go through the JSON API below.

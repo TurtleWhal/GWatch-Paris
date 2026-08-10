@@ -11,6 +11,7 @@
 #include "esp_timer.h"
 #include "esp_mac.h"
 #include "esp_heap_caps.h"
+#include "mbedtls/base64.h"
 
 #include "freertos/queue.h"
 #include "freertos/idf_additions.h"
@@ -1058,6 +1059,274 @@ void BLE::send_screenshot()
 #endif // LV_USE_SNAPSHOT
 }
 
+// Push /spiffs/config.json to the phone as a chunked file write.
+// Uses the same {t:"file"} protocol as send_screenshot but with the
+// `c` field and plain JSON escaping — config.json is mostly ASCII so
+// there's no reason to pay for base64 expansion. Only the four bytes
+// JSON syntactically requires escaping (`"`, `\`, and control chars
+// via \n / \r / \t / \u00XX) get escaped; everything else — including
+// non-ASCII UTF-8 continuation bytes for MDI icon codepoints — passes
+// through raw, since JSON strings accept high bytes verbatim.
+//
+// Runs on whatever task called it (typically the LVGL task via the
+// settings-screen button). Blocks until the whole file is streamed.
+void BLE::send_config()
+{
+    if (!connected()) {
+        ESP_LOGW(TAG, "send_config: no BLE link");
+        return;
+    }
+
+    FILE *f = fopen(GWATCH_CONFIG_PATH, "r");
+    if (!f) {
+        ESP_LOGW(TAG, "send_config: %s not found", GWATCH_CONFIG_PATH);
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (file_size <= 0 || file_size > 128 * 1024) {
+        ESP_LOGE(TAG, "send_config: size out of range: %ld", file_size);
+        fclose(f);
+        return;
+    }
+    uint8_t *content = (uint8_t *)heap_caps_malloc(
+        (size_t)file_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!content) {
+        ESP_LOGE(TAG, "send_config: alloc %ld B failed", file_size);
+        fclose(f);
+        return;
+    }
+    size_t got = fread(content, 1, (size_t)file_size, f);
+    fclose(f);
+
+    ESP_LOGI(TAG, "send_config: streaming %u B", (unsigned)got);
+
+    // Chunk sizing: 768 raw bytes → 1024 base64 bytes (4/3 expansion,
+    // exact for a multiple of 3). Base64 output is pure ASCII from
+    // the [A-Za-z0-9+/=] set, so cJSON parsing on the phone doesn't
+    // have any UTF-8 to mishandle — that's the entire reason for the
+    // switch away from the raw/escaped "c" field. JSON wrapper adds
+    // ~60 bytes; total ~1.1 KB per chunk fits in a few MTU frames.
+    constexpr size_t CHUNK_RAW = 768;
+    constexpr size_t B64_CAP   = (CHUNK_RAW / 3) * 4 + 4 + 8;
+    constexpr size_t JSON_CAP  = B64_CAP + 96;
+    char *b64 = (char *)heap_caps_malloc(B64_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    char *jsn = (char *)heap_caps_malloc(JSON_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!b64 || !jsn) {
+        ESP_LOGE(TAG, "send_config: chunk buf alloc failed");
+        heap_caps_free(b64);
+        heap_caps_free(jsn);
+        heap_caps_free(content);
+        return;
+    }
+
+    size_t offset = 0;
+    while (offset < got) {
+        size_t chunk = (got - offset > CHUNK_RAW) ? CHUNK_RAW : (got - offset);
+
+        size_t b64_len = 0;
+        int rc = mbedtls_base64_encode((unsigned char *)b64, B64_CAP,
+                                       &b64_len, content + offset, chunk);
+        if (rc != 0) {
+            ESP_LOGE(TAG, "send_config: base64_encode rc=%d at off=%u",
+                     rc, (unsigned)offset);
+            break;
+        }
+        b64[b64_len] = '\0';
+
+        const char *mode = (offset == 0) ? "w" : "a";
+        snprintf(jsn, JSON_CAP,
+                 "{\"t\":\"file\",\"n\":\"config.json\",\"m\":\"%s\",\"d\":\"%s\"}",
+                 mode, b64);
+        if (!send_gb(jsn)) {
+            ESP_LOGW(TAG, "send_config: send_gb failed at offset %u",
+                     (unsigned)offset);
+            break;
+        }
+        offset += chunk;
+
+        // Match the screenshot's inter-chunk pacing — one BLE conn
+        // event's worth of drain time between chunks so we don't
+        // exhaust the NimBLE mbuf pool.
+        vTaskDelay(pdMS_TO_TICKS(30));
+    }
+
+    ESP_LOGI(TAG, "send_config: done (%u / %u B)",
+             (unsigned)offset, (unsigned)got);
+
+    heap_caps_free(b64);
+    heap_caps_free(jsn);
+    heap_caps_free(content);
+}
+
+// ---------- Incoming config write ({t:"config","n":"post"}) ----------
+// Chunked receive path — mirror image of send_config. The phone streams
+// its saved config.json back to us in {t:"config","n":"post"} messages
+// with m:"w" for the first chunk (truncate/start) and m:"a" for each
+// subsequent chunk. Chunk payload arrives in the "d" field as base64
+// (which we decode into s_config_rx_buf), or, for backwards compat
+// with older phone-side firmware, in the "c" field as raw UTF-8. We
+// wait for an inactivity gap to declare the stream complete, then
+// parse-check + atomic-save + reboot + reply {t:"config","n":"success"|"fail"}.
+//
+// Base64 exists specifically to sidestep the phone's byte-wise \u00XX
+// JSON escaping (which turned every non-ASCII byte into doubly-encoded
+// UTF-8) and its cJSON parser rejecting 4-byte-UTF-8 sequences from
+// the MDI PUA range. Base64 is pure ASCII on the wire so neither
+// issue applies.
+//
+// "Stream complete" is detected by a 2 s inactivity timer — no
+// explicit end marker exists in the protocol. Phone-side chunks
+// mostly arrive 40–300 ms apart, but the occasional GC/scheduler
+// hiccup produced ~800 ms gaps mid-transfer that a shorter timer
+// finalized prematurely (partial buffer, cJSON_ParseWithOpts fails,
+// remaining chunks then land as an orphan m:"a" fragment). 2 s is
+// well above any observed hiccup while still being short enough
+// that a real end-of-transfer isn't perceived as a hang.
+
+static std::string  s_config_rx_buf;
+static lv_timer_t  *s_config_rx_timer = nullptr;
+
+// LVGL-task callback (lv_timer runs under lvgl_port_lock). Parse the
+// accumulated buffer; if it's valid JSON, atomically overwrite
+// /spiffs/config.json, ask Settings + Schedule to re-read from disk,
+// and reply "success". If parse fails, reply "fail" and leave the
+// existing on-disk config untouched.
+static void config_rx_finalize_cb(lv_timer_t *t)
+{
+    lv_timer_delete(t);
+    s_config_rx_timer = nullptr;
+
+    // Try to parse. Cheap sanity gate before we clobber the on-disk
+    // file — an incomplete or malformed transfer shouldn't be able
+    // to brick the watch's config. require_null_terminated=1 makes
+    // cJSON reject anything with trailing non-whitespace: a naked
+    // cJSON_Parse of a headless fragment like `  "start": 10.55, …`
+    // happily succeeds by parsing just the leading `"start"` string,
+    // which is not what we want when we're validating a full config.
+    cJSON *parsed = cJSON_ParseWithOpts(s_config_rx_buf.c_str(), NULL, 1);
+    if (!parsed) {
+        const char *err = cJSON_GetErrorPtr();
+        ESP_LOGW(TAG, "config post: JSON parse failed (near %s)",
+                 err ? err : "?");
+        ble.send_gb("{\"t\":\"config\",\"n\":\"fail\"}");
+        s_config_rx_buf.clear();
+        s_config_rx_buf.shrink_to_fit();
+        return;
+    }
+    cJSON_Delete(parsed);
+
+    // Atomic overwrite via .tmp + rename (same SPIFFS-friendly
+    // pattern Settings::save_config_locked uses: remove target first
+    // since SPIFFS rename refuses to clobber, then rename tmp into
+    // place). tmp path is on the same partition so rename is O(1).
+    std::string tmp_path = std::string(GWATCH_CONFIG_PATH) + ".tmp";
+    FILE *f = fopen(tmp_path.c_str(), "w");
+    if (!f) {
+        ESP_LOGE(TAG, "config post: open %s for write failed",
+                 tmp_path.c_str());
+        ble.send_gb("{\"t\":\"config\",\"n\":\"fail\"}");
+        s_config_rx_buf.clear();
+        s_config_rx_buf.shrink_to_fit();
+        return;
+    }
+    size_t written = fwrite(s_config_rx_buf.data(), 1,
+                            s_config_rx_buf.size(), f);
+    fclose(f);
+    if (written != s_config_rx_buf.size()) {
+        ESP_LOGE(TAG, "config post: short write %u/%u",
+                 (unsigned)written, (unsigned)s_config_rx_buf.size());
+        remove(tmp_path.c_str());
+        ble.send_gb("{\"t\":\"config\",\"n\":\"fail\"}");
+        s_config_rx_buf.clear();
+        s_config_rx_buf.shrink_to_fit();
+        return;
+    }
+
+    remove(GWATCH_CONFIG_PATH);
+    if (rename(tmp_path.c_str(), GWATCH_CONFIG_PATH) != 0) {
+        ESP_LOGE(TAG, "config post: rename %s -> %s failed",
+                 tmp_path.c_str(), GWATCH_CONFIG_PATH);
+        remove(tmp_path.c_str());
+        ble.send_gb("{\"t\":\"config\",\"n\":\"fail\"}");
+        s_config_rx_buf.clear();
+        s_config_rx_buf.shrink_to_fit();
+        return;
+    }
+
+    ESP_LOGI(TAG, "config post: wrote %u B, sending success + rebooting",
+             (unsigned)s_config_rx_buf.size());
+    ble.send_gb("{\"t\":\"config\",\"n\":\"success\"}");
+    s_config_rx_buf.clear();
+    s_config_rx_buf.shrink_to_fit();
+
+    // Reboot so every subsystem re-reads config.json from a clean
+    // slate — Settings, Schedule, HomeAssistant all pick up the new
+    // values via their normal boot-time load paths. Live-reload
+    // would need coordinated invalidation across each of them (and
+    // any in-flight widgets holding stale pointers), which is more
+    // fragile than a two-second reset. Delay first so the "success"
+    // notify actually leaves the BLE controller before the reset —
+    // send_gb queues the mbuf, and the controller drains it at the
+    // next conn event (~30 ms cadence). 500 ms is ~15 events worth
+    // of drain headroom.
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+}
+
+// Called from the {t:"config","n":"post"} handler for each chunk.
+// Appends the chunk's payload and (re)arms the inactivity timer.
+// If `b64` is non-null the payload is base64-decoded into the buffer;
+// otherwise `raw` (which may be null → treated as empty) is appended
+// as-is for backward compat with any pre-base64 phone-side firmware.
+// Runs on the ble_rx_task; grabs lvgl_port_lock because the timer
+// callback that reads s_config_rx_buf fires on the LVGL task under
+// that lock.
+static void config_rx_accept_chunk(const char *mode,
+                                   const char *b64,
+                                   const char *raw)
+{
+    if (!lvgl_port_lock(0)) return;
+
+    if (mode && strcmp(mode, "w") == 0)
+        s_config_rx_buf.clear();
+
+    if (b64) {
+        // Decode straight onto the tail of s_config_rx_buf. Base64
+        // output is exactly ceil(len/4)*3 bytes; grow the string to
+        // that upper bound, decode into the new tail region, then
+        // resize down to the actual byte count mbedtls reports.
+        size_t b64_len = strlen(b64);
+        size_t out_cap = (b64_len / 4) * 3 + 3;
+        size_t old_sz  = s_config_rx_buf.size();
+        s_config_rx_buf.resize(old_sz + out_cap);
+        size_t out_len = 0;
+        int rc = mbedtls_base64_decode(
+            (unsigned char *)&s_config_rx_buf[old_sz], out_cap, &out_len,
+            (const unsigned char *)b64, b64_len);
+        if (rc != 0) {
+            ESP_LOGW(TAG, "config post: base64_decode rc=%d (chunk dropped)", rc);
+            s_config_rx_buf.resize(old_sz);
+        } else {
+            s_config_rx_buf.resize(old_sz + out_len);
+        }
+    } else if (raw) {
+        s_config_rx_buf.append(raw);
+    }
+
+    if (s_config_rx_timer) {
+        lv_timer_reset(s_config_rx_timer);
+    } else {
+        s_config_rx_timer =
+            lv_timer_create(config_rx_finalize_cb, 2000, NULL);
+        if (s_config_rx_timer)
+            lv_timer_set_repeat_count(s_config_rx_timer, 1);
+    }
+
+    lvgl_port_unlock();
+}
+
 // ---------- Notification queue ----------
 
 void BLE::push_notification(Notification &&n)
@@ -1549,6 +1818,62 @@ void BLE::handle_gb_json(const char *json, size_t len)
         // last rendered frame may be partial. Just ignore the request.
         if (!watch.sleeping)
             send_screenshot();
+    }
+    else if (strcmp(t->valuestring, "config") == 0)
+    {
+        // Phone-side commands about the on-device config file.
+        //   {"t":"config","n":"fetch"} → stream /spiffs/config.json back
+        //     via the same {t:"file"} protocol the settings-screen
+        //     "Send config to phone" button uses.
+        // Additional n values (push, delete, etc.) can layer on later.
+        //
+        // Deferred to lv_async_call because send_config fopen's the
+        // SPIFFS file, which disables the flash cache — a PSRAM-
+        // backed task stack (ble_rx_task lives in PSRAM to save
+        // internal SRAM) trips esp_task_stack_is_sane_cache_disabled
+        // and panics. The LVGL task's stack is in internal SRAM, so
+        // the transfer runs safely from there — same pattern the
+        // alarm sync uses. Blocks LVGL for the transfer duration
+        // (~1 s for a small config), matching the settings-screen
+        // button which already runs send_config on the LVGL task.
+        cJSON *n = cJSON_GetObjectItemCaseSensitive(root, "n");
+        if (!cJSON_IsString(n) || !n->valuestring) {
+            /* ignore */
+        }
+        else if (strcmp(n->valuestring, "fetch") == 0) {
+            // Wake the watch so the transfer runs against a live
+            // LVGL task (send_config is scheduled on it below), and
+            // so the user sees the screen come up if they're
+            // watching for the sync to complete.
+            if (watch.sleeping) watch.wakeup();
+            lv_async_call([](void *) { ble.send_config(); }, nullptr);
+        }
+        else if (strcmp(n->valuestring, "post") == 0) {
+            // Chunked write from phone. m:"w" starts fresh, m:"a"
+            // appends. "d" carries base64-encoded raw bytes (the
+            // preferred wire format); "c" carries raw UTF-8 for
+            // backward compat with older phone-side firmware that
+            // predates the base64 switch. See config_rx_accept_chunk.
+            //
+            // Once nothing more has arrived for 500 ms the timer
+            // finalizes: parse-check + atomic-save + reboot + reply
+            // {t:"config","n":"success"|"fail"}.
+            //
+            // Wake on every chunk (cheap when already awake — the
+            // sleeping guard short-circuits). Guarantees the LVGL
+            // task is running by the time the inactivity timer
+            // fires, since the timer itself lives on the LVGL task
+            // and won't tick if it's suspended.
+            if (watch.sleeping) watch.wakeup();
+
+            cJSON *m = cJSON_GetObjectItemCaseSensitive(root, "m");
+            cJSON *d = cJSON_GetObjectItemCaseSensitive(root, "d");
+            cJSON *c = cJSON_GetObjectItemCaseSensitive(root, "c");
+            const char *mode = cJSON_IsString(m) ? m->valuestring : "a";
+            const char *b64  = cJSON_IsString(d) ? d->valuestring : nullptr;
+            const char *raw  = cJSON_IsString(c) ? c->valuestring : nullptr;
+            config_rx_accept_chunk(mode, b64, raw);
+        }
     }
     else if (strcmp(t->valuestring, "is_gps_active") == 0)
     {
