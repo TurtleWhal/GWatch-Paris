@@ -7,7 +7,7 @@ This watch is a personal project that I have worked on for fun over the last few
 
 This is the third major code "refactor" (full code rewrite), named Paris because I was in Paris when I started working on it (I'm trying to do a cool version name thing). The goal of this version is to be more careful as I add features. I started with a solid base that fetched the time using wifi, and then used ESP32-S3 light sleep to turn off the cpu while asleep, which allowed for a three day battery life, but without being able to receive notifications over Bluetooth from my phone. Since then, I have been careful about optimizing all processes for efficiency, and eventually added Bluetooth Low Energy connectivity to my phone, using modem sleep on the ESP32-S3 to maintain a bluetooth connection while still using very low power.
 
-<h2><a href="https://garrettjordan.xyz">Try it yourself in the LVGL simulator!</a></h2>
+<h2><a href="https://garrettjordan.xyz/watchsim">Try it yourself in the LVGL simulator!</a></h2>
 
 # Features
 * 240x240 Touchscreen
