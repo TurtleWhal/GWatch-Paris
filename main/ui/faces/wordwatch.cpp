@@ -51,11 +51,14 @@ static const lv_color_t COLOR_LIT = LV_COLOR_MAKE(0xFF, 0xFF, 0xFF);
 static lv_obj_t *cells[N_ROWS][MAX_COLS];
 static uint8_t last_bucket = 255;
 static uint8_t last_hour12 = 255;
+static uint8_t last_min = 255;
 
 // A word = a contiguous run of letters in one row.
 struct Word {
     uint8_t row, col, len;
 };
+
+static lv_obj_t *m1, *m2, *m3, *m4;
 
 // Fixed words (always-on or minute/connector words).
 // Words that can light at the same time never sit adjacent: each pair has at
@@ -131,11 +134,48 @@ lv_obj_t *wordwatch_create(lv_obj_t *parent)
         }
     }
 
+    m1 = lv_obj_create(scr);
+    lv_obj_set_size(m1, 4, 4);
+    lv_obj_set_style_bg_color(m1, COLOR_LIT, 0);
+    lv_obj_set_style_radius(m1, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(m1, 0, 0);
+    
+    m2 = lv_obj_create(scr);
+    lv_obj_set_size(m2, 4, 4);
+    lv_obj_set_style_bg_color(m2, COLOR_LIT, 0);
+    lv_obj_set_style_radius(m2, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(m2, 0, 0);
+
+    m3 = lv_obj_create(scr);
+    lv_obj_set_size(m3, 4, 4);
+    lv_obj_set_style_bg_color(m3, COLOR_LIT, 0);
+    lv_obj_set_style_radius(m3, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(m3, 0, 0);
+
+    m4 = lv_obj_create(scr);
+    lv_obj_set_size(m4, 4, 4);
+    lv_obj_set_style_bg_color(m4, COLOR_LIT, 0);
+    lv_obj_set_style_radius(m4, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(m4, 0, 0);
+
+    // Corners
+    // lv_obj_align(m1, LV_ALIGN_CENTER, -88, -72);
+    // lv_obj_align(m2, LV_ALIGN_CENTER, 88, -72);
+    // lv_obj_align(m3, LV_ALIGN_CENTER, 88, 72);
+    // lv_obj_align(m4, LV_ALIGN_CENTER, -88, 72);
+
+    // Bottom
+    lv_obj_align(m1, LV_ALIGN_CENTER, -15, 112);
+    lv_obj_align(m2, LV_ALIGN_CENTER, -5, 112);
+    lv_obj_align(m3, LV_ALIGN_CENTER, 5,  112);
+    lv_obj_align(m4, LV_ALIGN_CENTER, 15,  112);
+
     // Force a full draw now: reset the change-guards so the immediate update
     // below lights the current words. Without this, switching to this face
     // leaves every letter dim until the 5-minute bucket happens to change.
     last_bucket = 255;
     last_hour12 = 255;
+    last_min = 255;
     wordwatch_update();
 
     return scr;
@@ -148,6 +188,15 @@ void wordwatch_update()
     struct tm t;
     localtime_r(&tv.tv_sec, &t);
 
+    // Nothing on this face changes faster than once a minute (the words track
+    // the 5-minute bucket; the dots track the intra-bucket minute). This tick
+    // runs at the 16 ms refresh rate, so bail on every intra-minute frame —
+    // re-running the invalidating setters 60x/sec is exactly the per-frame
+    // reflush CLAUDE.md warns about.
+    if (t.tm_min == last_min)
+        return;
+    last_min = t.tm_min;
+
     uint8_t bucket = t.tm_min / 5; // 0..11, floor to 5 minutes
 
     // Hour to display: current hour for "past" buckets (0..6), next hour for
@@ -157,49 +206,60 @@ void wordwatch_update()
     if (h12 == 0)
         h12 = 12;
 
-    if (bucket == last_bucket && h12 == last_hour12)
-        return;
-    last_bucket = bucket;
-    last_hour12 = h12;
-
-    // Reset everything to dim.
-    for (int row = 0; row < N_ROWS; row++)
-        for (int col = 0; col < MAX_COLS; col++)
-            if (cells[row][col])
-                lv_obj_set_style_text_color(cells[row][col], COLOR_DIM, 0);
-
-    light(W_IT);
-    light(W_IS);
-
-    // Minute words.
-    switch (bucket)
+    // The lit words only change on a bucket/hour rollover (every 5 minutes),
+    // and relighting is 140 label writes — so gate that on an actual change.
+    // The minute dots below still refresh every minute.
+    if (bucket != last_bucket || h12 != last_hour12)
     {
-    case 0:                       break;                 // o'clock
-    case 1:  light(W_FIVE_MIN);   break;                 // five past
-    case 2:  light(W_TEN_MIN);    break;                 // ten past
-    case 3:  light(W_A); light(W_QUARTER); break;        // a quarter past
-    case 4:  light(W_TWENTY);     break;                 // twenty past
-    case 5:  light(W_TWENTY); light(W_FIVE_MIN); break;  // twenty-five past
-    case 6:  light(W_HALF);       break;                 // half past
-    case 7:  light(W_TWENTY); light(W_FIVE_MIN); break;  // twenty-five to
-    case 8:  light(W_TWENTY);     break;                 // twenty to
-    case 9:  light(W_A); light(W_QUARTER); break;        // a quarter to
-    case 10: light(W_TEN_MIN);    break;                 // ten to
-    case 11: light(W_FIVE_MIN);   break;                 // five to
+        last_bucket = bucket;
+        last_hour12 = h12;
+
+        // Reset everything to dim.
+        for (int row = 0; row < N_ROWS; row++)
+            for (int col = 0; col < MAX_COLS; col++)
+                if (cells[row][col])
+                    lv_obj_set_style_text_color(cells[row][col], COLOR_DIM, 0);
+
+        light(W_IT);
+        light(W_IS);
+
+        // Minute words.
+        switch (bucket)
+        {
+        case 0:                       break;                 // o'clock
+        case 1:  light(W_FIVE_MIN);   break;                 // five past
+        case 2:  light(W_TEN_MIN);    break;                 // ten past
+        case 3:  light(W_A); light(W_QUARTER); break;        // a quarter past
+        case 4:  light(W_TWENTY);     break;                 // twenty past
+        case 5:  light(W_TWENTY); light(W_FIVE_MIN); break;  // twenty-five past
+        case 6:  light(W_HALF);       break;                 // half past
+        case 7:  light(W_TWENTY); light(W_FIVE_MIN); break;  // twenty-five to
+        case 8:  light(W_TWENTY);     break;                 // twenty to
+        case 9:  light(W_A); light(W_QUARTER); break;        // a quarter to
+        case 10: light(W_TEN_MIN);    break;                 // ten to
+        case 11: light(W_FIVE_MIN);   break;                 // five to
+        }
+
+        // Connector.
+        if (bucket == 0)
+            light(W_OCLOCK);
+        else if (bucket <= 6)
+            light(W_PAST);
+        else
+            light(W_TO);
+
+        // Hour.
+        light(HOURS[h12]);
+
+        // AM/PM are present in the grid but intentionally left unlit for now.
+        (void)W_AM;
+        (void)W_PM;
     }
 
-    // Connector.
-    if (bucket == 0)
-        light(W_OCLOCK);
-    else if (bucket <= 6)
-        light(W_PAST);
-    else
-        light(W_TO);
-
-    // Hour.
-    light(HOURS[h12]);
-
-    // AM/PM are present in the grid but intentionally left unlit for now.
-    (void)W_AM;
-    (void)W_PM;
+    // Minute dots: how many minutes into the current 5-minute bucket we are.
+    // These change every minute, so they live outside the bucket guard above.
+    lv_obj_set_style_bg_color(m1, t.tm_min % 5 >= 1 ? COLOR_LIT : COLOR_DIM, 0);
+    lv_obj_set_style_bg_color(m2, t.tm_min % 5 >= 2 ? COLOR_LIT : COLOR_DIM, 0);
+    lv_obj_set_style_bg_color(m3, t.tm_min % 5 >= 3 ? COLOR_LIT : COLOR_DIM, 0);
+    lv_obj_set_style_bg_color(m4, t.tm_min % 5 >= 4 ? COLOR_LIT : COLOR_DIM, 0);
 }
