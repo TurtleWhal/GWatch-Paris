@@ -22,7 +22,7 @@ This is the third major code "refactor" (full code rewrite), named Paris because
 
 # UI
 * 5 unique watch faces
-* Adjustable global accent color/theme (7 presets)
+* Adjustable global accent color/theme
 * Stopwatch, Timer, and Alarms
 * Weather (from phone)
 * Music Control (from phone, only visible while media is playing)

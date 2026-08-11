@@ -45,17 +45,19 @@
         {"name": "chevron_right", "char": "",  "sizes": [22] },
         {"name": "chevron_left", "char": "",  "sizes": [22] },
         {"name": "backspace", "char": "",  "sizes": [24] },
-        {"name": "plusminus", "char": "",  "sizes": [24] }
+        {"name": "plusminus", "char": "",  "sizes": [24] },
+        {"name": "palette", "char": "",  "sizes": [24] }
     ],
     "mdi-symbols": [
         {"name": "home-assistant", "hex": "F07D0", "sizes": [22, 28] },
         {"name": "fan",            "hex": "F0210", "sizes": [22] },
         {"name": "window",         "hex": "F05B1", "sizes": [22] },
         {"name": "lightbulb",      "hex": "F0335", "sizes": [22] },
+        {"name": "tracklight",     "hex": "F0914", "sizes": [22] },
         {"name": "thermometer",    "hex": "F050F", "sizes": [22] },
         {"name": "lightning",      "hex": "F0241", "sizes": [22] },
         {"name": "window_shade",   "hex": "F1A6B", "sizes": [22] },
-        {"name": "desktop_pc",      "hex": "F0AAB", "sizes": [22] }
+        {"name": "desktop_pc",     "hex": "F0AAB", "sizes": [22] }
     ],
     "fonts": [
         {"font":"ProductSans-Regular.ttf", "size": [10, 12, 14, 16, 20, 24],         "range":"default,0xA0-0x24F,0x2000-0x21FF", "symbols":"",                          "bpp":8},

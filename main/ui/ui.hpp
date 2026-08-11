@@ -171,8 +171,17 @@ lv_color_t settings_color_at(uint8_t idx);
 // range idx clamps to 0.
 const char *settings_color_hex_at(uint8_t idx);
 // Reverse mapping: hex string → palette index. Case-insensitive.
-// Unknown / malformed hex falls back to index 0.
+// Returns UINT8_MAX when the hex isn't in the palette (i.e. a custom
+// picker-chosen colour) so callers can tell "matches palette entry 0"
+// from "no palette match".
 uint8_t settings_color_idx_from_hex(const char *hex);
+
+// Parse a "#RRGGBB" (or "RRGGBB", case-insensitive) hex string into an
+// lv_color_t. Accepts arbitrary hex — not restricted to the palette —
+// so a hand-edited config.json or the built-in color picker can carry
+// any accent colour through boot. Malformed input falls back to
+// SETTINGS_PALETTE[0] rather than throwing so the watch still boots.
+lv_color_t settings_color_from_hex(const char *hex);
 
 // Rotation setter that also persists the value to NVS. Quick-settings
 // rotate icon calls this so the choice survives reboots.
