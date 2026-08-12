@@ -20,6 +20,7 @@ static const watchface_def_t WATCHFACES[] = {
     {"Dive", divewatch_create, divewatch_update},
     {"Time", timescreen_create, timescreen_update},
     {"Words", wordwatch_create, wordwatch_update},
+    {"Tread", treadwatch_create, treadwatch_update},
 };
 static constexpr uint8_t WATCHFACE_N =
     sizeof(WATCHFACES) / sizeof(WATCHFACES[0]);

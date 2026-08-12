@@ -23,6 +23,10 @@ LV_FONT_DECLARE(ArsenalBold_14);
 LV_FONT_DECLARE(ArsenalBold_48);
 LV_FONT_DECLARE(LexendExaSemiBold_14);
 LV_FONT_DECLARE(LexendExaSemiBold_48);
+LV_FONT_DECLARE(SquadaOneRegular_16);
+LV_FONT_DECLARE(SquadaOneRegular_18);
+LV_FONT_DECLARE(SquadaOneRegular_24);
+LV_FONT_DECLARE(SquadaOneRegular_48);
 LV_FONT_DECLARE(NotoEmojiRegular_16);
 LV_FONT_DECLARE(NotoEmojiRegular_20);
 
@@ -54,7 +58,7 @@ LV_FONT_DECLARE(MaterialDesignIcons_28);
 #define FA_BATTERY_50     "" // '', Sizes: [14, 16, 28]
 #define FA_BATTERY_25     "" // '', Sizes: [14, 16, 28]
 #define FA_BATTERY_10     "" // '', Sizes: [14, 16, 28]
-#define FA_BATTERY_EMPTY  "" // '', Sizes: [14, 16, 28]
+#define FA_BATTERY_EMPTY  "" // '', Sizes: [14, 16, 22, 28]
 #define FA_CALENDAR       "" // '', Sizes: [14, 22, 28]
 #define FA_LIGHTNING      "" // '', Sizes: [14, 16, 28]
 #define FA_CHARGING       "" // '', Sizes: [14, 16, 28]

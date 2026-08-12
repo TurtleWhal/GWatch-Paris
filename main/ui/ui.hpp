@@ -87,6 +87,9 @@ void wordwatch_update();
 lv_obj_t *divewatch_create(lv_obj_t *parent);
 void divewatch_update();
 
+lv_obj_t *treadwatch_create(lv_obj_t *parent);
+void treadwatch_update();
+
 lv_obj_t *watchface_create(lv_obj_t *parent);
 extern lv_obj_t *watchface;
 

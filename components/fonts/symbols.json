@@ -7,7 +7,7 @@
         {"name": "battery-50",    "char": "",  "sizes": [14, 16, 28] },
         {"name": "battery-25",    "char": "",  "sizes": [14, 16, 28] },
         {"name": "battery-10",    "char": "",  "sizes": [14, 16, 28] },
-        {"name": "battery-empty", "char": "",  "sizes": [14, 16, 28] },
+        {"name": "battery-empty", "char": "",  "sizes": [14, 16, 22, 28] },
         {"name": "calendar",   "char": "",  "sizes": [14, 22, 28] },
         {"name": "lightning",  "char": "",  "sizes": [14, 16, 28] },
         {"name": "charging",  "char": "",  "sizes": [14, 16, 28] },
@@ -67,6 +67,7 @@
         {"font":"BadeenDisplay.ttf",       "size": [84],                             "range":"",                                 "symbols":"1234567890:.",              "bpp":8},
         {"font":"Arsenal-Bold.ttf",        "size": [14, 48],                         "range":"",                                 "symbols":"1234567890",                "bpp":8},
         {"font":"LexendExa-SemiBold.ttf",  "size": [14, 48],                         "range":"",                                 "symbols":"1234567890",                "bpp":8},
+        {"font":"SquadaOne-Regular.ttf",   "size": [16, 18, 24, 48],                 "range":"default",                          "symbols":"",                          "bpp":8},
         {"font":"NotoEmoji-Regular.ttf",   "size": [16, 20], "range": "0x231A-0x231B,0x23E9-0x23F3,0x25FB-0x25FE,0x2600-0x27BF,0x1F004,0x1F300-0x1F64F,0x1F680-0x1F6FF,0x1F900-0x1F9FF,0x1FA70-0x1FAFF", "symbols": "", "bpp": 8}
     ]
 }
