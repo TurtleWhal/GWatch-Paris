@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include "images.hpp"
 #include <sys/time.h>
 #if LV_USE_SNAPSHOT
 #include "draw/snapshot/lv_snapshot.h"
@@ -15,7 +16,7 @@
 static constexpr int BG_COLOR = 0x101010;
 static constexpr int TREAD_COLOR = 0x000000;
 static constexpr int EDGE_COLOR = 0x222222;
-static constexpr int FRAME_COLOR = 0x282833;
+// static constexpr int FRAME_COLOR = 0x282833; // now baked into IMG_TREADFRAME
 
 static constexpr uint8_t TW_COUNT = 12;            // 12 hour numbers
 static constexpr int TW_SLOT = 40;                 // px per number
@@ -57,7 +58,7 @@ static constexpr int M2_COUNT = 10, M2_SLOT = 48; // 0-9, 5 visible
 static constexpr float MN_ANGLE_DEG =
     -66.0f; // matches m*box transform_rotation (-660)
 static constexpr float MN_Y_NUDGE =
-    12.0f; // drop the digits this many px lower (vertical),
+    8.0f;  // drop the digits this many px lower (vertical),
            // applied along the track so they stay centred on it
 static constexpr int MN_LBL_W =
     30; // fixed slot width -> exact horizontal centring
@@ -287,12 +288,17 @@ lv_obj_t *treadwatch_create(lv_obj_t *parent) {
     tw_last_x[i] = TW_SLOT * i;
   }
 
-  lv_obj_t *hourframe = lv_obj_create(scr);
-  lv_obj_set_size(hourframe, 50, 60);
-  lv_obj_set_style_bg_opa(hourframe, 0, 0);
-  lv_obj_set_style_border_width(hourframe, 6, 0);
-  lv_obj_set_style_border_color(hourframe, lv_color_hex(FRAME_COLOR), 0);
-  lv_obj_align(hourframe, LV_ALIGN_CENTER, -120 + TW_SLOT * 1.5, 0);
+  // Frame widgets replaced by the IMG_TREADFRAME overlay at the bottom
+  // of this function — the PNG carries the hour/minute/second frames
+  // and the seconds arrow as a single pre-rendered layer, so an lv_image
+  // blit is cheaper than three border-drawing containers plus the
+  // rotated secarrow.
+  // lv_obj_t *hourframe = lv_obj_create(scr);
+  // lv_obj_set_size(hourframe, 50, 60);
+  // lv_obj_set_style_bg_opa(hourframe, 0, 0);
+  // lv_obj_set_style_border_width(hourframe, 6, 0);
+  // lv_obj_set_style_border_color(hourframe, lv_color_hex(FRAME_COLOR), 0);
+  // lv_obj_align(hourframe, LV_ALIGN_CENTER, -120 + TW_SLOT * 1.5, 0);
 
   // The two diagonal bars are static decoration, but transform_rotation makes
   // each a large rotated layer. LVGL re-renders that layer — tiled, because it
@@ -369,13 +375,13 @@ lv_obj_t *treadwatch_create(lv_obj_t *parent) {
   }
 #endif
 
-  lv_obj_t *minframe = lv_obj_create(scr);
-  lv_obj_set_size(minframe, 64, 36);
-  lv_obj_set_style_bg_opa(minframe, 0, 0);
-  lv_obj_set_style_border_width(minframe, 6, 0);
-  lv_obj_set_style_border_color(minframe, lv_color_hex(FRAME_COLOR), 0);
-  lv_obj_align(minframe, LV_ALIGN_CENTER, 8, 12);
-  lv_obj_set_scrollbar_mode(minframe, LV_SCROLLBAR_MODE_OFF);
+  // lv_obj_t *minframe = lv_obj_create(scr);
+  // lv_obj_set_size(minframe, 64, 36);
+  // lv_obj_set_style_bg_opa(minframe, 0, 0);
+  // lv_obj_set_style_border_width(minframe, 6, 0);
+  // lv_obj_set_style_border_color(minframe, lv_color_hex(FRAME_COLOR), 0);
+  // lv_obj_align(minframe, LV_ALIGN_CENTER, 8, 12);
+  // lv_obj_set_scrollbar_mode(minframe, LV_SCROLLBAR_MODE_OFF);
 
   // Digit ribbons for the two diagonal tracks. Created on scr (not the boxes)
   // so they render upright on top of the bars; positioned along the diagonal.
@@ -442,24 +448,38 @@ lv_obj_t *treadwatch_create(lv_obj_t *parent) {
     }
   }
 
-  lv_obj_t *secframe = lv_obj_create(scr);
-  lv_obj_set_size(secframe, 64, 36);
-  lv_obj_set_style_bg_opa(secframe, 0, 0);
-  lv_obj_set_style_border_width(secframe, 6, 0);
-  lv_obj_set_style_border_color(secframe, lv_color_hex(FRAME_COLOR), 0);
-  lv_obj_align(secframe, LV_ALIGN_CENTER, 58, 46);
-  lv_obj_set_style_pad_all(secframe, 0, 0);
-  lv_obj_set_scrollbar_mode(secframe, LV_SCROLLBAR_MODE_OFF);
+  // lv_obj_t *secframe = lv_obj_create(scr);
+  // lv_obj_set_size(secframe, 64, 36);
+  // lv_obj_set_style_bg_opa(secframe, 0, 0);
+  // lv_obj_set_style_border_width(secframe, 6, 0);
+  // lv_obj_set_style_border_color(secframe, lv_color_hex(FRAME_COLOR), 0);
+  // lv_obj_align(secframe, LV_ALIGN_CENTER, 58, 46);
+  // lv_obj_set_style_pad_all(secframe, 0, 0);
+  // lv_obj_set_scrollbar_mode(secframe, LV_SCROLLBAR_MODE_OFF);
 
-  lv_obj_t *secarrow = lv_obj_create(secframe);
-  lv_obj_set_size(secarrow, 6, 6);
-  lv_obj_set_style_border_width(secarrow, 0, 0);
-  lv_obj_set_style_bg_color(secarrow, lv_color_hex(FRAME_COLOR), 0);
-  lv_obj_align(secarrow, LV_ALIGN_BOTTOM_MID, 0, 3);
-  lv_obj_set_style_transform_pivot_x(secarrow, 3, 0);
-  lv_obj_set_style_transform_pivot_y(secarrow, 3, 0);
-  lv_obj_set_style_transform_rotation(secarrow, 450, 0);
-  lv_obj_set_style_radius(secarrow, 0, 0);
+  // lv_obj_t *secarrow = lv_obj_create(secframe);
+  // lv_obj_set_size(secarrow, 6, 6);
+  // lv_obj_set_style_border_width(secarrow, 0, 0);
+  // lv_obj_set_style_bg_color(secarrow, lv_color_hex(FRAME_COLOR), 0);
+  // lv_obj_align(secarrow, LV_ALIGN_BOTTOM_MID, 0, 3);
+  // lv_obj_set_style_transform_pivot_x(secarrow, 3, 0);
+  // lv_obj_set_style_transform_pivot_y(secarrow, 3, 0);
+  // lv_obj_set_style_transform_rotation(secarrow, 450, 0);
+  // lv_obj_set_style_radius(secarrow, 0, 0);
+
+  // Frame overlay: hour box, minute box, seconds box, and the seconds
+  // arrow are all baked into IMG_TREADFRAME. Created last so it sits on
+  // top of every ribbon; non-clickable so touches pass through to
+  // whatever the parent screen wants to do with them.
+  lv_obj_t *frame_imghm = lv_image_create(scr);
+  lv_image_set_src(frame_imghm, &IMG_TREADFRAMEHM);
+  lv_obj_set_pos(frame_imghm, 32, 91);
+  lv_obj_remove_flag(frame_imghm, LV_OBJ_FLAG_CLICKABLE);
+
+  lv_obj_t *frame_imgs = lv_image_create(scr);
+  lv_image_set_src(frame_imgs, &IMG_TREADFRAMES);
+  lv_obj_set_pos(frame_imgs, 143, 149);
+  lv_obj_remove_flag(frame_imgs, LV_OBJ_FLAG_CLICKABLE);
 
   tw_batlbl = lv_label_create(scr);
   lv_obj_set_style_text_font(tw_batlbl, &SquadaOneRegular_16, 0);
@@ -478,12 +498,12 @@ lv_obj_t *treadwatch_create(lv_obj_t *parent) {
   lv_obj_add_style(tw_datelbl, &accent_text_style,
                    0); // theme colour, live-updates
   lv_obj_set_style_transform_rotation(tw_datelbl, -660, 0);
-  lv_obj_align(tw_datelbl, LV_ALIGN_TOP_RIGHT, -35, 84);
+  lv_obj_align(tw_datelbl, LV_ALIGN_TOP_RIGHT, -29, 84);
 
   tw_daylbl = lv_label_create(scr);
   lv_obj_set_style_text_font(tw_daylbl, &SquadaOneRegular_24, 0);
   lv_obj_add_style(tw_daylbl, &accent_text_style, 0); // theme colour, live-updates
-  lv_obj_align(tw_daylbl, LV_ALIGN_TOP_RIGHT, -18, 70);
+  lv_obj_align(tw_daylbl, LV_ALIGN_TOP_RIGHT, -15, 70);
   lv_obj_set_style_text_align(tw_daylbl, LV_TEXT_ALIGN_CENTER, 0);
 
   // Rest every ribbon on the current time so nothing flicks at boot.

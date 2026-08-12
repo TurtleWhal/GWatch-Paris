@@ -969,26 +969,24 @@ void BLE::send_screenshot()
     // per the BangleJS file-write API:
     //   n: filename
     //   m: "w" on the first chunk (truncate), "a" on the rest (append)
-    //   c: contents as a string — raw bytes encoded with Espruino's
-    //      \xNN convention so the string parses back to the original
-    //      binary on the GB side. Printable ASCII (except " and \) is
-    //      sent unescaped to keep the payload smaller; everything else
-    //      is \xNN (4 chars per byte). The watch uses the same escape
-    //      convention on inbound messages (see fix_js_x_escapes), so
-    //      the GB fork already understands it.
+    //   d: contents base64-encoded — same wire format send_config
+    //      uses. Base64 is pure ASCII so the phone-side cJSON parser
+    //      has no escapes / raw high bytes to mishandle, and the
+    //      output size is a deterministic 4/3× (versus the escape
+    //      path which was 3–4× on average and 6× worst-case).
     //
-    // CHUNK_RAW is tuned so the worst-case-escaped payload + JSON
-    // wrapper stays under ~1.1 KB — well within Gadgetbridge's RX line
-    // buffer on the BangleJS side.
-    constexpr size_t CHUNK_RAW = 256;            // 256 * 4 = 1024 worst-case
-    constexpr size_t ESC_CAP   = CHUNK_RAW * 4 + 8;
-    constexpr size_t JSON_CAP  = ESC_CAP + 96;
-    char *esc = (char *)heap_caps_malloc(ESC_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    // CHUNK_RAW = 768 → 1024 B base64 (multiple of 3, no intermediate
+    // padding, so the phone can decode chunks independently). Total
+    // per-message ~1.1 KB, well inside Gadgetbridge's RX line buffer.
+    constexpr size_t CHUNK_RAW = 768;
+    constexpr size_t B64_CAP   = (CHUNK_RAW / 3) * 4 + 4 + 8;
+    constexpr size_t JSON_CAP  = B64_CAP + 96;
+    char *b64 = (char *)heap_caps_malloc(B64_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     char *jsn = (char *)heap_caps_malloc(JSON_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!esc || !jsn)
+    if (!b64 || !jsn)
     {
         ESP_LOGE(TAG, "screenshot chunk buf alloc failed");
-        heap_caps_free(esc);
+        heap_caps_free(b64);
         heap_caps_free(jsn);
         heap_caps_free(bmp);
         return;
@@ -1002,7 +1000,6 @@ void BLE::send_screenshot()
     ESP_LOGI(TAG, "screenshot %s: %u B in %ux%u",
              filename, (unsigned)file_size, (unsigned)w, (unsigned)h);
 
-    static const char hex[] = "0123456789abcdef";
     size_t offset = 0;
     while (offset < file_size)
     {
@@ -1010,32 +1007,20 @@ void BLE::send_screenshot()
                            ? CHUNK_RAW
                            : (file_size - offset);
 
-        // Escape bytes into `esc`. Keep printable ASCII unescaped except
-        // " (would close the string) and \ (escape lead-in); everything
-        // else is \xNN.
-        size_t epos = 0;
-        const uint8_t *src = bmp + offset;
-        for (size_t i = 0; i < chunk; i++)
-        {
-            uint8_t b = src[i];
-            if (b >= 0x20 && b <= 0x7E && b != '"' && b != '\\')
-            {
-                esc[epos++] = (char)b;
-            }
-            else
-            {
-                esc[epos++] = '\\';
-                esc[epos++] = 'x';
-                esc[epos++] = hex[b >> 4];
-                esc[epos++] = hex[b & 0x0F];
-            }
+        size_t b64_len = 0;
+        int rc = mbedtls_base64_encode((unsigned char *)b64, B64_CAP,
+                                       &b64_len, bmp + offset, chunk);
+        if (rc != 0) {
+            ESP_LOGE(TAG, "screenshot base64_encode rc=%d at off=%u",
+                     rc, (unsigned)offset);
+            break;
         }
-        esc[epos] = 0;
+        b64[b64_len] = '\0';
 
         const char *mode = (offset == 0) ? "w" : "a";
         snprintf(jsn, JSON_CAP,
-                 "{\"t\":\"file\",\"n\":\"%s\",\"m\":\"%s\",\"c\":\"%s\"}",
-                 filename, mode, esc);
+                 "{\"t\":\"file\",\"n\":\"%s\",\"m\":\"%s\",\"d\":\"%s\"}",
+                 filename, mode, b64);
         if (!send_gb(jsn))
         {
             ESP_LOGW(TAG, "screenshot send_gb failed at offset %u",
@@ -1053,7 +1038,7 @@ void BLE::send_screenshot()
         vTaskDelay(pdMS_TO_TICKS(30));
     }
 
-    heap_caps_free(esc);
+    heap_caps_free(b64);
     heap_caps_free(jsn);
     heap_caps_free(bmp);
 #endif // LV_USE_SNAPSHOT
