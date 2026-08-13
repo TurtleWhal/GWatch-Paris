@@ -14,52 +14,65 @@ volatile bool step_interrupt;
 
 static void pedometer_event();
 
+// Pedometer amplitude thresholds (ped_fix_peak2peak / ped_fix_peak) are
+// u6.10 fixed-point: 1 LSB = 1/1024 g ≈ 0.977 mg (datasheet §11.1), NOT
+// raw mg. Encode from mg so the config below reads in true mg.
+static constexpr uint16_t mg_to_u6_10(float mg) {
+  return (uint16_t)(mg * 1024.0f / 1000.0f + 0.5f);
+}
+
 // Set up accel + gyro + pedometer at full rates. Called from imu_init and
 // from imu_wake().
 static void imu_configure_normal() {
-  qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_16G,
-                          SensorQMI8658::ACC_ODR_125Hz);
+  // ±2 g range: finest resolution (0.061 mg/LSB) and cleanest low-motion
+  // data. Range is orthogonal to step accuracy here — the pedometer
+  // thresholds are absolute mg (u6.10), independent of range. Clips above
+  // 2 g (hard knocks, running arm-swing flat-top), harmless for counting:
+  // a clipped peak is still a peak.
+  //
+  // 62.5 Hz accel ODR: the rate every QMI8658 vendor example and the
+  // library's own pedometer reference use. The built-in pedometer engine
+  // is tuned/validated around 50–62.5 Hz; the old 125 Hz ran it outside
+  // that regime for no benefit (gait is 1–3 Hz) and cost ~2× accel
+  // current. Lower ODR also trims sleep power — a battery win.
+  qmi.configAccelerometer(SensorQMI8658::ACC_RANGE_2G,
+                          SensorQMI8658::ACC_ODR_62_5Hz);
   qmi.configGyroscope(SensorQMI8658::GYR_RANGE_512DPS,
                       SensorQMI8658::GYR_ODR_224_2Hz);
   qmi.enableAccelerometer();
   qmi.enableGyroscope();
 
-  // Tuned for wrist-worn use. The QMI8658 datasheet defaults
-  // (peak2peak=200 mg, peak=100 mg, time_cnt_entry=10) assume hip /
-  // pocket mounting where the gait impulse hits the sensor directly.
-  // On the wrist the arm absorbs most of the impulse — peak-to-peak
-  // accel during a relaxed walking step is closer to 40–80 mg, well
-  // under the default. Stock thresholds detect only exaggerated arm
-  // swings (running, deliberate gesture), missing most normal steps.
+  // Pedometer tuning. We adopt the QMI8658 library author's reference
+  // config (LilyGO ships T-watches with this chip) — 62.5 Hz, 2 g, and
+  // the window/timeout values below — and lower ONLY the amplitude
+  // thresholds for wrist use. The reference's 200 mg / 100 mg assume
+  // hip/pocket where the gait impulse is large; on the wrist the arm
+  // absorbs most of it, so those defaults under-count a normal walk.
   //
-  // All time-valued fields are in sample counts at the *current*
-  // accel ODR (datasheet: "80 means 1.6s @ ODR=50Hz"). Configured for
-  // 125 Hz; imu_sleep deliberately keeps accel at 125 Hz so these
-  // windows stay valid while the watch is asleep.
-  uint16_t ped_sample_cnt = 50;
-  // 40/20 mg fell below the noise floor of incidental wrist motion —
-  // just shaking the watch in your hand racked up steps. 60/30 is the
-  // sweet spot for this board: enough to filter rest-state jitter,
-  // low enough to catch a normal walking cadence on the wrist.
-  uint16_t ped_fix_peak2peak = 60;  // mg
-  uint16_t ped_fix_peak = 30;       // mg — half of p2p, per QMI guidance
-  uint16_t ped_time_up = 200;       // 1.6s @ 125Hz max gap between steps
-  uint8_t ped_time_low = 30;        // 240ms @ 125Hz — rejects back-swing
-  // Number of consecutive cadence-consistent peaks the chip must see
-  // before it commits to "this is walking" and starts adding to the
-  // counter. Higher = more shake rejection (short bursts of wrist
-  // motion that aren't gait can't trip a meaningful count) at the
-  // cost of throwing away the first N steps of every real walk. 6
-  // ≈ 6 wrist swings ≈ 6 seconds before counting engages, which
-  // matches how a real walk looks: it ramps in, it doesn't start
-  // with one explosive swing.
-  uint8_t ped_time_cnt_entry = 6;
-  uint8_t ped_fix_precision = 0;
-  // Was 4: counter register only updated in 4-step groups, so any
-  // walk ending on a non-multiple-of-4 forfeited the trailing 1–3
-  // steps when the cadence stopped. 1 = flush every individual step,
-  // at the cost of one extra interrupt per step (negligible — ~2 Hz
-  // when walking, free when not).
+  // History (all guesses — instrument to end them): ~59/29 mg entry-6
+  // over-counted (typing added steps; the chip counts autonomously in
+  // light sleep, so only the thresholds can reject it). 120/60 mg
+  // under-counted a real walk ~26% (2900 vs a phone's 3900). 80/40 mg is
+  // the split — nudge up if typing creeps back, down if it still misses.
+  //
+  // Time-valued fields are sample counts at the accel ODR. At 62.5 Hz
+  // accel-only: 50→0.8 s, 200→3.2 s, 20→0.32 s. imu_sleep keeps accel at
+  // 62.5 Hz so these windows stay valid asleep. (Awake 6DOF runs accel at
+  // the gyro's synced ~56 Hz — a ~10% window skew inherent to the chip,
+  // unchanged by this config; a walk is mostly asleep anyway.)
+  uint16_t ped_sample_cnt = 50;     // 0.8 s p2p window            [ref]
+  uint16_t ped_fix_peak2peak = mg_to_u6_10(80); // 80 mg p2p   (ref 200)
+  uint16_t ped_fix_peak = mg_to_u6_10(40);      // 40 mg peak  (ref 100)
+  uint16_t ped_time_up = 200;       // 3.2 s max gap before a run resets [ref]
+  uint8_t ped_time_low = 20;        // 0.32 s refractory, caps ~3 steps/s [ref]
+  // Consecutive rhythmic steps required before counting engages — the
+  // datasheet's primary false-step filter ("screen out fake steps from
+  // non-step vibrations"). 10 = a real walk has to ramp in ~10 swings.
+  uint8_t ped_time_cnt_entry = 10;  // [ref]
+  uint8_t ped_fix_precision = 0;    // [ref]
+  // 1 = flush every step (reference uses 4, which forfeits up to 3
+  // trailing steps when a walk ends on a non-multiple-of-4). Negligible
+  // extra interrupts; better trailing-step accuracy.
   uint8_t ped_sig_count = 1;
 
   qmi.configPedometer(ped_sample_cnt, ped_fix_peak2peak, ped_fix_peak,
@@ -180,7 +193,7 @@ Acceleration accel_read() {
 //                 ∨  angle(g_now, g_h) ≥ ~30°               (attitude path)
 //
 // The gyro plays no part, so imu_sleep powers it down entirely; the
-// accel already runs at 125 Hz for the pedometer, making the detector's
+// accel already runs at 62.5 Hz for the pedometer, making the detector's
 // marginal sensor cost zero — the only cost is one 6-byte I²C read per
 // poll.
 //
@@ -354,16 +367,17 @@ GyroData gyro_read() {
 
 void imu_sleep() {
   // Keep accel at the same ODR the pedometer was configured for
-  // (125 Hz). The QMI8658's built-in pedometer derives all its time
+  // (62.5 Hz). The QMI8658's built-in pedometer derives all its time
   // windows (ped_time_up, ped_time_low, ped_sample_cnt) in *sample
   // counts*, so changing the accel ODR while asleep would silently
   // skew them — at 31.25 Hz the 200-sample max-step-gap that meant
-  // 1.6 s now means 6.4 s, and detection collapses. The chip keeps
+  // 3.2 s now means 6.4 s, and detection collapses. The chip keeps
   // counting autonomously while asleep at this ODR; the counter is
   // read out on wake (below) since imu_task is suspended here.
   //
-  // Power cost: ACC_ODR_125Hz LP ≈ 30 µA vs 10 µA @ 31.25 Hz. The
-  // extra 20 µA is negligible against the ~12 mA light-sleep floor.
+  // Power cost: ACC_ODR_62_5Hz Normal ≈ 20 µA, below the old 125 Hz
+  // (~30 µA); both negligible against the ~12 mA light-sleep floor, but
+  // the drop is free battery.
   //
   // Gyro: fully OFF while asleep (~0.6 mA saved — a MEMS gyro's drive
   // oscillator draws that much at any ODR). The wrist-raise wake
