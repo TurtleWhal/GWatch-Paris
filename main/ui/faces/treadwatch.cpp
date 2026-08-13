@@ -1,5 +1,5 @@
-#include "ui.hpp"
 #include "images.hpp"
+#include "ui.hpp"
 #include <sys/time.h>
 #if LV_USE_SNAPSHOT
 #include "draw/snapshot/lv_snapshot.h"
@@ -58,8 +58,8 @@ static constexpr int M2_COUNT = 10, M2_SLOT = 48; // 0-9, 5 visible
 static constexpr float MN_ANGLE_DEG =
     -66.0f; // matches m*box transform_rotation (-660)
 static constexpr float MN_Y_NUDGE =
-    8.0f;  // drop the digits this many px lower (vertical),
-           // applied along the track so they stay centred on it
+    8.0f; // drop the digits this many px lower (vertical),
+          // applied along the track so they stay centred on it
 static constexpr int MN_LBL_W =
     30; // fixed slot width -> exact horizontal centring
 // Track centres = each m*box's screen centre (240px screen centre + its align
@@ -72,7 +72,8 @@ static lv_obj_t *tw_m2[M2_COUNT];
 static int tw_m1_xy[M1_COUNT][2]; // last (x,y) placed, to skip no-op moves
 static int tw_m2_xy[M2_COUNT][2];
 static float tw_dx, tw_dy; // screen-space unit dir of +along-track
-static float tw_mn_hh; // label-top -> ink-centre offset (minute vertical centre)
+static float
+    tw_mn_hh; // label-top -> ink-centre offset (minute vertical centre)
 static float tw_mn_along; // MN_Y_NUDGE expressed as an along-track shift
 
 // --- Seconds ruler (secbox): a 60-mark ring, one mark per second spaced
@@ -99,20 +100,57 @@ static constexpr uint32_t TW_BAR_W = 240, TW_BAR_H = 240;
 static constexpr uint32_t TW_BAR_BYTES = TW_BAR_W * TW_BAR_H * 4;
 #endif
 
+static constexpr int INFOSTACK_SIZE = 4;
+static constexpr uint8_t BOX_HEIGHT = 20;
+static constexpr uint8_t BOTTOM_Y = 88;
+
+lv_obj_t *infostackboxes[INFOSTACK_SIZE];
+
+// Priority order (index 0 = highest priority). MAX is the sentinel used
+// to size the source array and to know when to stop iterating.
+enum InfoStackPriority { SCHEDULE, TIMER, ALARM, STOPWATCH, MAX };
+
+std::string infostack[MAX];
+
+// Per-box last-text cache so updateInfoStack only touches labels when
+// something actually changed — set_text unconditionally dirties the
+// label's region and would spin an unnecessary flush every tick with
+// the stopwatch's per-second updates.
+static std::string infostack_box_last[INFOSTACK_SIZE];
+
+// Fill the visible boxes from `infostack` in priority order, skipping
+// any empty source (so if TIMER is unset but ALARM is enabled, ALARM
+// slides up into the higher-priority slot). Unused trailing boxes are
+// blanked so a previously-shown item disappears when its source clears.
+static void updateInfoStack() {
+  int box_idx = 0;
+  for (int i = 0; i < MAX && box_idx < INFOSTACK_SIZE; i++) {
+    if (infostack[i].empty()) continue;
+    if (infostack_box_last[box_idx] != infostack[i]) {
+      infostack_box_last[box_idx] = infostack[i];
+      lv_label_set_text(lv_obj_get_child(infostackboxes[box_idx], 0),
+                        infostack[i].c_str());
+    }
+    box_idx++;
+  }
+  for (; box_idx < INFOSTACK_SIZE; box_idx++) {
+    if (!infostack_box_last[box_idx].empty()) {
+      infostack_box_last[box_idx].clear();
+      lv_label_set_text(lv_obj_get_child(infostackboxes[box_idx], 0), "");
+    }
+  }
+}
+
 // Date + battery labels. Their value changes at most once a day / on a battery
 // step, and they're rotated (a set_text triggers a transform re-render), so
 // they're refreshed only when the shown value actually changes.
 static const char *TW_WDAYS[] = {"SUN", "MON", "TUE", "WED",
                                  "THU", "FRI", "SAT"};
-static lv_obj_t *tw_batlbl, *tw_datelbl, *tw_daylbl;
-static int tw_last_bat = -1, tw_last_wday = -1, tw_last_mday = -1;
+static lv_obj_t *tw_batlbl, *tw_baticon, *tw_datelbl, *tw_daylbl, *tw_steplbl;
+static int tw_last_bat = -1, tw_last_chg = false, tw_last_wday = -1,
+           tw_last_mday = -1, tw_last_steps = -1, tw_last_min = -1;
 
-static void tw_update_datebat(const struct tm &t) {
-  int pct = watch.battery.percent;
-  if (pct != tw_last_bat) {
-    tw_last_bat = pct;
-    lv_label_set_text_fmt(tw_batlbl, "%d%%", pct);
-  }
+static void tw_update_fields(const struct tm &t) {
   if (t.tm_wday != tw_last_wday) {
     tw_last_wday = t.tm_wday;
     lv_label_set_text(tw_datelbl, TW_WDAYS[t.tm_wday]);
@@ -121,6 +159,85 @@ static void tw_update_datebat(const struct tm &t) {
     tw_last_mday = t.tm_mday;
     lv_label_set_text_fmt(tw_daylbl, "%d", t.tm_mday);
   }
+
+  int pct = watch.battery.percent;
+  bool chg = watch.battery.charging;
+  if (watch.battery.percent != tw_last_bat || chg != tw_last_chg) {
+    tw_last_bat = pct;
+    lv_label_set_text_fmt(tw_batlbl, "%d%%", pct);
+
+    tw_last_chg = chg;
+    if (chg) {
+      SET_MDI_SYMBOL_16(tw_baticon, MDI_BATTERY_CHARGING);
+    } else {
+      if (pct > 66) {
+        SET_MDI_SYMBOL_16(tw_baticon, MDI_BATTERY_HIGH);
+      } else if (pct > 33) {
+        SET_MDI_SYMBOL_16(tw_baticon, MDI_BATTERY_MEDIUM);
+      } else if (pct > 10) {
+        SET_MDI_SYMBOL_16(tw_baticon, MDI_BATTERY_LOW);
+      } else {
+        SET_MDI_SYMBOL_16(tw_baticon, MDI_BATTERY_EMPTY);
+      }
+    }
+  }
+
+  int steps = watch.imu.steps;
+  // steps = 1234567;
+  if (steps != tw_last_steps) {
+    tw_last_mday = steps;
+    lv_label_set_text_fmt(tw_steplbl, "󰷺%d", steps);
+  }
+
+  // Per-minute sources: schedule text + next-alarm lookup. These only
+  // change when the minute rolls (schedule crosses event boundaries;
+  // the "next alarm" calculation is only meaningful to minute
+  // precision anyway).
+  if (t.tm_min != tw_last_min) {
+    tw_last_min = t.tm_min;
+    infostack[SCHEDULE] = watch.schedule.getText();
+    alarm_next_infostack_text(infostack[ALARM]);
+  }
+
+  // Per-tick sources: timer + stopwatch. Empty string when unset so
+  // updateInfoStack's priority walk skips them and slots below fill up.
+  if (watch.chrono.timertime > 0) {
+    int64_t sec = watch.chrono.timertime / 1000000;
+    int h = (int)(sec / 3600);
+    int m = (int)((sec % 3600) / 60);
+    int s = (int)(sec % 60);
+    char buf[24];
+    if (h > 0)
+      snprintf(buf, sizeof(buf), "%d:%02d:%02d %s", h, m, s, MDI_TIMER);
+    else
+      snprintf(buf, sizeof(buf), "%d:%02d %s", m, s, MDI_TIMER);
+    infostack[TIMER] = buf;
+  } else {
+    infostack[TIMER].clear();
+  }
+
+  if (watch.chrono.stopwatchstarttime != 0) {
+    // stopwatch.cpp: while running, starttime is the epoch the run
+    // began; while paused, starttime holds the accumulated microseconds.
+    int64_t elapsed = watch.chrono.stopwatchrunning
+                          ? (esp_timer_get_time() -
+                             watch.chrono.stopwatchstarttime)
+                          : watch.chrono.stopwatchstarttime;
+    int64_t sec = elapsed / 1000000;
+    int h = (int)(sec / 3600);
+    int m = (int)((sec % 3600) / 60);
+    int s = (int)(sec % 60);
+    char buf[24];
+    if (h > 0)
+      snprintf(buf, sizeof(buf), "%d:%02d:%02d %s", h, m, s, MDI_STOPWATCH);
+    else
+      snprintf(buf, sizeof(buf), "%d:%02d %s", m, s, MDI_STOPWATCH);
+    infostack[STOPWATCH] = buf;
+  } else {
+    infostack[STOPWATCH].clear();
+  }
+
+  updateInfoStack();
 }
 
 // SquadaOne is an all-caps / numeric display face whose glyphs sit high inside
@@ -483,28 +600,76 @@ lv_obj_t *treadwatch_create(lv_obj_t *parent) {
 
   tw_batlbl = lv_label_create(scr);
   lv_obj_set_style_text_font(tw_batlbl, &SquadaOneRegular_16, 0);
-  lv_obj_add_style(tw_batlbl, &accent_text_style, 0); // theme colour, live-updates
+  lv_obj_add_style(tw_batlbl, &accent_text_style,
+                   0); // theme colour, live-updates
   lv_obj_set_style_transform_rotation(tw_batlbl, -660, 0);
   lv_obj_align(tw_batlbl, LV_ALIGN_BOTTOM_LEFT, 46, -16);
 
-//   lv_obj_t *baticon = lv_label_create(scr);
-//   lv_obj_add_style(baticon, &accent_text_style, 0);
-//   lv_obj_set_style_transform_rotation(baticon, -660, 0);
-//   lv_obj_align(baticon, LV_ALIGN_BOTTOM_LEFT, 31, -26);
-//   SET_SYMBOL_14(baticon, FA_BATTERY_EMPTY);
+  tw_baticon = lv_label_create(scr);
+  lv_obj_add_style(tw_baticon, &accent_text_style, 0);
+  lv_obj_set_style_transform_rotation(tw_baticon, 240, 0);
+  lv_obj_align(tw_baticon, LV_ALIGN_BOTTOM_LEFT, 38, -40);
+  SET_MDI_SYMBOL_16(tw_baticon, MDI_BATTERY_HIGH);
 
   tw_datelbl = lv_label_create(scr);
   lv_obj_set_style_text_font(tw_datelbl, &SquadaOneRegular_18, 0);
   lv_obj_add_style(tw_datelbl, &accent_text_style,
                    0); // theme colour, live-updates
   lv_obj_set_style_transform_rotation(tw_datelbl, -660, 0);
-  lv_obj_align(tw_datelbl, LV_ALIGN_TOP_RIGHT, -29, 84);
+  lv_obj_align(tw_datelbl, LV_ALIGN_TOP_RIGHT, -18, 84);
+  lv_obj_set_width(tw_datelbl, 40);
 
   tw_daylbl = lv_label_create(scr);
   lv_obj_set_style_text_font(tw_daylbl, &SquadaOneRegular_24, 0);
-  lv_obj_add_style(tw_daylbl, &accent_text_style, 0); // theme colour, live-updates
+  lv_obj_add_style(tw_daylbl, &accent_text_style,
+                   0); // theme colour, live-updates
   lv_obj_align(tw_daylbl, LV_ALIGN_TOP_RIGHT, -15, 70);
   lv_obj_set_style_text_align(tw_daylbl, LV_TEXT_ALIGN_CENTER, 0);
+
+  tw_steplbl = lv_label_create(scr);
+  lv_obj_set_style_text_font(tw_steplbl, &SquadaOneRegular_18_mdi, 0);
+  lv_obj_add_style(tw_steplbl, &accent_text_style,
+                   0); // theme colour, live-updates
+  lv_obj_align(tw_steplbl, LV_ALIGN_BOTTOM_RIGHT, -24, -34);
+  lv_obj_set_style_text_align(tw_steplbl, LV_TEXT_ALIGN_LEFT, 0);
+  lv_obj_set_width(tw_steplbl, 80);
+
+  float slope = 1.0f / tanf(66 * DEG2RAD);
+  int yint = 102;
+
+  for (uint8_t i = 0; i < INFOSTACK_SIZE; i++) {
+    lv_obj_t *box = lv_obj_create(scr);
+
+    lv_obj_set_style_radius(box, 0, 0);
+    lv_obj_set_style_border_width(box, 0, 0);
+    // lv_obj_set_style_bg_color(box, lv_color_darken(lv_color_hex(0xff0000), i * 30), 0);
+    // lv_obj_set_style_bg_color(box, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(box, 0, 0);
+    lv_obj_set_style_pad_all(box, 0, 0);
+    lv_obj_set_scroll_dir(box, LV_DIR_NONE);
+
+    lv_obj_set_height(box, BOX_HEIGHT);
+    lv_obj_set_width(box, 50);
+
+    int y1 = BOTTOM_Y - (BOX_HEIGHT * (i + 1));
+    float dy = 120.0f - y1;
+    int x1 = 120 - (int)sqrtf(120.0f * 120.0f - dy * dy);
+
+    int y2 = BOTTOM_Y - (BOX_HEIGHT * i);
+    int x2 = slope * (120 - y2) + yint;
+
+    lv_obj_set_pos(box, x1, y1);
+    lv_obj_set_size(box, x2 - x1, y2 - y1);
+
+    lv_obj_t *label = lv_label_create(box);
+    lv_obj_set_style_text_font(label, &SquadaOneRegular_18_mdi, 0);
+    lv_obj_align(label, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_add_style(label, &accent_text_style, 0);
+
+    lv_label_set_text(label, "");
+
+    infostackboxes[i] = box;
+  }
 
   // Rest every ribbon on the current time so nothing flicks at boot.
   struct timeval tv;
@@ -531,7 +696,7 @@ lv_obj_t *treadwatch_create(lv_obj_t *parent) {
   // Force-populate the date/battery labels (guards are stale from a previous
   // build of the face, and these are freshly created objects).
   tw_last_bat = tw_last_wday = tw_last_mday = -1;
-  tw_update_datebat(t);
+  tw_update_fields(t);
 
   tw_last_tick = lv_tick_get();
 
@@ -572,5 +737,5 @@ void treadwatch_update() {
   tw_place_diag(tw_m2, tw_m2_xy, M2_COUNT, M2_SLOT, M2_CX, M2_CY, m2_off);
   tw_place_sec(sec_off);
 
-  tw_update_datebat(t);
+  tw_update_fields(t);
 }

@@ -36,6 +36,7 @@ set(GENERATED_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/SquadaOneRegular_48.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/NotoEmojiRegular_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/NotoEmojiRegular_20.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/generated/MaterialDesignIcons_16.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/MaterialDesignIcons_22.c
     ${CMAKE_CURRENT_SOURCE_DIR}/generated/MaterialDesignIcons_28.c
 )

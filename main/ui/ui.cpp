@@ -41,6 +41,8 @@ lv_font_t ProductSansRegular_14_emoji;
 lv_font_t ProductSansRegular_16_fa;
 lv_font_t ProductSansRegular_24_fa;
 
+lv_font_t SquadaOneRegular_18_mdi;
+
 // Shared accent styles. Every widget that wants the theme primary color
 // attaches one of these via lv_obj_add_style instead of capturing the
 // color value into a local style. apply_accent_color() mutates the one
@@ -336,6 +338,9 @@ void Display::ui_init() {
   ProductSansRegular_16_fa.fallback = &FontAwesome_16;
   ProductSansRegular_24_fa = ProductSansRegular_24;
   ProductSansRegular_24_fa.fallback = &FontAwesome_24;
+
+  SquadaOneRegular_18_mdi = SquadaOneRegular_18;
+  SquadaOneRegular_18_mdi.fallback = &MaterialDesignIcons_16;
 
   // Primary colour comes from settings.themecolor in config.json.
   // Parsed as an arbitrary hex string, not looked up in the palette,
@@ -750,6 +755,31 @@ void Display::ui_init() {
     lv_obj_set_scroll_dir(ver_layer, allow ? LV_DIR_VER : LV_DIR_NONE);
   };
 
+  // Watchface visibility: hidden unless watchscr is at least partly
+  // on-screen. Two axes have to line up for that:
+  //   - hor_layer's scroll is within ±240 px of watchscr's x
+  //   - ver_layer's scroll is within ±240 px of hor_layer's y
+  // Any full transition off either axis (onto quicksettings /
+  // notifications / a horizontally-adjacent screen) hides it, so the
+  // watchface's per-tick draw work stops and its widgets stop
+  // rendering underneath the opaque overlay pages. Called from both
+  // hor and ver scroll handlers because either axis can change what
+  // the user is looking at.
+  static auto update_watchface_vis = []() {
+    if (!ver_layer || !hor_layer || !watchscr || !watchface)
+      return;
+    int32_t hy = lv_obj_get_y(hor_layer);
+    int32_t vy = lv_obj_get_scroll_y(ver_layer);
+    bool ver_shows = (vy > hy - 240 && vy < hy + 240);
+
+    int32_t hx = lv_obj_get_scroll_x(hor_layer);
+    int32_t wx = lv_obj_get_x(watchscr);
+    bool hor_shows = (hx > wx - 240 && hx < wx + 240);
+
+    lv_obj_set_flag(watchface, LV_OBJ_FLAG_HIDDEN,
+                    !(ver_shows && hor_shows));
+  };
+
   lv_obj_add_event_cb(
       hor_layer,
       [](lv_event_t *e) {
@@ -757,26 +787,31 @@ void Display::ui_init() {
         int32_t scroll = lv_obj_get_scroll_x(lv_event_get_target_obj(e));
         int32_t pos = lv_obj_get_x(scr);
 
-        // Watchface bg visibility: hidden when fully off, transparent
-        // background; otherwise opaque so the watch face shows through.
-        if (scroll - 240 < pos && scroll + 240 > pos) {
+        // hor_layer's own bg toggles between transparent (letting the
+        // watchface show through) and opaque black (clipping any
+        // watchface bleed) purely from the horizontal distance to
+        // watchscr — that's this layer's own concern.
+        if (scroll - 240 < pos && scroll + 240 > pos)
           lv_obj_set_style_bg_opa(lv_event_get_target_obj(e), LV_OPA_0, 0);
-          lv_obj_set_flag(watchface, LV_OBJ_FLAG_HIDDEN, false);
-        } else {
-          lv_obj_set_flag(watchface, LV_OBJ_FLAG_HIDDEN, true);
+        else
           lv_obj_set_style_bg_opa(lv_event_get_target_obj(e), LV_OPA_COVER, 0);
-        }
 
+        update_watchface_vis();
         update_ver_scroll();
       },
       LV_EVENT_SCROLL, watchscr);
 
   // Also reevaluate on every ver_layer scroll event so moving onto
-  // the upper / lower row re-enables vertical immediately, without
-  // having to wait for the next hor_layer scroll.
+  // the upper / lower row re-enables vertical immediately (and hides
+  // the watchface immediately), without having to wait for the next
+  // hor_layer scroll.
   lv_obj_add_event_cb(
-      ver_layer, [](lv_event_t *) { update_ver_scroll(); }, LV_EVENT_SCROLL,
-      NULL);
+      ver_layer,
+      [](lv_event_t *) {
+        update_watchface_vis();
+        update_ver_scroll();
+      },
+      LV_EVENT_SCROLL, NULL);
 
   create_app(appsscreen, FA_STOPWATCH, "Stopwatch", stopwatch);
   create_app(appsscreen, FA_TIMER, "Timer", timer);

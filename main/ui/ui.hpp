@@ -46,6 +46,8 @@ extern lv_font_t ProductSansRegular_14_emoji;
 extern lv_font_t ProductSansRegular_16_fa;
 extern lv_font_t ProductSansRegular_24_fa;
 
+extern lv_font_t SquadaOneRegular_18_mdi;
+
 lv_obj_t *create_screen(lv_obj_t *parent);
 lv_obj_t *create_valuearc(lv_obj_t *parent, const char *symbol);
 
@@ -114,6 +116,10 @@ lv_obj_t *alarmscr_create(lv_obj_t *parent);
 // dropped; short arrays leave trailing slots disabled.
 struct cJSON;
 extern "C" void alarm_apply_from_gb(struct cJSON *arr);
+
+// Text for the next enabled alarm ("H:MM <mdi-alarm>"), or an empty
+// string if no alarm is enabled. Used by the treadwatch info-stack row.
+void alarm_next_infostack_text(std::string &out);
 lv_obj_t *imu_screen_create(lv_obj_t *parent);
 lv_obj_t *calculator_create(lv_obj_t *parent);
 lv_obj_t *dice_create(lv_obj_t *parent);

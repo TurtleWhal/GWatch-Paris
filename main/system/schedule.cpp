@@ -184,7 +184,7 @@ const char *Schedule::getText()
             (t.tm_hour < event.endhour ||
              (t.tm_hour == event.endhour && t.tm_min < event.endminute))) {
             show = true;
-            snprintf(buffer, sizeof(buffer), "%s › %d:%02d", event.text.c_str(),
+            snprintf(buffer, sizeof(buffer), "%s > %d:%02d", event.text.c_str(),
                      event.endhour > 12 ? event.endhour - 12 : event.endhour,
                      event.endminute);
             text = buffer;

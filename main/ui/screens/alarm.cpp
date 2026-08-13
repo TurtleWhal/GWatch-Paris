@@ -1,6 +1,8 @@
 #include "ui.hpp"
 
 #include "cJSON.h"
+#include <climits>
+#include <string>
 #include <sys/time.h>
 #include <time.h>
 
@@ -83,6 +85,43 @@ static void save_alarm(int idx)
     char key[8];
     snprintf(key, sizeof(key), "alarm%d", idx);
     watch.settings.writeUint16(key, pack_alarm(alarms[idx]));
+}
+
+// Find the enabled alarm that will fire next (soonest positive delta
+// from now, wrapping to tomorrow if all remaining alarms today are
+// past) and format it as "H:MM MDI_ALARM" for the info-stack row.
+// Leaves `out` empty if no alarm is enabled.
+void alarm_next_infostack_text(std::string &out)
+{
+    out.clear();
+
+    time_t now = time(nullptr);
+    struct tm nowtm;
+    localtime_r(&now, &nowtm);
+    int now_min = nowtm.tm_hour * 60 + nowtm.tm_min;
+
+    int best_delta = INT_MAX;
+    const Alarm *best = nullptr;
+    for (int i = 0; i < N_ALARMS; i++) {
+        if (!alarms[i].enabled) continue;
+        // hour is stored 1..12 with am flag; convert to 24h minute-
+        // of-day for chronological compare.
+        int h24 = alarms[i].hour % 12;      // 12 → 0
+        if (!alarms[i].am) h24 += 12;       // pm → 12..23
+        int amin = h24 * 60 + alarms[i].minute;
+        int delta = amin - now_min;
+        if (delta <= 0) delta += 24 * 60;   // already past today → tomorrow
+        if (delta < best_delta) {
+            best_delta = delta;
+            best = &alarms[i];
+        }
+    }
+
+    if (!best) return;
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d:%02d %s", best->hour, best->minute, MDI_ALARM);
+    out.assign(buf);
 }
 
 static void load_alarms()
