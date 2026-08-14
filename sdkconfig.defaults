@@ -15,6 +15,11 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_ESP32S3_DATA_CACHE_64KB=y
 CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+# Quad PSRAM at 80 MHz (IDF default is 40). The LVGL object heap (custom
+# lv_malloc), NimBLE buffers, and draw-layer buffers all live in PSRAM, so
+# every cache miss on them pays PSRAM latency; 80 MHz doubles that bandwidth.
+# Flash already runs 80 MHz on the same MSPI timing domain.
+CONFIG_SPIRAM_SPEED_80M=y
 
 # --- USB Serial/JTAG ---
 # Hold ESP_PM_NO_LIGHT_SLEEP while host is connected so flashing/monitor stays

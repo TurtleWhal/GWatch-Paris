@@ -222,6 +222,7 @@ lv_obj_t *divewatch_create(lv_obj_t *parent)
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+    lv_obj_set_style_radius(scr, 0, 0);
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x222222), 0);
 

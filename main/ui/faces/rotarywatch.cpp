@@ -41,6 +41,7 @@ lv_obj_t *rotarywatch_create(lv_obj_t *parent)
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+    lv_obj_set_style_radius(scr, 0, 0);
 
     /* Minute scale */
     minutescale = lv_scale_create(scr);
@@ -277,7 +278,7 @@ void rotarywatch_update()
 
     lv_arc_set_value(steps, watch.imu.steps);
     lv_label_set_text_fmt(lv_obj_get_child_by_name(steps, "text"),
-                          "%ld", watch.imu.steps);
+                          "%li", watch.imu.steps);
 
     if (ble.connected())
     {

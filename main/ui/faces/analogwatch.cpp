@@ -93,6 +93,7 @@ lv_obj_t *analogwatch_create(lv_obj_t *parent)
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+    lv_obj_set_style_radius(scr, 0, 0);
 
     timerarc = lv_arc_create(parent);
     lv_obj_set_size(timerarc, 234, 234);

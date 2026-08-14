@@ -26,6 +26,7 @@ lv_obj_t *timescreen_create(lv_obj_t *parent)
 
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+    lv_obj_set_style_radius(scr, 0, 0);
 
     datelabel = lv_label_create(scr);
     lv_obj_set_style_text_font(datelabel, &ProductSansBold_20, 0);
@@ -154,7 +155,7 @@ void timescreen_update()
     /* Battery (assume sysinfo.bat is still valid) */
     lv_label_set_text_fmt(battery, "%d%%", watch.battery.percent);
 
-    lv_label_set_text_fmt(steps, "%ld", watch.imu.steps);
+    lv_label_set_text_fmt(steps, "%li", watch.imu.steps);
 
     if (ble.connected())
     {

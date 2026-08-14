@@ -30,6 +30,39 @@ static constexpr int32_t W_ARC_POS = 55;
 static lv_obj_t *wdir;
 static lv_obj_t *wspd;
 
+// Wind-direction arrow template: 28x28 arrowhead pointing up (0° =
+// north). Rotation is done by transforming these base points into
+// wdir_pts around (WDIR_CX, WDIR_CY) — chosen over lv_obj_transform_
+// rotation because line points are what lv_line actually draws, so
+// mutating them keeps the widget's bounding box tight (no extra
+// draw-layer allocation for a rotated overlay).
+static constexpr float WDIR_CX = 14.0f, WDIR_CY = 14.0f;
+static constexpr int   WDIR_N  = 5;
+static const lv_point_precise_t WDIR_BASE[WDIR_N] = {
+    {0,  28}, // bottom left
+    {14, 0},  // top (the point)
+    {28, 28}, // bottom right
+    {14, 22}, // bottom mid (notch)
+    {0,  28}, // close back to start
+};
+static lv_point_precise_t wdir_pts[WDIR_N];
+
+// Rotate WDIR_BASE by `deg` clockwise around (WDIR_CX, WDIR_CY) into
+// wdir_pts and hand the mutated buffer back to the line widget. The
+// buffer is file-static so its lifetime outlives set_points_mutable's
+// pointer capture (set_points_mutable stores the pointer, not a copy).
+static void wdir_set_angle(float deg) {
+  float rad = deg * (float)DEG2RAD;
+  float ca = cosf(rad), sa = sinf(rad);
+  for (int i = 0; i < WDIR_N; i++) {
+    float dx = (float)WDIR_BASE[i].x - WDIR_CX;
+    float dy = (float)WDIR_BASE[i].y - WDIR_CY;
+    wdir_pts[i].x = (lv_value_precise_t)(WDIR_CX + dx * ca - dy * sa);
+    wdir_pts[i].y = (lv_value_precise_t)(WDIR_CY + dx * sa + dy * ca);
+  }
+  lv_line_set_points_mutable(wdir, wdir_pts, WDIR_N);
+}
+
 // Last weather snapshot reflected in the UI. Compared against
 // ble.weather().version on each tick so we only repaint on real changes.
 static uint32_t last_weather_version = 0;
@@ -434,15 +467,13 @@ void weather_update(lv_timer_t *) {
 
   lv_image_set_src(icon, icon_for_code(w.code));
 
-  // Wind direction arrow. The arrow image's natural orientation is
-  // pointing up = north; rotating by (wdir + 180) makes it point in
-  // the direction the wind is GOING (the convention most weather
-  // apps display) instead of where it's coming from. Use
-  // lv_image_set_rotation (image-API) rather than the obj-style
-  // version so the rotation pivots around the source centre and the
-  // arrow stays in place as the angle changes. Units: tenths of a
-  // degree.
-  lv_image_set_rotation(wdir, ((w.wind_dir + 180) % 360) * 10);
+  // Wind direction arrow. Base points up = north; add 180° so the
+  // arrow points in the direction the wind is GOING (the convention
+  // most weather apps display) instead of where it's coming from.
+  // Rotating the line's points in place (rather than the widget's
+  // transform_rotation) keeps the bounding box tight and avoids
+  // LVGL allocating a rotated-overlay draw layer per redraw.
+  wdir_set_angle((float)((w.wind_dir + 180) % 360));
 
   // Wind speed: Gadgetbridge sends the value in km/h despite the
   // field name. Confirmed empirically — a real 2.5 mph wind came
@@ -637,20 +668,32 @@ lv_obj_t *weather_create(lv_obj_t *parent) {
   //
   // The 0,84 align offset puts the centre at screen y=204, matching
   // where the original emoji-rotation pivot was.
-  wdir = lv_image_create(render_group);
-  lv_image_set_src(wdir, &IMG_ARROW);
-  // Scale the 64 px source down to ~48 px to match the original
-  // wind-dial size. LVGL scale value: 256 = 1:1.
-  lv_image_set_scale(wdir, 256 * 48 / 96);
+  // wdir = lv_image_create(render_group);
+  // lv_image_set_src(wdir, &IMG_ARROW);
+  // // Scale the 64 px source down to ~48 px to match the original
+  // // wind-dial size. LVGL scale value: 256 = 1:1.
+  // lv_image_set_scale(wdir, 256 * 48 / 96);
+  // lv_obj_align(wdir, LV_ALIGN_CENTER, 0, 84);
+  // // Use lv_image_set_rotation, NOT lv_obj_set_style_transform_rotation.
+  // // The obj-style version pivots around the obj's top-left by default,
+  // // which makes the image fly off to the side as the angle changes;
+  // // the image API uses the image's pivot (defaults to source centre)
+  // // so the arrow rotates in place. Start pointing down to match the
+  // // original emoji's initial state. weather_update overwrites this on
+  // // the first BLE update.
+  // lv_image_set_rotation(wdir, 210 * 10);
+
+  wdir = lv_line_create(render_group);
+  lv_obj_set_style_line_width(wdir, 20, 0);
+  lv_obj_set_style_line_color(wdir, lv_color_hex(0x333333), 0);
+  lv_obj_set_style_line_rounded(wdir, true, 0);
+
   lv_obj_align(wdir, LV_ALIGN_CENTER, 0, 84);
-  // Use lv_image_set_rotation, NOT lv_obj_set_style_transform_rotation.
-  // The obj-style version pivots around the obj's top-left by default,
-  // which makes the image fly off to the side as the angle changes;
-  // the image API uses the image's pivot (defaults to source centre)
-  // so the arrow rotates in place. Start pointing down to match the
-  // original emoji's initial state. weather_update overwrites this on
-  // the first BLE update.
-  lv_image_set_rotation(wdir, 210 * 10);
+
+  // Seed pointing south (180°) so the placeholder matches the arrow's
+  // eventual "wind going down toward the label" orientation until the
+  // first BLE weather update lands. weather_update overwrites it.
+  wdir_set_angle(180.0f);
 
   wspd = lv_label_create(render_group);
   lv_obj_set_style_text_align(wspd, LV_TEXT_ALIGN_CENTER, 0);

@@ -106,6 +106,7 @@ lv_obj_t *wordwatch_create(lv_obj_t *parent)
 {
     lv_obj_t *scr = create_screen(parent);
     lv_obj_set_scroll_dir(scr, LV_DIR_NONE);
+    lv_obj_set_style_radius(scr, 0, 0);
 
     for (int row = 0; row < N_ROWS; row++)
     {
